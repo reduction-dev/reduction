@@ -45,7 +45,7 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
 		},
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(node, connect.WithProtoJSON())
+			return rpc.NewOperatorConnectClient("job", node, connect.WithProtoJSON())
 		},
 	)
 	mux = http.NewServeMux()

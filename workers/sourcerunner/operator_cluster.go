@@ -17,13 +17,11 @@ type operatorCluster struct {
 	keyGroupCount int
 	keySpace      *partitioning.KeySpace
 	workers       []proto.Operator
-	senderID      string
 }
 
 type newClusterParams struct {
 	keyGroupCount int
 	workers       []proto.Operator
-	senderID      string
 }
 
 func newOperatorCluster(params *newClusterParams) *operatorCluster {
@@ -31,7 +29,6 @@ func newOperatorCluster(params *newClusterParams) *operatorCluster {
 		keyGroupCount: params.keyGroupCount,
 		workers:       params.workers,
 		keySpace:      partitioning.NewKeySpace(params.keyGroupCount, len(params.workers)),
-		senderID:      params.senderID,
 	}
 }
 
@@ -39,9 +36,8 @@ func newOperatorCluster(params *newClusterParams) *operatorCluster {
 func (c *operatorCluster) routeEvent(ctx context.Context, event *handlerpb.KeyedEvent) error {
 	rangeIndex := c.keySpace.RangeIndex(event.Key)
 	targetWorker := c.workers[rangeIndex]
-	request := &workerpb.HandleEventRequest{
-		SenderId: c.senderID,
-		Event: &workerpb.HandleEventRequest_KeyedEvent{
+	request := &workerpb.Event{
+		Event: &workerpb.Event_KeyedEvent{
 			KeyedEvent: event,
 		},
 	}
@@ -58,7 +54,6 @@ func (c *operatorCluster) broadcastEvent(ctx context.Context, event gproto.Messa
 		return fmt.Errorf("cluster.broadcastEvent: %v", err)
 	}
 
-	request.SenderId = c.senderID
 	g, gctx := errgroup.WithContext(ctx)
 	for _, w := range c.workers {
 		g.Go(func() error {

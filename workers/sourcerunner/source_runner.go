@@ -24,7 +24,7 @@ import (
 
 type SourceRunner struct {
 	host            string // A host name used to contract this SourceRunner
-	id              string
+	ID              string
 	sourceReader    connectors.SourceReader
 	eoi             bool // Did the sourceReader reach end of input
 	userHandler     proto.Handler
@@ -60,7 +60,7 @@ func New(params NewParams) *SourceRunner {
 	id := ksuid.New().String()
 	log := slog.With("instanceID", "source-runner-"+id[len(id)-4:])
 	return &SourceRunner{
-		id:                id,
+		ID:                id,
 		host:              params.Host,
 		sourceReader:      params.SourceReader,
 		job:               params.Job,
@@ -85,7 +85,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 
 	r.registerPoller = r.clock.Every(3*time.Second, func(*clocks.EveryContext) {
 		if err := r.job.RegisterSourceRunner(ctx, &jobpb.NodeIdentity{
-			Id:   r.id,
+			Id:   r.ID,
 			Host: r.host,
 		}); err != nil {
 			r.Logger.Error("registering source runner with job service failed", "err", err)
@@ -103,7 +103,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	r.registerPoller.Stop()
 
 	if !r.isHalting.Load() {
-		if err := r.job.DeregisterSourceRunner(context.Background(), &jobpb.NodeIdentity{Id: r.id, Host: r.host}); err != nil {
+		if err := r.job.DeregisterSourceRunner(context.Background(), &jobpb.NodeIdentity{Id: r.ID, Host: r.host}); err != nil {
 			r.Logger.Warn("failed deregistration", "err", err)
 		}
 	}
@@ -132,7 +132,6 @@ func (r *SourceRunner) HandleStart(ctx context.Context, ops []proto.Operator, ms
 		return err
 	}
 	r.operators = newOperatorCluster(&newClusterParams{
-		senderID:      r.id,
 		keyGroupCount: int(msg.KeyGroupCount),
 		workers:       ops,
 	})
@@ -241,6 +240,6 @@ func (r *SourceRunner) createCheckpoint(id uint64) error {
 	return r.job.OnSourceCheckpointComplete(context.Background(), &snapshotpb.SourceCheckpoint{
 		CheckpointId:   id,
 		Data:           data,
-		SourceRunnerId: r.id,
+		SourceRunnerId: r.ID,
 	})
 }

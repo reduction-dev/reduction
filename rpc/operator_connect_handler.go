@@ -21,9 +21,13 @@ func NewOperatorConnectHandler(operator *operator.Operator) (string, http.Handle
 	return workerpbconnect.NewOperatorHandler(l, connect.WithInterceptors(NewLoggingInterceptor(operator.Logger)))
 }
 
-func (l *OperatorConnectHandler) HandleEvent(ctx context.Context, req *connect.Request[workerpb.HandleEventRequest]) (*connect.Response[workerpb.Empty], error) {
-	if err := l.operator.HandleEvent(ctx, req.Msg); err != nil {
-		return nil, err
+// HandleEventBatch implements workerpbconnect.OperatorHandler.
+func (l *OperatorConnectHandler) HandleEventBatch(ctx context.Context, req *connect.Request[workerpb.HandleEventBatchRequest]) (*connect.Response[workerpb.Empty], error) {
+	senderID := req.Msg.SenderId
+	for _, event := range req.Msg.Events {
+		if err := l.operator.HandleEvent(ctx, senderID, event); err != nil {
+			return nil, err
+		}
 	}
 
 	return connect.NewResponse(&workerpb.Empty{}), nil

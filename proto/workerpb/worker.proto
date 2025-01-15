@@ -10,7 +10,7 @@ package worker;
 
 service Operator {
   rpc Start(StartOperatorRequest) returns (Empty);
-  rpc HandleEvent(HandleEventRequest) returns (Empty);
+  rpc HandleEventBatch(HandleEventBatchRequest) returns (Empty);
 }
 
 service SourceRunner {
@@ -42,20 +42,18 @@ message Sink {
 
 message Empty{}
 
-message HandleEventRequest {
+message HandleEventBatchRequest {
   string sender_id = 1;
+  repeated Event events = 2;
+}
+
+message Event {
   oneof event {
     dev.reduction.handler.KeyedEvent keyed_event = 2;
     Watermark watermark = 3;
     CheckpointBarrier checkpoint_barrier = 4;
     SourceCompleteEvent source_complete = 5;
   }
-}
-
-message UserEvent {
-  bytes key = 1;
-  bytes value = 2; 
-  google.protobuf.Timestamp timestamp = 3;
 }
 
 message CheckpointBarrier {

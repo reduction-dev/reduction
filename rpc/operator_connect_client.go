@@ -14,10 +14,11 @@ import (
 type OperatorConnectClient struct {
 	id             string
 	host           string
+	senderID       string
 	operatorClient workerpbconnect.OperatorClient
 }
 
-func NewOperatorConnectClient(params *jobpb.NodeIdentity, opts ...connect.ClientOption) *OperatorConnectClient {
+func NewOperatorConnectClient(senderID string, params *jobpb.NodeIdentity, opts ...connect.ClientOption) *OperatorConnectClient {
 	if params.Host == "" {
 		panic("missing host")
 	}
@@ -25,12 +26,17 @@ func NewOperatorConnectClient(params *jobpb.NodeIdentity, opts ...connect.Client
 	return &OperatorConnectClient{
 		id:             params.Id,
 		host:           params.Host,
+		senderID:       senderID,
 		operatorClient: operatorClient,
 	}
 }
 
-func (c *OperatorConnectClient) HandleEvent(ctx context.Context, req *workerpb.HandleEventRequest) error {
-	_, err := c.operatorClient.HandleEvent(ctx, connect.NewRequest(req))
+func (c *OperatorConnectClient) HandleEvent(ctx context.Context, event *workerpb.Event) error {
+	req := &workerpb.HandleEventBatchRequest{
+		SenderId: c.senderID,
+		Events:   []*workerpb.Event{event}, // Starting by just sending one event in batch
+	}
+	_, err := c.operatorClient.HandleEventBatch(ctx, connect.NewRequest(req))
 	return err
 }
 

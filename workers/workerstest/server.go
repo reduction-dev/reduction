@@ -53,7 +53,7 @@ func NewServer(params NewServerParams) *server {
 	path, handler := rpc.NewSourceRunnerConnectHandler(
 		worker.SourceRunner,
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(node)
+			return rpc.NewOperatorConnectClient(worker.SourceRunner.ID, node)
 		},
 	)
 	mux.Handle(path, handler)

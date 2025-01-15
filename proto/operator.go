@@ -9,6 +9,6 @@ import (
 type Operator interface {
 	ID() string
 	Host() string
-	HandleEvent(ctx context.Context, event *workerpb.HandleEventRequest) error
+	HandleEvent(ctx context.Context, event *workerpb.Event) error
 	Start(ctx context.Context, req *workerpb.StartOperatorRequest) error
 }

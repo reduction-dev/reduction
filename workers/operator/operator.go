@@ -177,38 +177,38 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	return nil
 }
 
-func (o *Operator) HandleEvent(ctx context.Context, req *workerpb.HandleEventRequest) error {
+func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *workerpb.Event) error {
 	if !o.isInAssembly.Load() {
 		return fmt.Errorf("not running")
 	}
 
-	o.Logger.Info("handling", "sender", req.SenderId, "event", req.Event)
+	o.Logger.Info("handling", "sender", senderID, "event", req.Event)
 
 	// Collect the err response from the queued event.
 	respErr := make(chan error)
 
 	// Block the sender to align checkpoint barriers if needed
 	o.mu.RLock()
-	waitOnAlignment := o.checkpoint.alignSender(req.SenderId)
+	waitOnAlignment := o.checkpoint.alignSender(senderID)
 	o.mu.RUnlock()
 	waitOnAlignment()
 
 	switch typedEvent := req.Event.(type) {
-	case *workerpb.HandleEventRequest_KeyedEvent:
+	case *workerpb.Event_KeyedEvent:
 		o.events <- func() {
 			respErr <- o.handleUserEvent(ctx, typedEvent.KeyedEvent)
 		}
-	case *workerpb.HandleEventRequest_Watermark:
+	case *workerpb.Event_Watermark:
 		o.events <- func() {
-			respErr <- o.handleWatermark(ctx, req.SenderId, typedEvent.Watermark)
+			respErr <- o.handleWatermark(ctx, senderID, typedEvent.Watermark)
 		}
-	case *workerpb.HandleEventRequest_CheckpointBarrier:
+	case *workerpb.Event_CheckpointBarrier:
 		o.events <- func() {
-			respErr <- o.handleCheckpointBarrier(ctx, req.SenderId, typedEvent.CheckpointBarrier)
+			respErr <- o.handleCheckpointBarrier(ctx, senderID, typedEvent.CheckpointBarrier)
 		}
-	case *workerpb.HandleEventRequest_SourceComplete:
+	case *workerpb.Event_SourceComplete:
 		o.events <- func() {
-			o.handleSourceComplete(req.SenderId)
+			o.handleSourceComplete(senderID)
 			respErr <- nil
 		}
 	default:

@@ -60,7 +60,7 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 			return rpc.NewSourceRunnerConnectClient(node)
 		},
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(node)
+			return rpc.NewOperatorConnectClient("job", node)
 		},
 	)
 	mux = http.NewServeMux()
