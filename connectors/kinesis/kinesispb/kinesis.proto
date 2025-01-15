@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package connectors.kinesis.proto.v1;
+option go_package = "connectors/kinesispb";
+
+message Checkpoint {
+  repeated Shard shards = 1;
+}
+
+message Shard {
+  string shard_id = 1;
+  string cursor = 2;
+}

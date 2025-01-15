@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -ue
+
+# Extract words from cspell.json and search codebase
+jq -r '.words[]' cspell.json | while read word; do
+  count=$(find . -type f \
+    ! -path "*/\.*" \
+    ! -name "cspell.json" \
+    -exec grep -l "$word" {} \; | wc -l)
+  
+  if [ "$count" -eq 0 ]; then
+    echo "Word not found: $word"
+  fi
+done

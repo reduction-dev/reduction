@@ -1,0 +1,8 @@
+*.pb.go
+*.connect.go
+/scratch
+*.snapshot
+todo.md
+/build
+/bin
+.vscode

@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package e2e;
+option go_package = "reduction.dev/reduction/e2epb";
+
+message TimestampList {
+  repeated int64 timestamps = 1;
+}

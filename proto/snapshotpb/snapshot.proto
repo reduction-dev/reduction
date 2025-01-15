@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package snapshot;
+option go_package = "reduction.dev/reduction/proto/snapshotpb";
+
+message JobCheckpoint {
+  uint64 id = 1;
+  repeated OperatorCheckpoint operator_checkpoints = 2;
+  string dkv_root = 3;
+  repeated SourceCheckpoint source_checkpoints = 4;
+}
+
+message OperatorCheckpoint {
+  uint64 checkpoint_id = 1;
+  string operator_id = 2;
+  string dkv_file_uri = 3;
+  KeyGroupRange key_group_range = 4;
+}
+
+message KeyGroupRange {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message SourceCheckpoint {
+  uint64 checkpoint_id = 1;
+  bytes data = 2;
+  string source_runner_id = 3;
+}

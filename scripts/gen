@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -ue
+shopt -s globstar
+
+TOOLS_BIN="./bin"
+
+./bin/protoc/bin/protoc \
+  -I ../reduction-handler \
+  -I . \
+  --plugin=protoc-gen-go=./bin/protoc-gen-go \
+  --go_opt=paths=source_relative \
+  --go_out=. \
+  --plugin=protoc-gen-connect-go=./bin/protoc-gen-connect-go \
+  --connect-go_opt=paths=source_relative \
+  --connect-go_out=. \
+  proto/**/*.proto connectors/**/*.proto

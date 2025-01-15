@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+import "proto/snapshotpb/snapshot.proto";
+
+package job;
+option go_package = "reduction.dev/reduction/proto/jobpb";
+
+service Job {
+  rpc RegisterSourceRunner(NodeIdentity) returns (Empty);
+  rpc DeregisterSourceRunner(NodeIdentity) returns (Empty);
+  rpc RegisterOperator(NodeIdentity) returns (Empty);
+  rpc DeregisterOperator(NodeIdentity) returns (Empty);
+  rpc OperatorCheckpointComplete(snapshot.OperatorCheckpoint) returns (Empty);
+  rpc SourceCheckpointComplete(snapshot.SourceCheckpoint) returns (Empty);
+}
+
+service JobUI {
+  rpc CreateSavepoint(Empty) returns (CreateSavepointResponse);
+  rpc GetSavepoint(GetSavepointRequest) returns (GetSavepointResponse);
+}
+
+message NodeIdentity {
+  string id = 1;
+  string host = 2;
+}
+
+message Empty {}
+
+message CreateSavepointResponse {
+  uint64 savepoint_id = 1;
+}
+
+message GetSavepointRequest {
+  uint64 savepoint_id = 1;
+}
+
+message GetSavepointResponse {
+  string uri = 1;
+}
