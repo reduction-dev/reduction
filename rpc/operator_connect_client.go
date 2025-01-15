@@ -11,40 +11,40 @@ import (
 	"connectrpc.com/connect"
 )
 
-type WorkerConnectClient struct {
+type OperatorConnectClient struct {
 	id             string
 	host           string
 	operatorClient workerpbconnect.OperatorClient
 }
 
-func NewWorkerOperatorClient(params *jobpb.NodeIdentity, opts ...connect.ClientOption) *WorkerConnectClient {
+func NewOperatorConnectClient(params *jobpb.NodeIdentity, opts ...connect.ClientOption) *OperatorConnectClient {
 	if params.Host == "" {
 		panic("missing host")
 	}
 	operatorClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.Host, opts...)
-	return &WorkerConnectClient{
+	return &OperatorConnectClient{
 		id:             params.Id,
 		host:           params.Host,
 		operatorClient: operatorClient,
 	}
 }
 
-func (c *WorkerConnectClient) HandleEvent(ctx context.Context, req *workerpb.HandleEventRequest) error {
+func (c *OperatorConnectClient) HandleEvent(ctx context.Context, req *workerpb.HandleEventRequest) error {
 	_, err := c.operatorClient.HandleEvent(ctx, connect.NewRequest(req))
 	return err
 }
 
-func (c *WorkerConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
+func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
 	_, err := c.operatorClient.Start(ctx, connect.NewRequest(req))
 	return err
 }
 
-func (c *WorkerConnectClient) ID() string {
+func (c *OperatorConnectClient) ID() string {
 	return c.id
 }
 
-func (c *WorkerConnectClient) Host() string {
+func (c *OperatorConnectClient) Host() string {
 	return c.host
 }
 
-var _ proto.Operator = (*WorkerConnectClient)(nil)
+var _ proto.Operator = (*OperatorConnectClient)(nil)

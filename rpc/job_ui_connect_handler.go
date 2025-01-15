@@ -12,27 +12,27 @@ import (
 	"connectrpc.com/connect"
 )
 
-type JobUIConnectAdapter struct {
+type JobUIConnectHandler struct {
 	job *jobs.Job
 }
 
 func NewJobUIConnectHandler(job *jobs.Job) (path string, handler http.Handler) {
-	adapter := &JobUIConnectAdapter{job}
-	return jobpbconnect.NewJobUIHandler(adapter)
+	h := &JobUIConnectHandler{job}
+	return jobpbconnect.NewJobUIHandler(h)
 }
 
-func (l *JobUIConnectAdapter) CreateSavepoint(ctx context.Context, req *connect.Request[jobpb.Empty]) (*connect.Response[jobpb.CreateSavepointResponse], error) {
+func (l *JobUIConnectHandler) CreateSavepoint(ctx context.Context, req *connect.Request[jobpb.Empty]) (*connect.Response[jobpb.CreateSavepointResponse], error) {
 	id, err := l.job.HandleCreateSavepoint(ctx)
 	return connect.NewResponse(&jobpb.CreateSavepointResponse{
 		SavepointId: id,
 	}), err
 }
 
-func (l *JobUIConnectAdapter) GetSavepoint(ctx context.Context, req *connect.Request[jobpb.GetSavepointRequest]) (*connect.Response[jobpb.GetSavepointResponse], error) {
+func (l *JobUIConnectHandler) GetSavepoint(ctx context.Context, req *connect.Request[jobpb.GetSavepointRequest]) (*connect.Response[jobpb.GetSavepointResponse], error) {
 	uri, err := l.job.HandleGetSavepointURI(ctx, req.Msg.SavepointId)
 	return connect.NewResponse(&jobpb.GetSavepointResponse{
 		Uri: uri,
 	}), err
 }
 
-var _ jobpbconnect.JobUIHandler = (*JobUIConnectAdapter)(nil)
+var _ jobpbconnect.JobUIHandler = (*JobUIConnectHandler)(nil)

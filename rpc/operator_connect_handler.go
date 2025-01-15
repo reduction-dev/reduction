@@ -12,16 +12,16 @@ import (
 	"connectrpc.com/connect"
 )
 
-type OperatorConnectAdapter struct {
+type OperatorConnectHandler struct {
 	operator *operator.Operator
 }
 
 func NewOperatorConnectHandler(operator *operator.Operator) (string, http.Handler) {
-	l := &OperatorConnectAdapter{operator: operator}
+	l := &OperatorConnectHandler{operator: operator}
 	return workerpbconnect.NewOperatorHandler(l, connect.WithInterceptors(NewLoggingInterceptor(operator.Logger)))
 }
 
-func (l *OperatorConnectAdapter) HandleEvent(ctx context.Context, req *connect.Request[workerpb.HandleEventRequest]) (*connect.Response[workerpb.Empty], error) {
+func (l *OperatorConnectHandler) HandleEvent(ctx context.Context, req *connect.Request[workerpb.HandleEventRequest]) (*connect.Response[workerpb.Empty], error) {
 	if err := l.operator.HandleEvent(ctx, req.Msg); err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (l *OperatorConnectAdapter) HandleEvent(ctx context.Context, req *connect.R
 	return connect.NewResponse(&workerpb.Empty{}), nil
 }
 
-func (l *OperatorConnectAdapter) Start(ctx context.Context, req *connect.Request[workerpb.StartOperatorRequest]) (*connect.Response[workerpb.Empty], error) {
+func (l *OperatorConnectHandler) Start(ctx context.Context, req *connect.Request[workerpb.StartOperatorRequest]) (*connect.Response[workerpb.Empty], error) {
 	if len(req.Msg.Sinks) != 1 {
 		panic("exactly one Sink config required")
 	}
@@ -38,4 +38,4 @@ func (l *OperatorConnectAdapter) Start(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&workerpb.Empty{}), err
 }
 
-var _ workerpbconnect.OperatorHandler = (*OperatorConnectAdapter)(nil)
+var _ workerpbconnect.OperatorHandler = (*OperatorConnectHandler)(nil)
