@@ -32,17 +32,21 @@ func (c *checkpoint) registerBarrier(senderID string, barrier *workerpb.Checkpoi
 	return nil
 }
 
-func (c *checkpoint) receivedAllBarriers() bool {
+func (c *checkpoint) hasAllBarriers() bool {
 	return len(c.srIDs) == 0
 }
 
-// alignSender will block requests from senders until all barriers have been received.
-func (c *checkpoint) alignSender(senderID string) {
+// alignSender returns a waiter function that will block requests from senders
+// until all barriers have been received.
+func (c *checkpoint) alignSender(senderID string) (wait func()) {
 	if c == nil {
-		return // no-op if there is no checkpoint
+		return func() {} // no-op if there is no checkpoint
 	}
 
 	if _, ok := c.srIDs[senderID]; !ok {
-		<-c.allBarriersReceived
+		return func() {
+			<-c.allBarriersReceived
+		}
 	}
+	return func() {}
 }

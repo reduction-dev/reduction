@@ -189,8 +189,9 @@ func (o *Operator) HandleEvent(ctx context.Context, req *workerpb.HandleEventReq
 
 	// Block the sender to align checkpoint barriers if needed
 	o.mu.RLock()
-	o.checkpoint.alignSender(req.SenderId)
+	waitOnAlignment := o.checkpoint.alignSender(req.SenderId)
 	o.mu.RUnlock()
+	waitOnAlignment()
 
 	switch typedEvent := req.Event.(type) {
 	case *workerpb.HandleEventRequest_KeyedEvent:
@@ -203,7 +204,7 @@ func (o *Operator) HandleEvent(ctx context.Context, req *workerpb.HandleEventReq
 		}
 	case *workerpb.HandleEventRequest_CheckpointBarrier:
 		o.events <- func() {
-			respErr <- o.handleSnapshotBarrier(ctx, req.SenderId, typedEvent.CheckpointBarrier)
+			respErr <- o.handleCheckpointBarrier(ctx, req.SenderId, typedEvent.CheckpointBarrier)
 		}
 	case *workerpb.HandleEventRequest_SourceComplete:
 		o.events <- func() {
@@ -261,7 +262,7 @@ func (o *Operator) handleUserEvent(ctx context.Context, event *handlerpb.KeyedEv
 	return nil
 }
 
-func (o *Operator) handleSnapshotBarrier(ctx context.Context, senderID string, barrier *workerpb.CheckpointBarrier) error {
+func (o *Operator) handleCheckpointBarrier(ctx context.Context, senderID string, barrier *workerpb.CheckpointBarrier) error {
 	// Get lock for checkpoint resource which is shared between all callers.
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -273,7 +274,7 @@ func (o *Operator) handleSnapshotBarrier(ctx context.Context, senderID string, b
 		return err
 	}
 
-	if o.checkpoint.receivedAllBarriers() {
+	if o.checkpoint.hasAllBarriers() {
 		cp, err := o.db.Checkpoint(o.checkpoint.checkpointID)()
 		if err != nil {
 			return err
