@@ -73,7 +73,7 @@ func NewServer(params NewServerParams) *server {
 				SenderID:     worker.SourceRunner.ID,
 				OperatorNode: node,
 				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  100,
+					MaxSize:  10_000,
 					MaxDelay: 10 * time.Millisecond,
 				},
 			})

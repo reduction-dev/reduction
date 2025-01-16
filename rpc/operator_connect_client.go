@@ -13,11 +13,11 @@ import (
 )
 
 type OperatorConnectClient struct {
-	id             string
-	host           string
-	senderID       string
-	operatorClient workerpbconnect.OperatorClient
-	eventBatcher   *batching.EventBatcher
+	id            string
+	host          string
+	senderID      string
+	connectClient workerpbconnect.OperatorClient
+	eventBatcher  *batching.EventBatcher
 }
 
 type NewOperatorConnectClientParams struct {
@@ -31,27 +31,35 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) *OperatorCo
 	if params.OperatorNode.Host == "" {
 		panic("missing host")
 	}
-	operatorClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
-	return &OperatorConnectClient{
-		id:             params.OperatorNode.Id,
-		host:           params.OperatorNode.Host,
-		senderID:       params.SenderID,
-		operatorClient: operatorClient,
-		eventBatcher:   batching.NewEventBatcher(params.BatchingOptions),
+	connectClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
+	client := &OperatorConnectClient{
+		id:            params.OperatorNode.Id,
+		host:          params.OperatorNode.Host,
+		senderID:      params.SenderID,
+		connectClient: connectClient,
+		eventBatcher:  batching.NewEventBatcher(params.BatchingOptions),
 	}
+	client.eventBatcher.OnBatchReady(func(batch []*workerpb.Event) {
+		req := &workerpb.HandleEventBatchRequest{
+			SenderId: client.senderID,
+			Events:   batch,
+		}
+		_, err := client.connectClient.HandleEventBatch(context.Background(), connect.NewRequest(req))
+		if err != nil {
+			panic(err)
+		}
+	})
+
+	return client
 }
 
 func (c *OperatorConnectClient) HandleEvent(ctx context.Context, event *workerpb.Event) error {
-	req := &workerpb.HandleEventBatchRequest{
-		SenderId: c.senderID,
-		Events:   []*workerpb.Event{event}, // Starting by just sending one event in batch
-	}
-	_, err := c.operatorClient.HandleEventBatch(ctx, connect.NewRequest(req))
-	return err
+	c.eventBatcher.Add(event)
+	return nil
 }
 
 func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
-	_, err := c.operatorClient.Start(ctx, connect.NewRequest(req))
+	_, err := c.connectClient.Start(ctx, connect.NewRequest(req))
 	return err
 }
 
