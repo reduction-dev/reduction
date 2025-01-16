@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
@@ -17,6 +18,7 @@ import (
 	"reduction.dev/reduction/jobs"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/storage"
 )
 
@@ -45,7 +47,15 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
 		},
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient("job", node, connect.WithProtoJSON())
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:       "job",
+				OperatorNode:   node,
+				ConnectOptions: []connect.ClientOption{connect.WithProtoJSON()},
+				BatchingOptions: batching.EventBatcherParams{
+					MaxSize:  2,
+					MaxDelay: 5 * time.Millisecond,
+				},
+			})
 		},
 	)
 	mux = http.NewServeMux()

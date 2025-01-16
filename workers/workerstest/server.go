@@ -12,6 +12,7 @@ import (
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers"
 
 	"connectrpc.com/connect"
@@ -53,7 +54,14 @@ func NewServer(params NewServerParams) *server {
 	path, handler := rpc.NewSourceRunnerConnectHandler(
 		worker.SourceRunner,
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(worker.SourceRunner.ID, node)
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:     worker.SourceRunner.ID,
+				OperatorNode: node,
+				BatchingOptions: batching.EventBatcherParams{
+					MaxSize:  2,
+					MaxDelay: 5 * time.Millisecond,
+				},
+			})
 		},
 	)
 	mux.Handle(path, handler)

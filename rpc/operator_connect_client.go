@@ -7,6 +7,7 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/workerpb"
 	workerpbconnect "reduction.dev/reduction/proto/workerpb/workerpbconnect"
+	"reduction.dev/reduction/rpc/batching"
 
 	"connectrpc.com/connect"
 )
@@ -16,18 +17,27 @@ type OperatorConnectClient struct {
 	host           string
 	senderID       string
 	operatorClient workerpbconnect.OperatorClient
+	eventBatcher   *batching.EventBatcher
 }
 
-func NewOperatorConnectClient(senderID string, params *jobpb.NodeIdentity, opts ...connect.ClientOption) *OperatorConnectClient {
-	if params.Host == "" {
+type NewOperatorConnectClientParams struct {
+	SenderID        string
+	OperatorNode    *jobpb.NodeIdentity
+	ConnectOptions  []connect.ClientOption
+	BatchingOptions batching.EventBatcherParams
+}
+
+func NewOperatorConnectClient(params NewOperatorConnectClientParams) *OperatorConnectClient {
+	if params.OperatorNode.Host == "" {
 		panic("missing host")
 	}
-	operatorClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.Host, opts...)
+	operatorClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
 	return &OperatorConnectClient{
-		id:             params.Id,
-		host:           params.Host,
-		senderID:       senderID,
+		id:             params.OperatorNode.Id,
+		host:           params.OperatorNode.Host,
+		senderID:       params.SenderID,
 		operatorClient: operatorClient,
+		eventBatcher:   batching.NewEventBatcher(params.BatchingOptions),
 	}
 }
 

@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/util/httpu"
 	"reduction.dev/reduction/workers"
 
@@ -67,7 +69,14 @@ func NewServer(params NewServerParams) *server {
 	path, handler := rpc.NewSourceRunnerConnectHandler(
 		worker.SourceRunner,
 		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(worker.SourceRunner.ID, node)
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:     worker.SourceRunner.ID,
+				OperatorNode: node,
+				BatchingOptions: batching.EventBatcherParams{
+					MaxSize:  100,
+					MaxDelay: 10 * time.Millisecond,
+				},
+			})
 		},
 	)
 	mux.Handle(path, handler)
