@@ -10,14 +10,14 @@ import (
 	"os"
 	"runtime/debug"
 
+	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/clocks"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/storage"
-
-	"connectrpc.com/connect"
 )
 
 // Create a new local job server for testing.
@@ -37,10 +37,19 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 	mux.Handle(rpc.NewJobUIConnectHandler(job))
 	uiServer := &http.Server{Handler: mux}
 
-	mux = http.NewServeMux()
 	// Configure job to use JSON when creating worker clients for easier debugging
 	// in tests.
-	mux.Handle(rpc.NewJobConnectHandler(job, connect.WithProtoJSON()))
+	jobPath, jobHandler := rpc.NewJobConnectHandler(
+		job,
+		func(node *jobpb.NodeIdentity) *rpc.SourceRunnerConnectClient {
+			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
+		},
+		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
+			return rpc.NewOperatorConnectClient(node, connect.WithProtoJSON())
+		},
+	)
+	mux = http.NewServeMux()
+	mux.Handle(jobPath, jobHandler)
 	rpcServer := &http.Server{Handler: mux}
 
 	svr := &Server{

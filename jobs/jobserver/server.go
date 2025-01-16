@@ -10,6 +10,7 @@ import (
 
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/util/httpu"
 
@@ -53,8 +54,17 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 		panic(err)
 	}
 
+	jobPath, jobHandler := rpc.NewJobConnectHandler(
+		job,
+		func(node *jobpb.NodeIdentity) *rpc.SourceRunnerConnectClient {
+			return rpc.NewSourceRunnerConnectClient(node)
+		},
+		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
+			return rpc.NewOperatorConnectClient(node)
+		},
+	)
 	mux = http.NewServeMux()
-	mux.Handle(rpc.NewJobConnectHandler(job))
+	mux.Handle(jobPath, jobHandler)
 	rpcServer := httpu.NewServer(mux)
 	rpcListener, err := net.Listen("tcp", serverOptions.rpcAddr)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"net/http/pprof"
 
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/util/httpu"
 	"reduction.dev/reduction/workers"
@@ -63,7 +64,12 @@ func NewServer(params NewServerParams) *server {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	path, handler := rpc.NewSourceRunnerConnectHandler(worker.SourceRunner)
+	path, handler := rpc.NewSourceRunnerConnectHandler(
+		worker.SourceRunner,
+		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
+			return rpc.NewOperatorConnectClient(node)
+		},
+	)
 	mux.Handle(path, handler)
 
 	path, handler = rpc.NewOperatorConnectHandler(worker.Operator)

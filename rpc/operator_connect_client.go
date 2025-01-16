@@ -48,3 +48,5 @@ func (c *OperatorConnectClient) Host() string {
 }
 
 var _ proto.Operator = (*OperatorConnectClient)(nil)
+
+type OperatorClientFactory func(node *jobpb.NodeIdentity) *OperatorConnectClient

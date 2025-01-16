@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/clocks"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/workers"
 
@@ -49,7 +50,12 @@ func NewServer(params NewServerParams) *server {
 
 	mux := http.NewServeMux()
 
-	path, handler := rpc.NewSourceRunnerConnectHandler(worker.SourceRunner)
+	path, handler := rpc.NewSourceRunnerConnectHandler(
+		worker.SourceRunner,
+		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
+			return rpc.NewOperatorConnectClient(node)
+		},
+	)
 	mux.Handle(path, handler)
 
 	path, handler = rpc.NewOperatorConnectHandler(worker.Operator)

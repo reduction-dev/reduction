@@ -15,12 +15,13 @@ import (
 )
 
 type JobConnectHandler struct {
-	job        *jobs.Job
-	clientOpts []connect.ClientOption
+	job             *jobs.Job
+	opClientFactory OperatorClientFactory
+	srClientFactory SourceRunnerClientFactory
 }
 
-func NewJobConnectHandler(job *jobs.Job, clientOpts ...connect.ClientOption) (path string, handler http.Handler) {
-	h := &JobConnectHandler{job: job, clientOpts: clientOpts}
+func NewJobConnectHandler(job *jobs.Job, srClientFactory SourceRunnerClientFactory, opClientFactory OperatorClientFactory) (path string, handler http.Handler) {
+	h := &JobConnectHandler{job: job, opClientFactory: opClientFactory, srClientFactory: srClientFactory}
 	logger := slog.With("instanceID", "job")
 	return jobpbconnect.NewJobHandler(h, connect.WithInterceptors(NewLoggingInterceptor(logger)))
 }
@@ -35,11 +36,8 @@ func (l *JobConnectHandler) OperatorCheckpointComplete(ctx context.Context, req 
 }
 
 func (l *JobConnectHandler) RegisterOperator(ctx context.Context, req *connect.Request[jobpb.NodeIdentity]) (*connect.Response[jobpb.Empty], error) {
-	w := NewOperatorConnectClient(req.Msg, l.clientOpts...)
-	if w.Host() == "" {
-		panic("listener missing host")
-	}
-	l.job.HandleRegisterOperator(w)
+	op := l.opClientFactory(req.Msg)
+	l.job.HandleRegisterOperator(op)
 
 	return connect.NewResponse(&jobpb.Empty{}), nil
 }
@@ -50,7 +48,7 @@ func (l *JobConnectHandler) DeregisterOperator(ctx context.Context, req *connect
 }
 
 func (l *JobConnectHandler) RegisterSourceRunner(ctx context.Context, req *connect.Request[jobpb.NodeIdentity]) (*connect.Response[jobpb.Empty], error) {
-	sr := NewSourceRunnerConnectClient(req.Msg, l.clientOpts...)
+	sr := l.srClientFactory(req.Msg)
 	l.job.HandleRegisterSourceRunner(sr)
 
 	return connect.NewResponse(&jobpb.Empty{}), nil

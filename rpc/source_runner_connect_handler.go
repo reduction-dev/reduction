@@ -13,18 +13,19 @@ import (
 )
 
 type SourceRunnerConnectHandler struct {
-	sourceRunner *sourcerunner.SourceRunner
+	sourceRunner    *sourcerunner.SourceRunner
+	opClientFactory OperatorClientFactory
 }
 
-func NewSourceRunnerConnectHandler(sourceRunner *sourcerunner.SourceRunner) (string, http.Handler) {
-	h := &SourceRunnerConnectHandler{sourceRunner: sourceRunner}
+func NewSourceRunnerConnectHandler(sourceRunner *sourcerunner.SourceRunner, opClientFactory OperatorClientFactory) (string, http.Handler) {
+	h := &SourceRunnerConnectHandler{sourceRunner: sourceRunner, opClientFactory: opClientFactory}
 	return workerpbconnect.NewSourceRunnerHandler(h, connect.WithInterceptors(NewLoggingInterceptor(sourceRunner.Logger)))
 }
 
 func (s *SourceRunnerConnectHandler) Start(ctx context.Context, req *connect.Request[workerpb.StartSourceRunnerRequest]) (*connect.Response[workerpb.Empty], error) {
 	ops := make([]proto.Operator, len(req.Msg.Operators))
 	for i, op := range req.Msg.Operators {
-		ops[i] = NewOperatorConnectClient(op)
+		ops[i] = s.opClientFactory(op)
 	}
 
 	err := s.sourceRunner.HandleStart(ctx, ops, req.Msg)

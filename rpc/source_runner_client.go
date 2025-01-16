@@ -49,3 +49,5 @@ func (c *SourceRunnerConnectClient) Host() string {
 }
 
 var _ proto.SourceRunner = (*SourceRunnerConnectClient)(nil)
+
+type SourceRunnerClientFactory func(node *jobpb.NodeIdentity) *SourceRunnerConnectClient
