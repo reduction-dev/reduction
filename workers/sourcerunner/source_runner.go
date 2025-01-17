@@ -34,9 +34,10 @@ type SourceRunner struct {
 	watermarkTicker *time.Ticker
 	clock           clocks.Clock
 	isHalting       atomic.Bool
-	stopLoop        context.CancelFunc // Signal to stop the event loop if running
-	stop            context.CancelFunc // Signal to stop all source runner processes
+	stopLoop        context.CancelFunc      // Signal to stop the event loop if running
+	stop            context.CancelCauseFunc // Signal to stop all source runner processes
 	operatorFactory proto.OperatorFactory
+	errChan         chan error
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -72,9 +73,10 @@ func New(params NewParams) *SourceRunner {
 		checkpointBarrier: make(chan *workerpb.CheckpointBarrier, 1),
 		Logger:            log,
 		clock:             params.Clock,
-		stopLoop:          func() {}, // initialize with noop
-		stop:              func() {}, // initialize with noop
+		stopLoop:          func() {},          // initialize with noop
+		stop:              func(err error) {}, // initialize with noop
 		operatorFactory:   params.OperatorFactory,
+		errChan:           make(chan error),
 	}
 }
 
@@ -82,8 +84,8 @@ func New(params NewParams) *SourceRunner {
 func (r *SourceRunner) Start(ctx context.Context) error {
 	defer r.Logger.Info("stopped event loop")
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	r.stop = cancel
 
 	r.registerPoller = r.clock.Every(3*time.Second, func(*clocks.EveryContext) {
@@ -95,6 +97,11 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 		}
 	}, "register")
 	r.registerPoller.Trigger() // Try to register immediately
+
+	// Listen for errors on the errChan
+	go func() {
+		cancel(<-r.errChan)
+	}()
 
 	<-ctx.Done() // Afterward begin shutdown process
 
@@ -110,19 +117,26 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 			r.Logger.Warn("failed deregistration", "err", err)
 		}
 	}
+
+	close(r.errChan)
+
+	// Treat context.Canceled as a non-error case
+	if cause := context.Cause(ctx); cause != context.Canceled {
+		return cause
+	}
 	return nil
 }
 
 // Stop signals the SR to shutdown. This is safe to call multiple times.
 func (r *SourceRunner) Stop() error {
-	r.stop()
+	r.stop(nil)
 	return nil
 }
 
 // Halt stops the source runner without deregistering from the job
 func (r *SourceRunner) Halt() {
 	r.isHalting.Store(true)
-	r.stop()
+	r.stop(nil)
 }
 
 // HandleStart is invoked by the Job when the SourceRunner has joined an assembly.

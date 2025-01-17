@@ -1,6 +1,7 @@
 package batching
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ type EventBatcher struct {
 	batchesChan  chan []*workerpb.Event
 }
 
-func NewEventBatcher(params EventBatcherParams) *EventBatcher {
+func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatcher {
 	if params.Timer == nil {
 		params.Timer = &clocks.SystemTimer{}
 	}
@@ -39,7 +40,19 @@ func NewEventBatcher(params EventBatcherParams) *EventBatcher {
 		batchNum:     1, // Reserve 0 for stopping the timer
 	}
 
-	go batcher.invokeCallbacks()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case batch, ok := <-batcher.batchesChan:
+				if !ok {
+					return
+				}
+				batcher.onBatchReady(batch)
+			}
+		}
+	}()
 
 	return batcher
 }
@@ -81,14 +94,4 @@ func (b *EventBatcher) flushLocked() {
 	b.batch = make([]*workerpb.Event, 0, len(flushingBatch))
 	b.batchNum++
 	b.batchesChan <- flushingBatch
-}
-
-func (b *EventBatcher) invokeCallbacks() {
-	for batch := range b.batchesChan {
-		b.onBatchReady(batch)
-	}
-}
-
-func (b *EventBatcher) Close() {
-	close(b.batchesChan)
 }

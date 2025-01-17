@@ -34,17 +34,17 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *Op
 	if params.OperatorNode.Host == "" {
 		panic("missing host")
 	}
+
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
 	connectClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
 	client = &OperatorConnectClient{
 		id:            params.OperatorNode.Id,
 		host:          params.OperatorNode.Host,
 		senderID:      params.SenderID,
 		connectClient: connectClient,
-		eventBatcher:  batching.NewEventBatcher(params.BatchingOptions),
+		eventBatcher:  batching.NewEventBatcher(ctx, params.BatchingOptions),
+		cancelFunc:    cancelFunc,
 	}
-
-	ctx, cancelFunc := context.WithCancelCause(context.Background())
-	client.cancelFunc = cancelFunc
 
 	client.eventBatcher.OnBatchReady(func(batch []*workerpb.Event) {
 		req := &workerpb.HandleEventBatchRequest{
@@ -78,11 +78,4 @@ func (c *OperatorConnectClient) Host() string {
 	return c.host
 }
 
-func (c *OperatorConnectClient) Close() {
-	c.cancelFunc(ErrClientClosed)
-	c.eventBatcher.Close()
-}
-
 var _ proto.Operator = (*OperatorConnectClient)(nil)
-
-var ErrClientClosed = errors.New("client closed")

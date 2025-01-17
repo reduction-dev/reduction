@@ -1,6 +1,7 @@
 package batching_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -12,10 +13,13 @@ import (
 )
 
 func TestEventBatcherFlushesOnSize(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	timer := &clocks.FakeTimer{}
 	receivedBatches := make(chan []*workerpb.Event, 2)
 
-	batcher := batching.NewEventBatcher(batching.EventBatcherParams{
+	batcher := batching.NewEventBatcher(ctx, batching.EventBatcherParams{
 		MaxDelay: time.Second, // unused
 		MaxSize:  2,
 		Timer:    timer,
@@ -23,7 +27,6 @@ func TestEventBatcherFlushesOnSize(t *testing.T) {
 	batcher.OnBatchReady(func(events []*workerpb.Event) {
 		receivedBatches <- events
 	})
-	defer batcher.Close()
 
 	event1 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 	event2 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
@@ -41,10 +44,13 @@ func TestEventBatcherFlushesOnSize(t *testing.T) {
 }
 
 func TestEventBatcherFlushesOnTime(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	timer := &clocks.FakeTimer{}
 	receivedBatches := make(chan []*workerpb.Event, 2)
 
-	batcher := batching.NewEventBatcher(batching.EventBatcherParams{
+	batcher := batching.NewEventBatcher(ctx, batching.EventBatcherParams{
 		MaxDelay: time.Second, // unused
 		MaxSize:  10,
 		Timer:    timer,
@@ -52,7 +58,6 @@ func TestEventBatcherFlushesOnTime(t *testing.T) {
 	batcher.OnBatchReady(func(events []*workerpb.Event) {
 		receivedBatches <- events
 	})
-	defer batcher.Close()
 
 	event1 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 	event2 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
@@ -69,10 +74,13 @@ func TestEventBatcherFlushesOnTime(t *testing.T) {
 }
 
 func TestEventBatcherResetsBatchAfterFlush(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	timer := &clocks.FakeTimer{}
 	receivedBatches := make(chan []*workerpb.Event, 2)
 
-	batcher := batching.NewEventBatcher(batching.EventBatcherParams{
+	batcher := batching.NewEventBatcher(ctx, batching.EventBatcherParams{
 		MaxDelay: time.Second,
 		MaxSize:  2,
 		Timer:    timer,
@@ -80,7 +88,6 @@ func TestEventBatcherResetsBatchAfterFlush(t *testing.T) {
 	batcher.OnBatchReady(func(events []*workerpb.Event) {
 		receivedBatches <- events
 	})
-	defer batcher.Close()
 
 	event1 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 	event2 := &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
