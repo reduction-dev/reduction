@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"testing"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -32,13 +33,13 @@ type NewServerParams struct {
 	LogPrefix   string       // Optional log prefix for differentiating different worker logs
 }
 
-func NewServer(params NewServerParams) *server {
+func NewServer(t *testing.T, params NewServerParams) *server {
 	// Create job client using JSON for easier debugging in tests
 	job := rpc.NewJobConnectClient(params.JobAddr, connect.WithProtoJSON())
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		panic(fmt.Sprintf("failed to listen on address: %v", err))
+		t.Fatalf("failed to listen on address: %v", err)
 	}
 	worker := workers.New(workers.NewParams{
 		Host:        listener.Addr().String(),
@@ -61,6 +62,9 @@ func NewServer(params NewServerParams) *server {
 					MaxSize:  2,
 					MaxDelay: 5 * time.Millisecond,
 				},
+				OnAsyncError: func(err error) {
+					t.Errorf("operator client async error: %v", err)
+				},
 			})
 		},
 	)
@@ -77,19 +81,19 @@ func NewServer(params NewServerParams) *server {
 	}
 }
 
-// Create and run a test server. Any errors panic.
-func Run(params NewServerParams) (server *server, stop func()) {
-	server = NewServer(params)
+// Create and run a test server. Any errors fail the test.
+func Run(t *testing.T, params NewServerParams) (server *server, stop func()) {
+	server = NewServer(t, params)
 	go func() {
 		err := server.Start(context.Background())
 		if err != nil {
-			panic(err)
+			t.Errorf("server.Start error: %v", err)
 		}
 	}()
 	return server, func() {
 		err := server.Stop()
 		if err != nil {
-			panic(err)
+			t.Fatalf("server.Stop error: %v", err)
 		}
 	}
 }

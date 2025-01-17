@@ -57,7 +57,7 @@ func TestCountInWindow(t *testing.T) {
 	handlerServer, stop := RunHandler(handler)
 	defer stop()
 
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -121,7 +121,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	handlerServer, stop := RunHandler(handler)
 	defer stop()
 
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -152,7 +152,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	job, stop = jobstest.Run(jobConfig, jobstest.WithStore(jobStore))
 	defer stop()
 
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})

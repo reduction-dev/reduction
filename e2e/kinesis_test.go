@@ -80,13 +80,13 @@ func TestKinesis(t *testing.T) {
 	handlerServer, stop := e2e.RunHandler(handler)
 	defer stop()
 
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
 
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})

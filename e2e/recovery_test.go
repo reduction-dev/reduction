@@ -58,7 +58,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 	defer stop()
 
 	// Start the worker
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -103,7 +103,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 	defer stop()
 
 	// Start the worker again
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -153,7 +153,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	defer stop()
 
 	// Start the worker
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -176,7 +176,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	worker.Stop()
 
 	// Start a new worker
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -227,7 +227,7 @@ func TestScaleOutWorkers(t *testing.T) {
 	defer stop()
 
 	// Start the worker
-	worker1, stop := workerstest.Run(workerstest.NewServerParams{
+	worker1, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-1",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
@@ -263,14 +263,14 @@ func TestScaleOutWorkers(t *testing.T) {
 	defer stop()
 
 	// Start 2 new workers
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-2",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
 
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-3",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
@@ -321,7 +321,7 @@ func TestScaleInWorkers(t *testing.T) {
 	defer stop()
 
 	// Start the first worker
-	worker1, stop := workerstest.Run(workerstest.NewServerParams{
+	worker1, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-1",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
@@ -330,7 +330,7 @@ func TestScaleInWorkers(t *testing.T) {
 	defer stop()
 
 	// Start the second worker
-	worker2, stop := workerstest.Run(workerstest.NewServerParams{
+	worker2, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-2",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
@@ -368,7 +368,7 @@ func TestScaleInWorkers(t *testing.T) {
 	defer stop()
 
 	// Start the third worker
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-3",
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
@@ -419,7 +419,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	defer stop()
 
 	// Start the first worker
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
 		Clock:       clock,
@@ -473,7 +473,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	defer stop()
 
 	// Start the next worker
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handler.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})

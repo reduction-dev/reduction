@@ -44,7 +44,7 @@ func TestWorkerRegistrationAfterShutdown(t *testing.T) {
 	defer stop()
 
 	// Start the worker
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -59,7 +59,7 @@ func TestWorkerRegistrationAfterShutdown(t *testing.T) {
 	worker.Stop()
 
 	// Start the worker again
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -103,7 +103,7 @@ func TestWorkerRegistrationAfterKilled(t *testing.T) {
 	defer stop()
 
 	// Start the worker
-	worker, stop := workerstest.Run(workerstest.NewServerParams{
+	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -121,7 +121,7 @@ func TestWorkerRegistrationAfterKilled(t *testing.T) {
 	clock.Advance(time.Minute * 1)
 
 	// Start the worker again
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -164,7 +164,7 @@ func TestAddingStandbyWorker(t *testing.T) {
 	defer stop()
 
 	// Start the first worker
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
@@ -176,7 +176,7 @@ func TestAddingStandbyWorker(t *testing.T) {
 	}, time.Second*1, time.Millisecond*100)
 
 	// Start the second worker, which should be on standby after registering.
-	_, stop = workerstest.Run(workerstest.NewServerParams{
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})

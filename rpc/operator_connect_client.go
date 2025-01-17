@@ -25,6 +25,7 @@ type NewOperatorConnectClientParams struct {
 	OperatorNode    *jobpb.NodeIdentity
 	ConnectOptions  []connect.ClientOption
 	BatchingOptions batching.EventBatcherParams
+	OnAsyncError    func(error)
 }
 
 func NewOperatorConnectClient(params NewOperatorConnectClientParams) *OperatorConnectClient {
@@ -46,7 +47,7 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) *OperatorCo
 		}
 		_, err := client.connectClient.HandleEventBatch(context.Background(), connect.NewRequest(req))
 		if err != nil {
-			panic(err)
+			params.OnAsyncError(err)
 		}
 	})
 
