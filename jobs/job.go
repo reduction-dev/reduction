@@ -46,6 +46,7 @@ type NewParams struct {
 	Logger              *slog.Logger
 	OperatorFactory     proto.OperatorFactory
 	SourceRunnerFactory proto.SourceRunnerFactory
+	CheckpointEvents    chan snapshots.CheckpointEvent
 }
 
 func New(params *NewParams) *Job {
@@ -85,10 +86,11 @@ func New(params *NewParams) *Job {
 	}
 
 	snapshotStore := snapshots.NewStore(&snapshots.NewStoreParams{
-		SavepointURI:    params.SavepointURI,
-		FileStore:       params.Store,
-		SavepointsPath:  params.SavepointsPath,
-		CheckpointsPath: params.CheckpointsPath,
+		SavepointURI:     params.SavepointURI,
+		FileStore:        params.Store,
+		SavepointsPath:   params.SavepointsPath,
+		CheckpointsPath:  params.CheckpointsPath,
+		CheckpointEvents: params.CheckpointEvents,
 	})
 	job := &Job{
 		snapshotStore:       snapshotStore,
@@ -139,11 +141,6 @@ func (j *Job) HandleDeregisterSourceRunner(sr *jobpb.NodeIdentity) {
 }
 
 func (j *Job) HandleCreateSavepoint(ctx context.Context) (uint64, error) {
-	// Need to save all state:
-	// -[x] The source cursor
-	// -[x] The DB files
-	// -[ ] The timerRegistry
-
 	// Create a pending savepoint in the snapshot store to track savepointing.
 	checkpointID, created, err := j.snapshotStore.CreateSavepoint(j.assembly.OperatorIDs(), j.assembly.SourceRunnerIDs())
 	if err != nil {

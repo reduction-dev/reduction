@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sync"
 
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/storage"
@@ -16,21 +17,34 @@ import (
 var ErrCheckpointInProgress = errors.New("checkpoint in progress")
 
 type Store struct {
-	fileStore          storage.FileStore
-	savepointsPath     string
-	checkpointsPath    string
+	fileStore       storage.FileStore
+	savepointsPath  string
+	checkpointsPath string
+	log             *slog.Logger
+	savepointURI    string
+	subscriber      chan CheckpointEvent
+
+	state   storeState
+	stateMu sync.Mutex
+}
+
+type CheckpointEvent struct {
+	URI string
+	Err error
+}
+
+type storeState struct {
 	completedSnapshots []*jobSnapshot
 	pendingSnapshot    *jobSnapshot
-	log                *slog.Logger
-	savepointURI       string
 	checkpointID       uint64 // The last used, monotonically increasing checkpoint ID
 }
 
 type NewStoreParams struct {
-	SavepointURI    string
-	FileStore       storage.FileStore
-	SavepointsPath  string
-	CheckpointsPath string
+	SavepointURI     string
+	FileStore        storage.FileStore
+	SavepointsPath   string
+	CheckpointsPath  string
+	CheckpointEvents chan CheckpointEvent
 }
 
 func NewStore(params *NewStoreParams) *Store {
@@ -40,6 +54,7 @@ func NewStore(params *NewStoreParams) *Store {
 		checkpointsPath: params.CheckpointsPath,
 		log:             slog.With("instanceID", "job"),
 		savepointURI:    params.SavepointURI,
+		subscriber:      params.CheckpointEvents,
 	}
 }
 
@@ -64,103 +79,128 @@ func (s *Store) SavepointURIForID(id uint64) (string, error) {
 }
 
 func (s *Store) CreateCheckpoint(operatorIDs, sourceRunnerIDs []string) (uint64, error) {
-	if s.pendingSnapshot != nil {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if s.state.pendingSnapshot != nil {
 		return 0, ErrCheckpointInProgress
 	}
-	s.checkpointID++
-	s.pendingSnapshot = newJobSnapshot(s.checkpointID, operatorIDs, sourceRunnerIDs)
+	s.state.checkpointID++
+	s.state.pendingSnapshot = newJobSnapshot(s.state.checkpointID, operatorIDs, sourceRunnerIDs)
 
-	return s.checkpointID, nil
+	return s.state.checkpointID, nil
 }
 
 func (s *Store) CreateSavepoint(operatorIDs, sourceRunnerIDs []string) (cpID uint64, created bool, err error) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
 	// If there is an in-progress checkpoint, mark it as a savepoint
-	if s.pendingSnapshot != nil {
-		if s.pendingSnapshot.isSavepoint {
+	if s.state.pendingSnapshot != nil {
+		if s.state.pendingSnapshot.isSavepoint {
 			return 0, false, fmt.Errorf("savepoint already in-progress")
 		}
-		s.pendingSnapshot.isSavepoint = true
-		return s.pendingSnapshot.id, false, nil
+		s.state.pendingSnapshot.isSavepoint = true
+		return s.state.pendingSnapshot.id, false, nil
 	}
 
 	// Otherwise start a new checkpoint, marking it as a savepoint
-	s.checkpointID++
-	s.pendingSnapshot = newJobSnapshot(s.checkpointID, operatorIDs, sourceRunnerIDs)
-	s.pendingSnapshot.isSavepoint = true
+	s.state.checkpointID++
+	s.state.pendingSnapshot = newJobSnapshot(s.state.checkpointID, operatorIDs, sourceRunnerIDs)
+	s.state.pendingSnapshot.isSavepoint = true
 
-	return s.checkpointID, true, nil
+	return s.state.checkpointID, true, nil
 }
 
 func (s *Store) AddOperatorSnapshot(req *snapshotpb.OperatorCheckpoint) error {
-	if s.pendingSnapshot == nil {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if s.state.pendingSnapshot == nil {
 		return fmt.Errorf("operator %s tried to add to job checkpoint %d but there is no pending checkpoint", req.OperatorId, req.CheckpointId)
 	}
-	if s.pendingSnapshot.id != req.CheckpointId {
-		return fmt.Errorf("operator %s tried to add to job checkpoint %d but pending checkpoint is %d", req.OperatorId, req.CheckpointId, s.pendingSnapshot.id)
+	if s.state.pendingSnapshot.id != req.CheckpointId {
+		return fmt.Errorf("operator %s tried to add to job checkpoint %d but pending checkpoint is %d", req.OperatorId, req.CheckpointId, s.state.pendingSnapshot.id)
 	}
 
-	if err := s.pendingSnapshot.addOperatorSnapshot(req); err != nil {
+	if err := s.state.pendingSnapshot.addOperatorSnapshot(req); err != nil {
 		s.log.Warn("adding operator snapshot", "err", err)
 	}
 
-	if s.pendingSnapshot.isComplete() {
-		return s.finishSnapshot()
+	if s.state.pendingSnapshot.isComplete() {
+		s.finishSnapshotAsync(s.state.pendingSnapshot)
+		s.state.pendingSnapshot = nil
 	}
 	return nil
 }
 
 func (s *Store) AddSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
-	if s.pendingSnapshot == nil {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	if s.state.pendingSnapshot == nil {
 		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but there is no pending snapshot", ckpt.SourceRunnerId, ckpt.CheckpointId)
 	}
-	if s.pendingSnapshot.id != ckpt.CheckpointId {
-		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but pending snapshot is %d", ckpt.SourceRunnerId, ckpt.CheckpointId, s.pendingSnapshot.id)
+	if s.state.pendingSnapshot.id != ckpt.CheckpointId {
+		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but pending snapshot is %d", ckpt.SourceRunnerId, ckpt.CheckpointId, s.state.pendingSnapshot.id)
 	}
 
-	err := s.pendingSnapshot.addSourceSnapshot(ckpt)
+	err := s.state.pendingSnapshot.addSourceSnapshot(ckpt)
 	if err != nil {
 		return err
 	}
 
-	if s.pendingSnapshot.isComplete() {
-		return s.finishSnapshot()
+	if s.state.pendingSnapshot.isComplete() {
+		s.finishSnapshotAsync(s.state.pendingSnapshot)
+		s.state.pendingSnapshot = nil
 	}
 	return nil
 }
 
-func (s *Store) finishSnapshot() error {
-	finalizingSnapshot := s.pendingSnapshot
-	data, err := finalizingSnapshot.marshal()
+func (s *Store) finishSnapshotAsync(snap *jobSnapshot) {
+	go func() {
+		uri, err := s.finishSnapshot(snap)
+		s.subscriber <- CheckpointEvent{URI: uri, Err: err}
+	}()
+}
+
+func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
+	data, err := snap.marshal()
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	uri, err := s.fileStore.Write(
-		filepath.Join(s.checkpointsPath, "job-"+pathSegment(finalizingSnapshot.id)+".snapshot"),
+	uri, err = s.fileStore.Write(
+		filepath.Join(s.checkpointsPath, "job-"+pathSegment(snap.id)+".snapshot"),
 		bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf("failed creating job snapshot: %v", err)
+		return "", fmt.Errorf("failed creating job snapshot: %v", err)
 	}
-	s.completedSnapshots = append(s.completedSnapshots, finalizingSnapshot)
+
+	// Accessing state to update completedSnapshots
+	s.stateMu.Lock()
+	s.state.completedSnapshots = append(s.state.completedSnapshots, snap)
+	s.stateMu.Unlock()
 
 	s.log.Info("store wrote checkpoint", "uri", uri)
-	s.pendingSnapshot = nil
 
-	if finalizingSnapshot.isSavepoint {
-		spURI, err := CreateSavepointArtifact(s.fileStore, s.savepointsPath, uri, finalizingSnapshot)
+	if snap.isSavepoint {
+		spURI, err := CreateSavepointArtifact(s.fileStore, s.savepointsPath, uri, snap)
 		if err != nil {
-			return err
+			return "", err
 		}
 		s.log.Info("store wrote savepoint", "uri", spURI)
 	}
-
-	return nil
+	return uri, nil
 }
 
 func (s *Store) LoadLatestCheckpoint() (*snapshotpb.JobCheckpoint, error) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
 	// For a running job, check memory for checkpoints
-	if len(s.completedSnapshots) > 0 {
-		return s.completedSnapshots[len(s.completedSnapshots)-1].toProto(), nil
+	if len(s.state.completedSnapshots) > 0 {
+		return s.state.completedSnapshots[len(s.state.completedSnapshots)-1].toProto(), nil
 	}
 
 	// For now let savepoint always override using local checkpoints. Later will
@@ -184,7 +224,7 @@ func (s *Store) LoadLatestCheckpoint() (*snapshotpb.JobCheckpoint, error) {
 		}
 		if latestSnapshotFile != "" {
 			snap, err := s.SnapshotForURI(latestSnapshotFile)
-			s.checkpointID = snap.Id
+			s.state.checkpointID = snap.Id
 			return snap, err
 		}
 
@@ -197,7 +237,7 @@ func (s *Store) LoadLatestCheckpoint() (*snapshotpb.JobCheckpoint, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.checkpointID = snap.Id
+	s.state.checkpointID = snap.Id
 
 	if err := RestoreFromSavepointArtifact(s.fileStore, s.savepointURI, snap); err != nil {
 		return nil, fmt.Errorf("restore checkpoints from savepoint: %v", err)

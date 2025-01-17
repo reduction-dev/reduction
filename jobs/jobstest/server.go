@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
@@ -19,6 +20,7 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/storage"
+	"reduction.dev/reduction/storage/snapshots"
 )
 
 // Create a new local job server for testing.
@@ -38,6 +40,7 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
 			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
 		},
+		CheckpointEvents: make(chan snapshots.CheckpointEvent, 1),
 	}
 	for _, o := range options {
 		o(jobParams)
@@ -56,12 +59,13 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 	rpcServer := &http.Server{Handler: mux}
 
 	svr := &Server{
-		uiServer:    uiServer,
-		uiListener:  uiListener,
-		rpcServer:   rpcServer,
-		rpcListener: rpcListener,
-		job:         job,
-		log:         logger,
+		uiServer:         uiServer,
+		uiListener:       uiListener,
+		rpcServer:        rpcServer,
+		rpcListener:      rpcListener,
+		job:              job,
+		log:              logger,
+		checkpointEvents: jobParams.CheckpointEvents,
 	}
 	return svr
 }
@@ -144,12 +148,13 @@ func WithRPCAddr(addr string) func(*ServerParams) {
 }
 
 type Server struct {
-	uiServer    *http.Server
-	uiListener  net.Listener
-	rpcServer   *http.Server
-	rpcListener net.Listener
-	job         *jobs.Job
-	log         *slog.Logger
+	uiServer         *http.Server
+	uiListener       net.Listener
+	rpcServer        *http.Server
+	rpcListener      net.Listener
+	job              *jobs.Job
+	log              *slog.Logger
+	checkpointEvents chan snapshots.CheckpointEvent
 }
 
 func (s *Server) Start() error {
@@ -196,13 +201,21 @@ func (s *Server) RESTAddr() string {
 
 func (s *Server) Stop() error {
 	s.log.Info("stopping server")
-	var err error
-	if s.rpcServer != nil {
-		err = s.rpcServer.Shutdown(context.Background())
-	}
-	if s.uiServer != nil {
-		err = errors.Join(err, s.uiServer.Shutdown(context.Background()))
-	}
 
-	return err
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		return s.rpcServer.Shutdown(gctx)
+	})
+
+	g.Go(func() error {
+		return s.uiServer.Shutdown(gctx)
+	})
+
+	if err := g.Wait(); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("server shutdown error: %v", err)
+	}
+	return nil
 }

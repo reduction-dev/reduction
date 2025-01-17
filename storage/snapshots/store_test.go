@@ -19,10 +19,13 @@ import (
 func TestRoundTrippingSavepoint(t *testing.T) {
 	testDir := t.TempDir()
 	fs := localfs.NewDirectory(testDir)
+
+	checkpointEvents := make(chan snapshots.CheckpointEvent)
 	store := snapshots.NewStore(&snapshots.NewStoreParams{
-		FileStore:       fs,
-		SavepointsPath:  "savepoints",
-		CheckpointsPath: "checkpoints",
+		CheckpointEvents: checkpointEvents,
+		FileStore:        fs,
+		SavepointsPath:   "savepoints",
+		CheckpointsPath:  "checkpoints",
 	})
 
 	db := dkv.Open(dkv.DBOptions{
@@ -53,6 +56,10 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		SourceRunnerId: "sr1",
 	})
 	require.NoError(t, err)
+
+	// Wait for the savepoint to be created
+	result := <-checkpointEvents
+	require.NoError(t, result.Err)
 
 	spURI, err := store.SavepointURIForID(cpID)
 	require.NoError(t, err)

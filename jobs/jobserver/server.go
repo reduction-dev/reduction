@@ -13,6 +13,7 @@ import (
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/storage/snapshots"
 	"reduction.dev/reduction/util/httpu"
 
 	"golang.org/x/sync/errgroup"
@@ -43,6 +44,9 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 		serverOptions.rpcAddr = "127.0.0.1:8081"
 	}
 
+	// A channel for handling checkpoint errors
+	checkpointEvents := make(chan snapshots.CheckpointEvent, 1)
+
 	job := jobs.New(&jobs.NewParams{
 		JobConfig: jd,
 		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
@@ -55,6 +59,7 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
 			return rpc.NewSourceRunnerConnectClient(node)
 		},
+		CheckpointEvents: checkpointEvents,
 	})
 
 	mux := http.NewServeMux()
@@ -75,10 +80,11 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 	}
 
 	return &Server{
-		uiServer:    uiServer,
-		UIListener:  uiListener,
-		rpcServer:   rpcServer,
-		RPCListener: rpcListener,
+		uiServer:         uiServer,
+		UIListener:       uiListener,
+		rpcServer:        rpcServer,
+		RPCListener:      rpcListener,
+		checkpointEvents: checkpointEvents,
 	}
 }
 
@@ -101,10 +107,11 @@ func WithUIAddress(addr string) func(*serverOptions) {
 }
 
 type Server struct {
-	uiServer    *httpu.Server
-	UIListener  net.Listener
-	rpcServer   *httpu.Server
-	RPCListener net.Listener
+	uiServer         *httpu.Server
+	UIListener       net.Listener
+	rpcServer        *httpu.Server
+	RPCListener      net.Listener
+	checkpointEvents chan snapshots.CheckpointEvent
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -128,6 +135,20 @@ func (s *Server) Start(ctx context.Context) error {
 			return fmt.Errorf("job RPC server stopped: %w", err)
 		}
 		return nil
+	})
+
+	// Listen for checkpoint errors
+	g.Go(func() error {
+		for {
+			select {
+			case event := <-s.checkpointEvents:
+				if event.Err != nil {
+					return fmt.Errorf("checkpoint error: %w", event.Err)
+				}
+			case <-gctx.Done():
+				return nil
+			}
+		}
 	})
 
 	return g.Wait()
