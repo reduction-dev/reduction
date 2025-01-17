@@ -14,19 +14,21 @@ import (
 )
 
 type NewParams struct {
-	Host        string
-	Handler     proto.Handler
-	Job         proto.Job
-	Diagnostics []any // Debug arguments logged when starting the worker
-	Clock       clocks.Clock
-	LogPrefix   string // Optional log value to differentiate worker logs
+	Host            string
+	Handler         proto.Handler
+	Job             proto.Job
+	Diagnostics     []any // Debug arguments logged when starting the worker
+	Clock           clocks.Clock
+	LogPrefix       string // Optional log value to differentiate worker logs
+	OperatorFactory proto.OperatorFactory
 }
 
 func New(params NewParams) *Worker {
 	sourceRunner := sourcerunner.New(sourcerunner.NewParams{
-		Host:        params.Host,
-		UserHandler: params.Handler,
-		Job:         params.Job,
+		Host:            params.Host,
+		UserHandler:     params.Handler,
+		Job:             params.Job,
+		OperatorFactory: params.OperatorFactory,
 	})
 
 	operator := operator.NewOperator(operator.NewOperatorParams{

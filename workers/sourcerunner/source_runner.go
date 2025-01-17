@@ -36,6 +36,7 @@ type SourceRunner struct {
 	isHalting       atomic.Bool
 	stopLoop        context.CancelFunc // Signal to stop the event loop if running
 	stop            context.CancelFunc // Signal to stop all source runner processes
+	operatorFactory proto.OperatorFactory
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -45,11 +46,12 @@ type SourceRunner struct {
 }
 
 type NewParams struct {
-	Host         string
-	SourceReader connectors.SourceReader
-	UserHandler  proto.Handler
-	Job          proto.Job
-	Clock        clocks.Clock
+	Host            string
+	SourceReader    connectors.SourceReader
+	UserHandler     proto.Handler
+	Job             proto.Job
+	Clock           clocks.Clock
+	OperatorFactory proto.OperatorFactory
 }
 
 func New(params NewParams) *SourceRunner {
@@ -72,6 +74,7 @@ func New(params NewParams) *SourceRunner {
 		clock:             params.Clock,
 		stopLoop:          func() {}, // initialize with noop
 		stop:              func() {}, // initialize with noop
+		operatorFactory:   params.OperatorFactory,
 	}
 }
 
@@ -123,7 +126,7 @@ func (r *SourceRunner) Halt() {
 }
 
 // HandleStart is invoked by the Job when the SourceRunner has joined an assembly.
-func (r *SourceRunner) HandleStart(ctx context.Context, ops []proto.Operator, msg *workerpb.StartSourceRunnerRequest) error {
+func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourceRunnerRequest) error {
 	if len(msg.Sources) != 1 {
 		panic("exactly one source required")
 	}
@@ -131,9 +134,14 @@ func (r *SourceRunner) HandleStart(ctx context.Context, ops []proto.Operator, ms
 	if err := r.sourceReader.SetSplits(msg.Splits); err != nil {
 		return err
 	}
+
+	ops := make([]proto.Operator, len(msg.Operators))
+	for i, op := range msg.Operators {
+		ops[i] = r.operatorFactory(r.ID, op, make(chan error))
+	}
 	r.operators = newOperatorCluster(&newClusterParams{
 		keyGroupCount: int(msg.KeyGroupCount),
-		workers:       ops,
+		operators:     ops,
 	})
 
 	r.watermarkTicker = time.NewTicker(time.Millisecond * 200)

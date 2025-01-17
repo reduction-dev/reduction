@@ -21,27 +21,31 @@ import (
 )
 
 type Job struct {
-	snapshotStore    *snapshots.Store
-	log              *slog.Logger
-	stateUpdates     chan func()
-	assembly         *Assembly
-	sourceSplitter   connectors.SourceSplitter
-	registry         *Registry
-	config           *config.Config
-	clock            clocks.Clock
-	checkpointTicker *clocks.Ticker
-	keySpace         *partitioning.KeySpace
+	snapshotStore       *snapshots.Store
+	log                 *slog.Logger
+	stateUpdates        chan func()
+	assembly            *Assembly
+	sourceSplitter      connectors.SourceSplitter
+	registry            *Registry
+	config              *config.Config
+	clock               clocks.Clock
+	checkpointTicker    *clocks.Ticker
+	keySpace            *partitioning.KeySpace
+	operatorFactory     proto.OperatorFactory
+	sourceRunnerFactory proto.SourceRunnerFactory
 }
 
 type NewParams struct {
-	JobConfig         *config.Config
-	SavepointURI      string
-	Clock             clocks.Clock
-	HeartbeatDeadline time.Duration
-	Store             storage.FileStore
-	CheckpointsPath   string
-	SavepointsPath    string
-	Logger            *slog.Logger
+	JobConfig           *config.Config
+	SavepointURI        string
+	Clock               clocks.Clock
+	HeartbeatDeadline   time.Duration
+	Store               storage.FileStore
+	CheckpointsPath     string
+	SavepointsPath      string
+	Logger              *slog.Logger
+	OperatorFactory     proto.OperatorFactory
+	SourceRunnerFactory proto.SourceRunnerFactory
 }
 
 func New(params *NewParams) *Job {
@@ -87,14 +91,16 @@ func New(params *NewParams) *Job {
 		CheckpointsPath: params.CheckpointsPath,
 	})
 	job := &Job{
-		snapshotStore:  snapshotStore,
-		log:            params.Logger,
-		stateUpdates:   make(chan func()),
-		registry:       NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
-		config:         params.JobConfig,
-		clock:          params.Clock,
-		sourceSplitter: params.JobConfig.Sources[0].NewSourceSplitter(),
-		keySpace:       partitioning.NewKeySpace(params.JobConfig.KeyGroupCount, params.JobConfig.WorkerCount),
+		snapshotStore:       snapshotStore,
+		log:                 params.Logger,
+		stateUpdates:        make(chan func()),
+		registry:            NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
+		config:              params.JobConfig,
+		clock:               params.Clock,
+		sourceSplitter:      params.JobConfig.Sources[0].NewSourceSplitter(),
+		keySpace:            partitioning.NewKeySpace(params.JobConfig.KeyGroupCount, params.JobConfig.WorkerCount),
+		operatorFactory:     params.OperatorFactory,
+		sourceRunnerFactory: params.SourceRunnerFactory,
 	}
 
 	go job.processStateUpdates()
@@ -102,10 +108,11 @@ func New(params *NewParams) *Job {
 	return job
 }
 
-func (j *Job) HandleRegisterOperator(op proto.Operator) {
+func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("registered operator", "id", op.ID(), "host", op.Host())
-		j.registry.RegisterOperator(op)
+		j.log.Info("registering operator", "id", node.Id, "host", node.Host)
+		operator := j.operatorFactory("job", node, nil)
+		j.registry.RegisterOperator(operator)
 	}
 }
 
@@ -116,9 +123,10 @@ func (j *Job) HandleDeregisterOperator(op *jobpb.NodeIdentity) {
 	}
 }
 
-func (j *Job) HandleRegisterSourceRunner(sr proto.SourceRunner) {
+func (j *Job) HandleRegisterSourceRunner(node *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("registered source runner", "id", sr.ID(), "host", sr.Host())
+		j.log.Info("registered source runner", "id", node.Id, "host", node.Host)
+		sr := j.sourceRunnerFactory(node)
 		j.registry.RegisterSourceRunner(sr)
 	}
 }

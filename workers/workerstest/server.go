@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/clocks"
+	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/rpc/batching"
@@ -41,6 +42,7 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 	if err != nil {
 		t.Fatalf("failed to listen on address: %v", err)
 	}
+
 	worker := workers.New(workers.NewParams{
 		Host:        listener.Addr().String(),
 		Handler:     rpc.NewHandlerConnectClient(params.HandlerAddr),
@@ -48,26 +50,21 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 		Diagnostics: []any{"handler", params.HandlerAddr},
 		Clock:       params.Clock,
 		LogPrefix:   params.LogPrefix,
-	})
-
-	mux := http.NewServeMux()
-
-	path, handler := rpc.NewSourceRunnerConnectHandler(
-		worker.SourceRunner,
-		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
-				SenderID:     worker.SourceRunner.ID,
+				SenderID:     senderID,
 				OperatorNode: node,
 				BatchingOptions: batching.EventBatcherParams{
 					MaxSize:  2,
 					MaxDelay: 5 * time.Millisecond,
 				},
-				OnAsyncError: func(err error) {
-					t.Errorf("operator client async error: %v", err)
-				},
 			})
 		},
-	)
+	})
+
+	mux := http.NewServeMux()
+
+	path, handler := rpc.NewSourceRunnerConnectHandler(worker.SourceRunner)
 	mux.Handle(path, handler)
 
 	path, handler = rpc.NewOperatorConnectHandler(worker.Operator)

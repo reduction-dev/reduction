@@ -9,16 +9,15 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
-	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/clocks"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
+	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/storage"
 )
 
@@ -29,6 +28,16 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 		JobConfig: jd,
 		Clock:     clocks.NewSystemClock(),
 		Logger:    logger,
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, _errChan chan<- error) proto.Operator {
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:       senderID,
+				OperatorNode:   node,
+				ConnectOptions: []connect.ClientOption{connect.WithProtoJSON()},
+			})
+		},
+		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
+			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
+		},
 	}
 	for _, o := range options {
 		o(jobParams)
@@ -41,23 +50,7 @@ func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...
 
 	// Configure job to use JSON when creating worker clients for easier debugging
 	// in tests.
-	jobPath, jobHandler := rpc.NewJobConnectHandler(
-		job,
-		func(node *jobpb.NodeIdentity) *rpc.SourceRunnerConnectClient {
-			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
-		},
-		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
-				SenderID:       "job",
-				OperatorNode:   node,
-				ConnectOptions: []connect.ClientOption{connect.WithProtoJSON()},
-				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  2,
-					MaxDelay: 5 * time.Millisecond,
-				},
-			})
-		},
-	)
+	jobPath, jobHandler := rpc.NewJobConnectHandler(job)
 	mux = http.NewServeMux()
 	mux.Handle(jobPath, jobHandler)
 	rpcServer := &http.Server{Handler: mux}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/rpc/batching"
@@ -55,6 +56,17 @@ func NewServer(params NewServerParams) *server {
 		Handler:     rpc.NewHandlerConnectClient(params.HandlerAddr, connect.WithInterceptors(rpc.NewLoggingInterceptor(logger))),
 		Job:         job,
 		Diagnostics: []any{"handler", params.HandlerAddr},
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:     senderID,
+				OperatorNode: node,
+				BatchingOptions: batching.EventBatcherParams{
+					MaxSize:  100,
+					MaxDelay: 10 * time.Millisecond,
+				},
+				ErrChan: errChan,
+			})
+		},
 	})
 
 	mux := http.NewServeMux()
@@ -66,19 +78,7 @@ func NewServer(params NewServerParams) *server {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	path, handler := rpc.NewSourceRunnerConnectHandler(
-		worker.SourceRunner,
-		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
-				SenderID:     worker.SourceRunner.ID,
-				OperatorNode: node,
-				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  10_000,
-					MaxDelay: 10 * time.Millisecond,
-				},
-			})
-		},
-	)
+	path, handler := rpc.NewSourceRunnerConnectHandler(worker.SourceRunner)
 	mux.Handle(path, handler)
 
 	path, handler = rpc.NewOperatorConnectHandler(worker.Operator)

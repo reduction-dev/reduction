@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/proto/workerpb/workerpbconnect"
 	"reduction.dev/reduction/workers/sourcerunner"
@@ -13,22 +12,16 @@ import (
 )
 
 type SourceRunnerConnectHandler struct {
-	sourceRunner    *sourcerunner.SourceRunner
-	opClientFactory OperatorClientFactory
+	sourceRunner *sourcerunner.SourceRunner
 }
 
-func NewSourceRunnerConnectHandler(sourceRunner *sourcerunner.SourceRunner, opClientFactory OperatorClientFactory) (string, http.Handler) {
-	h := &SourceRunnerConnectHandler{sourceRunner: sourceRunner, opClientFactory: opClientFactory}
+func NewSourceRunnerConnectHandler(sourceRunner *sourcerunner.SourceRunner) (string, http.Handler) {
+	h := &SourceRunnerConnectHandler{sourceRunner: sourceRunner}
 	return workerpbconnect.NewSourceRunnerHandler(h, connect.WithInterceptors(NewLoggingInterceptor(sourceRunner.Logger)))
 }
 
 func (s *SourceRunnerConnectHandler) Start(ctx context.Context, req *connect.Request[workerpb.StartSourceRunnerRequest]) (*connect.Response[workerpb.Empty], error) {
-	ops := make([]proto.Operator, len(req.Msg.Operators))
-	for i, op := range req.Msg.Operators {
-		ops[i] = s.opClientFactory(op)
-	}
-
-	err := s.sourceRunner.HandleStart(ctx, ops, req.Msg)
+	err := s.sourceRunner.HandleStart(ctx, req.Msg)
 	return connect.NewResponse(&workerpb.Empty{}), err
 }
 

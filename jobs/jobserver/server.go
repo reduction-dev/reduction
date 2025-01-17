@@ -7,13 +7,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"time"
 
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
+	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/util/httpu"
 
 	"golang.org/x/sync/errgroup"
@@ -46,6 +45,16 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 
 	job := jobs.New(&jobs.NewParams{
 		JobConfig: jd,
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
+			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
+				SenderID:     senderID,
+				OperatorNode: node,
+				ErrChan:      errChan,
+			})
+		},
+		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
+			return rpc.NewSourceRunnerConnectClient(node)
+		},
 	})
 
 	mux := http.NewServeMux()
@@ -56,22 +65,7 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 		panic(err)
 	}
 
-	jobPath, jobHandler := rpc.NewJobConnectHandler(
-		job,
-		func(node *jobpb.NodeIdentity) *rpc.SourceRunnerConnectClient {
-			return rpc.NewSourceRunnerConnectClient(node)
-		},
-		func(node *jobpb.NodeIdentity) *rpc.OperatorConnectClient {
-			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
-				SenderID:     "job",
-				OperatorNode: node,
-				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  100,
-					MaxDelay: 10 * time.Millisecond,
-				},
-			})
-		},
-	)
+	jobPath, jobHandler := rpc.NewJobConnectHandler(job)
 	mux = http.NewServeMux()
 	mux.Handle(jobPath, jobHandler)
 	rpcServer := httpu.NewServer(mux)

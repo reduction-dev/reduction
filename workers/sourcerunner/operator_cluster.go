@@ -16,26 +16,26 @@ import (
 type operatorCluster struct {
 	keyGroupCount int
 	keySpace      *partitioning.KeySpace
-	workers       []proto.Operator
+	operators     []proto.Operator
 }
 
 type newClusterParams struct {
 	keyGroupCount int
-	workers       []proto.Operator
+	operators     []proto.Operator
 }
 
 func newOperatorCluster(params *newClusterParams) *operatorCluster {
 	return &operatorCluster{
 		keyGroupCount: params.keyGroupCount,
-		workers:       params.workers,
-		keySpace:      partitioning.NewKeySpace(params.keyGroupCount, len(params.workers)),
+		operators:     params.operators,
+		keySpace:      partitioning.NewKeySpace(params.keyGroupCount, len(params.operators)),
 	}
 }
 
 // routeEvent sends an event to a single operator based on its key.
 func (c *operatorCluster) routeEvent(ctx context.Context, event *handlerpb.KeyedEvent) error {
 	rangeIndex := c.keySpace.RangeIndex(event.Key)
-	targetWorker := c.workers[rangeIndex]
+	targetWorker := c.operators[rangeIndex]
 	request := &workerpb.Event{
 		Event: &workerpb.Event_KeyedEvent{
 			KeyedEvent: event,
@@ -55,7 +55,7 @@ func (c *operatorCluster) broadcastEvent(ctx context.Context, event gproto.Messa
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
-	for _, w := range c.workers {
+	for _, w := range c.operators {
 		g.Go(func() error {
 			return w.HandleEvent(gctx, request)
 		})

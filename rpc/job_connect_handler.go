@@ -15,13 +15,11 @@ import (
 )
 
 type JobConnectHandler struct {
-	job             *jobs.Job
-	opClientFactory OperatorClientFactory
-	srClientFactory SourceRunnerClientFactory
+	job *jobs.Job
 }
 
-func NewJobConnectHandler(job *jobs.Job, srClientFactory SourceRunnerClientFactory, opClientFactory OperatorClientFactory) (path string, handler http.Handler) {
-	h := &JobConnectHandler{job: job, opClientFactory: opClientFactory, srClientFactory: srClientFactory}
+func NewJobConnectHandler(job *jobs.Job) (path string, handler http.Handler) {
+	h := &JobConnectHandler{job: job}
 	logger := slog.With("instanceID", "job")
 	return jobpbconnect.NewJobHandler(h, connect.WithInterceptors(NewLoggingInterceptor(logger)))
 }
@@ -36,8 +34,7 @@ func (l *JobConnectHandler) OperatorCheckpointComplete(ctx context.Context, req 
 }
 
 func (l *JobConnectHandler) RegisterOperator(ctx context.Context, req *connect.Request[jobpb.NodeIdentity]) (*connect.Response[jobpb.Empty], error) {
-	op := l.opClientFactory(req.Msg)
-	l.job.HandleRegisterOperator(op)
+	l.job.HandleRegisterOperator(req.Msg)
 
 	return connect.NewResponse(&jobpb.Empty{}), nil
 }
@@ -48,8 +45,7 @@ func (l *JobConnectHandler) DeregisterOperator(ctx context.Context, req *connect
 }
 
 func (l *JobConnectHandler) RegisterSourceRunner(ctx context.Context, req *connect.Request[jobpb.NodeIdentity]) (*connect.Response[jobpb.Empty], error) {
-	sr := l.srClientFactory(req.Msg)
-	l.job.HandleRegisterSourceRunner(sr)
+	l.job.HandleRegisterSourceRunner(req.Msg)
 
 	return connect.NewResponse(&jobpb.Empty{}), nil
 }
