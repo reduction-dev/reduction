@@ -48,7 +48,6 @@ type SourceRunner struct {
 
 type NewParams struct {
 	Host            string
-	SourceReader    connectors.SourceReader
 	UserHandler     proto.Handler
 	Job             proto.Job
 	Clock           clocks.Clock
@@ -65,7 +64,6 @@ func New(params NewParams) *SourceRunner {
 	return &SourceRunner{
 		ID:                id,
 		host:              params.Host,
-		sourceReader:      params.SourceReader,
 		job:               params.Job,
 		watermarker:       &wmark.Watermarker{},
 		watermarkTicker:   time.NewTicker(math.MaxInt64), // initialize with ticker that never ticks
