@@ -22,7 +22,7 @@ type EventBatcher struct {
 	timer        clocks.Timer
 	mu           sync.Mutex // Guard batch
 	batch        []*workerpb.Event
-	batchNum     uint64 // Batch number tracked as cancellation token for timer
+	batchToken   *struct{} // Tracks the current batch
 	batchesChan  chan []*workerpb.Event
 }
 
@@ -37,7 +37,6 @@ func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatch
 		maxSize:      params.MaxSize,
 		maxDelay:     params.MaxDelay,
 		batchesChan:  make(chan []*workerpb.Event, 1),
-		batchNum:     1, // Reserve 0 for stopping the timer
 	}
 
 	go func() {
@@ -67,13 +66,13 @@ func (b *EventBatcher) Add(event *workerpb.Event) {
 
 	// Set the timer when starting a new batch
 	if len(b.batch) == 0 {
-		timerBatchNum := b.batchNum // Track the batchNum when setting timer
+		currentBatchToken := b.batchToken // Track the batch when setting timer
 		b.timer.Set(b.maxDelay, func() {
 			b.mu.Lock()
 			defer b.mu.Unlock()
 
 			// Skip flushing if the batch was flushed before the timer acquired the lock
-			if timerBatchNum != b.batchNum {
+			if currentBatchToken != b.batchToken {
 				return
 			}
 
@@ -92,6 +91,6 @@ func (b *EventBatcher) flushLocked() {
 	// Yield the current batch and start a new one
 	flushingBatch := b.batch
 	b.batch = make([]*workerpb.Event, 0, len(flushingBatch))
-	b.batchNum++
+	b.batchToken = &struct{}{}
 	b.batchesChan <- flushingBatch
 }
