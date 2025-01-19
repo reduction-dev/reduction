@@ -23,7 +23,6 @@ type EventBatcher struct {
 	mu           sync.Mutex // Guard batch
 	batch        []*workerpb.Event
 	batchToken   *struct{} // Tracks the current batch
-	batchesChan  chan []*workerpb.Event
 }
 
 func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatcher {
@@ -36,21 +35,13 @@ func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatch
 		timer:        params.Timer,
 		maxSize:      params.MaxSize,
 		maxDelay:     params.MaxDelay,
-		batchesChan:  make(chan []*workerpb.Event, 1),
 	}
 
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case batch, ok := <-batcher.batchesChan:
-				if !ok {
-					return
-				}
-				batcher.onBatchReady(batch)
-			}
-		}
+		<-ctx.Done()
+		batcher.mu.Lock()
+		defer batcher.mu.Unlock()
+		batcher.batchToken = &struct{}{}
 	}()
 
 	return batcher
@@ -92,5 +83,5 @@ func (b *EventBatcher) flushLocked() {
 	flushingBatch := b.batch
 	b.batch = make([]*workerpb.Event, 0, len(flushingBatch))
 	b.batchToken = &struct{}{}
-	b.batchesChan <- flushingBatch
+	b.onBatchReady(flushingBatch)
 }
