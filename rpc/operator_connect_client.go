@@ -18,7 +18,7 @@ type OperatorConnectClient struct {
 	host          string
 	senderID      string
 	connectClient workerpbconnect.OperatorClient
-	eventBatcher  *batching.EventBatcher
+	eventBatcher  *batching.EventBatcher[*workerpb.Event]
 	cancelFunc    context.CancelCauseFunc
 }
 
@@ -42,7 +42,7 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *Op
 		host:          params.OperatorNode.Host,
 		senderID:      params.SenderID,
 		connectClient: connectClient,
-		eventBatcher:  batching.NewEventBatcher(ctx, params.BatchingOptions),
+		eventBatcher:  batching.NewEventBatcher[*workerpb.Event](ctx, params.BatchingOptions),
 		cancelFunc:    cancelFunc,
 	}
 

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"reduction.dev/reduction/clocks"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 type EventBatcherParams struct {
@@ -15,23 +14,23 @@ type EventBatcherParams struct {
 	Timer    clocks.Timer
 }
 
-type EventBatcher struct {
-	onBatchReady func([]*workerpb.Event)
+type EventBatcher[T any] struct {
+	onBatchReady func([]T)
 	maxSize      int           // Max number of batched events before flushing
 	maxDelay     time.Duration // Max time to wait before flushing
 	timer        clocks.Timer
 	mu           sync.Mutex // Guard batch
-	batch        []*workerpb.Event
+	batch        []T
 	batchToken   *struct{} // Tracks the current batch
 }
 
-func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatcher {
+func NewEventBatcher[T any](ctx context.Context, params EventBatcherParams) *EventBatcher[T] {
 	if params.Timer == nil {
 		params.Timer = &clocks.SystemTimer{}
 	}
 
-	batcher := &EventBatcher{
-		onBatchReady: func([]*workerpb.Event) {}, // no-op by default
+	batcher := &EventBatcher[T]{
+		onBatchReady: func([]T) {}, // no-op by default
 		timer:        params.Timer,
 		maxSize:      params.MaxSize,
 		maxDelay:     params.MaxDelay,
@@ -47,11 +46,11 @@ func NewEventBatcher(ctx context.Context, params EventBatcherParams) *EventBatch
 	return batcher
 }
 
-func (b *EventBatcher) OnBatchReady(fn func([]*workerpb.Event)) {
+func (b *EventBatcher[T]) OnBatchReady(fn func([]T)) {
 	b.onBatchReady = fn
 }
 
-func (b *EventBatcher) Add(event *workerpb.Event) {
+func (b *EventBatcher[T]) Add(event T) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -78,10 +77,10 @@ func (b *EventBatcher) Add(event *workerpb.Event) {
 }
 
 // Caller must hold the mutex lock
-func (b *EventBatcher) flushLocked() {
+func (b *EventBatcher[T]) flushLocked() {
 	// Yield the current batch and start a new one
 	flushingBatch := b.batch
-	b.batch = make([]*workerpb.Event, 0, len(flushingBatch))
+	b.batch = make([]T, 0, len(flushingBatch))
 	b.batchToken = &struct{}{}
 	b.onBatchReady(flushingBatch)
 }
