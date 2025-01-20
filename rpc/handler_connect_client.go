@@ -21,8 +21,8 @@ func NewHandlerConnectClient(host string, opts ...connect.ClientOption) *Handler
 	}
 }
 
-func (h *HandlerConnectClient) KeyEvent(ctx context.Context, req *handlerpb.KeyEventRequest) (*handlerpb.KeyEventResponse, error) {
-	resp, err := h.connClient.KeyEvent(ctx, connect.NewRequest(req))
+func (h *HandlerConnectClient) KeyEvent(ctx context.Context, req *handlerpb.KeyEventBatchRequest) (*handlerpb.KeyEventBatchResponse, error) {
+	resp, err := h.connClient.KeyEventBatch(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, err
 	}

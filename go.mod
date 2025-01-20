@@ -16,7 +16,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.5
 	golang.org/x/sync v0.10.0
 	golang.org/x/text v0.21.0
-	google.golang.org/protobuf v1.36.2
+	google.golang.org/protobuf v1.36.3
 	reduction.dev/reduction-go v0.0.0-00010101000000-000000000000
 	reduction.dev/reduction-handler v0.0.0-00010101000000-000000000000
 )

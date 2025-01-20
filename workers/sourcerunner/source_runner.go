@@ -231,7 +231,7 @@ func (r *SourceRunner) HandleStartCheckpoint(ctx context.Context, id uint64) {
 
 // Process one event in the event queue
 func (r *SourceRunner) processEvent(ctx context.Context, event []byte) error {
-	resp, err := r.userHandler.KeyEvent(ctx, &handlerpb.KeyEventRequest{Value: event})
+	resp, err := r.userHandler.KeyEvent(ctx, &handlerpb.KeyEventBatchRequest{Values: [][]byte{event}})
 	if err != nil {
 		return fmt.Errorf("keying event: %v", err)
 	}
