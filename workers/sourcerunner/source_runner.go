@@ -75,7 +75,7 @@ func New(params NewParams) *SourceRunner {
 		stop:              func(err error) {}, // initialize with noop
 		operatorFactory:   params.OperatorFactory,
 		errChan:           make(chan error),
-		outputStream:      make(chan *workerpb.Event, 1),
+		outputStream:      make(chan *workerpb.Event, 1_000),
 	}
 }
 

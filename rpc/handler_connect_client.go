@@ -22,9 +22,14 @@ type NewHandlerConnectClientParams struct {
 	Opts            []connect.ClientOption
 	BatchingOptions batching.EventBatcherParams
 	ErrChan         chan<- error
+	AsyncBufferSize int
 }
 
 func NewHandlerConnectClient(params NewHandlerConnectClientParams) *HandlerConnectClient {
+	if params.AsyncBufferSize == 0 {
+		params.AsyncBufferSize = 1_000
+	}
+
 	connectClient := handlerpbconnect.NewHandlerClient(NewHTTPClient(), "http://"+params.Host, params.Opts...)
 	client := &HandlerConnectClient{
 		connectClient: connectClient,
@@ -32,7 +37,7 @@ func NewHandlerConnectClient(params NewHandlerConnectClientParams) *HandlerConne
 			MaxDelay: params.BatchingOptions.MaxDelay,
 			MaxSize:  params.BatchingOptions.MaxSize,
 		}),
-		keyEventResults: make(chan []*handlerpb.KeyedEvent),
+		keyEventResults: make(chan []*handlerpb.KeyedEvent, params.AsyncBufferSize),
 	}
 
 	client.keyEventBatcher.OnBatchReady(func(batch [][]byte) {
