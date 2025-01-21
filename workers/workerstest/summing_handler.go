@@ -11,7 +11,11 @@ import (
 
 type SummingHandler struct{}
 
-func (s *SummingHandler) KeyEvent(ctx context.Context, req *handlerpb.KeyEventBatchRequest) (*handlerpb.KeyEventBatchResponse, error) {
+func (s *SummingHandler) KeyEvent(ctx context.Context, event []byte) {
+	panic("unused by operators")
+}
+
+func (s *SummingHandler) KeyEventResults() <-chan []*handlerpb.KeyedEvent {
 	panic("unused by operators")
 }
 

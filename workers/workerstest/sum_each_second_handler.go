@@ -46,7 +46,12 @@ func (ss SumState) Marshal() []byte {
 	return b
 }
 
-func (s *SumEachSecondHandler) KeyEvent(ctx context.Context, req *handlerpb.KeyEventBatchRequest) (*handlerpb.KeyEventBatchResponse, error) {
+func (s *SumEachSecondHandler) KeyEvent(ctx context.Context, event []byte) {
+	panic("unused for test")
+}
+
+// KeyEventResults implements proto.Handler.
+func (s *SumEachSecondHandler) KeyEventResults() <-chan []*handlerpb.KeyedEvent {
 	panic("unused for test")
 }
 

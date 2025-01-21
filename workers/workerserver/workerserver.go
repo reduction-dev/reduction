@@ -52,8 +52,15 @@ func NewServer(params NewServerParams) *server {
 		panic(fmt.Sprintf("failed to listen on address: %v", err))
 	}
 	worker := workers.New(workers.NewParams{
-		Host:        listener.Addr().String(),
-		Handler:     rpc.NewHandlerConnectClient(params.HandlerAddr, connect.WithInterceptors(rpc.NewLoggingInterceptor(logger))),
+		Host: listener.Addr().String(),
+		Handler: rpc.NewHandlerConnectClient(rpc.NewHandlerConnectClientParams{
+			Host: params.HandlerAddr,
+			Opts: []connect.ClientOption{connect.WithInterceptors(rpc.NewLoggingInterceptor(logger))},
+			BatchingOptions: batching.EventBatcherParams{
+				MaxSize:  100,
+				MaxDelay: 10 * time.Millisecond,
+			},
+		}),
 		Job:         job,
 		Diagnostics: []any{"handler", params.HandlerAddr},
 		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {

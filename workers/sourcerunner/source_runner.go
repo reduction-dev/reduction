@@ -11,7 +11,6 @@ import (
 
 	"github.com/segmentio/ksuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"reduction.dev/reduction-handler/handlerpb"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
@@ -38,6 +37,7 @@ type SourceRunner struct {
 	stop            context.CancelCauseFunc // Signal to stop all source runner processes
 	operatorFactory proto.OperatorFactory
 	errChan         chan error
+	outputStream    chan *workerpb.Event
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -75,6 +75,7 @@ func New(params NewParams) *SourceRunner {
 		stop:              func(err error) {}, // initialize with noop
 		operatorFactory:   params.OperatorFactory,
 		errChan:           make(chan error),
+		outputStream:      make(chan *workerpb.Event, 1),
 	}
 }
 
@@ -166,6 +167,13 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 		}
 		cancel()
 	}()
+	go func() {
+		for opEvent := range r.outputStream {
+			if err := r.sendOperatorEvent(opEvent); err != nil {
+				r.errChan <- err
+			}
+		}
+	}()
 
 	return nil
 }
@@ -177,16 +185,12 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 			r.Logger.Info("stopping source runner loop", "cause", context.Cause(ctx))
 			return nil
 		case <-r.watermarkTicker.C:
-			if err := r.processWatermarkTick(ctx); err != nil {
-				r.Logger.Error("error processing watermark tick", "err", err)
-			}
+			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{Watermark: &workerpb.Watermark{}}}
 		case barrier := <-r.checkpointBarrier:
 			if err := r.createCheckpoint(barrier.CheckpointId); err != nil {
 				return fmt.Errorf("creating checkpoint: %w", err)
 			}
-			if err := r.operators.broadcastEvent(ctx, barrier); err != nil {
-				return fmt.Errorf("broadcast snapshot barrier event: %w", err)
-			}
+			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
 		default: // Read from source
 			if r.eoi { // Never read source events again after reaching end of input
 				continue
@@ -197,16 +201,15 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				if errors.Is(err, connectors.ErrEndOfInput) {
 					// EOI error case may still have returned events
 					for _, e := range events {
-						if err := r.processEvent(ctx, e); err != nil {
-							return err
-						}
+						r.userHandler.KeyEvent(ctx, e)
+						r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 					}
-					if err := r.processWatermarkTick(ctx); err != nil {
-						return err
-					}
-					if err := r.operators.broadcastEvent(ctx, &workerpb.SourceCompleteEvent{}); err != nil {
-						r.Logger.Error("failed broadcasting source complete", "err", err)
-					}
+
+					// Send the current watermark followed by source complete event
+					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
+						Watermark: &workerpb.Watermark{},
+					}}
+					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
 
 					r.eoi = true
 					continue
@@ -217,9 +220,9 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 			}
 
 			for _, e := range events {
-				if err := r.processEvent(ctx, e); err != nil {
-					return err
-				}
+				// Key the event then put an empty KeyedEvent into the output stream as a placeholder.
+				r.userHandler.KeyEvent(ctx, e)
+				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 			}
 		}
 	}
@@ -229,29 +232,33 @@ func (r *SourceRunner) HandleStartCheckpoint(ctx context.Context, id uint64) {
 	r.checkpointBarrier <- &workerpb.CheckpointBarrier{CheckpointId: id}
 }
 
-// Process one event in the event queue
-func (r *SourceRunner) processEvent(ctx context.Context, event []byte) error {
-	resp, err := r.userHandler.KeyEvent(ctx, &handlerpb.KeyEventBatchRequest{Values: [][]byte{event}})
-	if err != nil {
-		return fmt.Errorf("keying event: %v", err)
-	}
-	for _, ev := range resp.Events {
-		r.watermarker.AdvanceTime(ev.Timestamp.AsTime())
-		if err := r.operators.routeEvent(ctx, ev); err != nil {
-			return err
+func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
+	switch typedEvent := event.Event.(type) {
+	case *workerpb.Event_KeyedEvent:
+		// Get the async result for this placeholder event
+		asyncResult := <-r.userHandler.KeyEventResults()
+		for _, event := range asyncResult {
+			r.watermarker.AdvanceTime(event.Timestamp.AsTime())
+			err := r.operators.routeEvent(context.Background(), event.Key, &workerpb.Event{
+				Event: &workerpb.Event_KeyedEvent{
+					KeyedEvent: event,
+				},
+			})
+			if err != nil {
+				return err
+			}
 		}
+		return nil
+	case *workerpb.Event_Watermark:
+		typedEvent.Watermark.Timestamp = timestamppb.New(r.watermarker.CurrentWatermark())
+		return r.operators.broadcastEvent(context.Background(), typedEvent.Watermark)
+	case *workerpb.Event_CheckpointBarrier:
+		return r.operators.broadcastEvent(context.Background(), typedEvent.CheckpointBarrier)
+	case *workerpb.Event_SourceComplete:
+		return r.operators.broadcastEvent(context.Background(), typedEvent.SourceComplete)
+	default:
+		return fmt.Errorf("unknown operator event type: %T", typedEvent)
 	}
-
-	return nil
-}
-
-// processWatermarkTick broadcasts a watermark to the operators.
-func (r *SourceRunner) processWatermarkTick(ctx context.Context) error {
-	wm := &workerpb.Watermark{Timestamp: timestamppb.New(r.watermarker.CurrentWatermark())}
-	if err := r.operators.broadcastEvent(ctx, wm); err != nil {
-		return fmt.Errorf("broadcast watermark: %v", err)
-	}
-	return nil
 }
 
 // createCheckpoint gets checkpoint data from the source reader and notifies the job.

@@ -10,5 +10,6 @@ import (
 type Handler interface {
 	OnEvent(ctx context.Context, req *handlerpb.OnEventRequest) (*handlerpb.HandlerResponse, error)
 	OnTimerExpired(ctx context.Context, req *handlerpb.OnTimerExpiredRequest) (*handlerpb.HandlerResponse, error)
-	KeyEvent(ctx context.Context, req *handlerpb.KeyEventBatchRequest) (*handlerpb.KeyEventBatchResponse, error)
+	KeyEvent(ctx context.Context, event []byte)
+	KeyEventResults() <-chan []*handlerpb.KeyedEvent
 }

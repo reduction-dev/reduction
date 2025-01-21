@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	gproto "google.golang.org/protobuf/proto"
-	"reduction.dev/reduction-handler/handlerpb"
 	"reduction.dev/reduction/partitioning"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/workerpb"
@@ -33,15 +32,10 @@ func newOperatorCluster(params *newClusterParams) *operatorCluster {
 }
 
 // routeEvent sends an event to a single operator based on its key.
-func (c *operatorCluster) routeEvent(ctx context.Context, event *handlerpb.KeyedEvent) error {
-	rangeIndex := c.keySpace.RangeIndex(event.Key)
+func (c *operatorCluster) routeEvent(ctx context.Context, key []byte, event *workerpb.Event) error {
+	rangeIndex := c.keySpace.RangeIndex(key)
 	targetWorker := c.operators[rangeIndex]
-	request := &workerpb.Event{
-		Event: &workerpb.Event_KeyedEvent{
-			KeyedEvent: event,
-		},
-	}
-	if err := targetWorker.HandleEvent(ctx, request); err != nil {
+	if err := targetWorker.HandleEvent(ctx, event); err != nil {
 		return fmt.Errorf("cluster.routeEvent: %v", err)
 	}
 	return nil

@@ -44,8 +44,14 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 	}
 
 	worker := workers.New(workers.NewParams{
-		Host:        listener.Addr().String(),
-		Handler:     rpc.NewHandlerConnectClient(params.HandlerAddr),
+		Host: listener.Addr().String(),
+		Handler: rpc.NewHandlerConnectClient(rpc.NewHandlerConnectClientParams{
+			Host: params.HandlerAddr,
+			BatchingOptions: batching.EventBatcherParams{
+				MaxSize:  100,
+				MaxDelay: 5 * time.Millisecond,
+			},
+		}),
 		Job:         job,
 		Diagnostics: []any{"handler", params.HandlerAddr},
 		Clock:       params.Clock,
