@@ -234,82 +234,25 @@ func (o *Operator) processEvents(ctx context.Context) {
 }
 
 func (o *Operator) handleUserEvent(ctx context.Context, event *handlerpb.KeyedEvent) error {
-	state, err := o.stateStore.GetState(event.Key)
-	if err != nil {
-		return err
-	}
-	o.Logger.Info("calling user handler", "event", event)
-	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
-		KeyStates: []*handlerpb.KeyState{{
-			Key:                  event.Key,
-			StateEntryNamespaces: state,
-		}},
-		Events: []*handlerpb.Event{{
-			Event: &handlerpb.Event_KeyedEvent{
-				KeyedEvent: event,
-			},
-		}},
+	return o.processEventBatch(ctx, event.Key, &handlerpb.Event{
+		Event: &handlerpb.Event_KeyedEvent{
+			KeyedEvent: event,
+		},
 	})
-	if err != nil {
-		return err
-	}
-
-	// Update state for each key result
-	for _, keyResult := range resp.KeyResults {
-		for _, t := range keyResult.NewTimers {
-			o.Logger.Info("registering timer", "timer", t)
-			o.timerRegistry.SetTimer(event.Key, t.AsTime())
-
-		}
-		if err := o.stateStore.ApplyMutations(event.Key, keyResult.StateMutationNamespaces); err != nil {
-			return err
-		}
-	}
-
-	// Send sink requests
-	for _, r := range resp.SinkRequests {
-		if err := o.sink.Write(r.Value); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (o *Operator) handleWatermark(ctx context.Context, senderID string, wm *workerpb.Watermark) error {
 	for key, t := range o.timerRegistry.AdvanceWatermark(senderID, wm) {
-		state, err := o.stateStore.GetState(key)
-		if err != nil {
-			return fmt.Errorf("getting state for due timer: %v", err)
-		}
-
-		resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
-			KeyStates: []*handlerpb.KeyState{{
-				Key:                  key,
-				StateEntryNamespaces: state,
-			}},
-			Events: []*handlerpb.Event{{
-				Event: &handlerpb.Event_TimerExpired{
-					TimerExpired: &handlerpb.TimerExpired{
-						Key:       key,
-						Timestamp: timestamppb.New(t),
-					},
+		err := o.processEventBatch(ctx, key, &handlerpb.Event{
+			Event: &handlerpb.Event_TimerExpired{
+				TimerExpired: &handlerpb.TimerExpired{
+					Key:       key,
+					Timestamp: timestamppb.New(t),
 				},
-			}},
+			},
 		})
 		if err != nil {
-			return fmt.Errorf("handler OnTimerExpired: %v", err)
-		}
-		for _, r := range resp.SinkRequests {
-			if err := o.sink.Write(r.Value); err != nil {
-				return fmt.Errorf("writing OnTimerExpired results to sink: %v", err)
-			}
-		}
-
-		for _, keyResult := range resp.KeyResults {
-			if err := o.stateStore.ApplyMutations(key, keyResult.StateMutationNamespaces); err != nil {
-				return fmt.Errorf("applying OnTimerExpired mutations: %v", err)
-			}
+			return fmt.Errorf("operator handleWatermark: %v", err)
 		}
 	}
 
@@ -361,4 +304,43 @@ func (o *Operator) handleSourceComplete(sourceRunnerID string) {
 	if !o.sourceRunners.hasActive() {
 		o.stop()
 	}
+}
+
+func (o *Operator) processEventBatch(ctx context.Context, key []byte, event *handlerpb.Event) error {
+	state, err := o.stateStore.GetState(key)
+	if err != nil {
+		return fmt.Errorf("getting state for processEventBatch: %v", err)
+	}
+
+	o.Logger.Info("calling user handler", "event", event)
+	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
+		KeyStates: []*handlerpb.KeyState{{
+			Key:                  key,
+			StateEntryNamespaces: state,
+		}},
+		Events: []*handlerpb.Event{event},
+	})
+	if err != nil {
+		return err
+	}
+
+	// Update state for each key result
+	for _, keyResult := range resp.KeyResults {
+		for _, t := range keyResult.NewTimers {
+			o.Logger.Info("registering timer", "timer", t)
+			o.timerRegistry.SetTimer(key, t.AsTime())
+		}
+		if err := o.stateStore.ApplyMutations(key, keyResult.StateMutationNamespaces); err != nil {
+			return err
+		}
+	}
+
+	// Send sink requests
+	for _, r := range resp.SinkRequests {
+		if err := o.sink.Write(r.Value); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
