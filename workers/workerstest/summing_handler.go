@@ -19,49 +19,67 @@ func (s *SummingHandler) KeyEventResults() <-chan []*handlerpb.KeyedEvent {
 	panic("unused by operators")
 }
 
-func (s *SummingHandler) OnEvent(ctx context.Context, req *handlerpb.OnEventRequest) (*handlerpb.HandlerResponse, error) {
-	// Find and decode a state entry for "sum" if available
-	var sumState SumState
-	snIndex := slices.IndexFunc(req.StateEntryNamespaces, func(ns *handlerpb.StateEntryNamespace) bool {
-		return ns.Namespace == "sum"
-	})
-	if snIndex > -1 { // found
-		entries := req.StateEntryNamespaces[snIndex].Entries
-		if len(entries) > 0 {
-			if err := json.Unmarshal(entries[0].Value, &sumState); err != nil {
+func (s *SummingHandler) ProcessEventBatch(ctx context.Context, req *handlerpb.ProcessEventBatchRequest) (*handlerpb.ProcessEventBatchResponse, error) {
+	// Use the req.KeyStates to construct a state store that will be mutated by the events
+	state := make(map[string]SumState, len(req.KeyStates))
+	for _, keyState := range req.KeyStates {
+		// Find and decode a state entry for "sum" if available
+		var sumState SumState
+		snIndex := slices.IndexFunc(keyState.StateEntryNamespaces, func(ns *handlerpb.StateEntryNamespace) bool {
+			return ns.Namespace == "sum"
+		})
+		if snIndex > -1 { // found
+			entries := keyState.StateEntryNamespaces[snIndex].Entries
+			if len(entries) > 0 {
+				if err := json.Unmarshal(entries[0].Value, &sumState); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		state[string(keyState.Key)] = sumState
+	}
+
+	var keyResults []*handlerpb.KeyResult
+	var sinkRequests []*handlerpb.SinkRequest
+	for _, event := range req.Events {
+		if typedEvent, ok := event.Event.(*handlerpb.Event_KeyedEvent); ok {
+			// Increment the sum
+			sumState := state[string(typedEvent.KeyedEvent.Key)]
+			sumState.Sum++
+			state[string(typedEvent.KeyedEvent.Key)] = sumState
+
+			// Add the mutation for this key
+			nextSumState, err := json.Marshal(sumState)
+			if err != nil {
 				return nil, err
 			}
+			keyResults = append(keyResults, &handlerpb.KeyResult{
+				Key: typedEvent.KeyedEvent.Key,
+				StateMutationNamespaces: []*handlerpb.StateMutationNamespace{{
+					Namespace: "sum",
+					Mutations: []*handlerpb.StateMutation{{
+						Mutation: &handlerpb.StateMutation_Put{
+							Put: &handlerpb.PutMutation{
+								Key:   []byte("sum"),
+								Value: nextSumState,
+							},
+						},
+					}},
+				}},
+			})
+
+			sinkRequests = append(sinkRequests, &handlerpb.SinkRequest{
+				Id:    "sink",
+				Value: nextSumState,
+			})
 		}
 	}
 
-	// Add one and encode state item
-	sumState.Sum = sumState.Sum + 1
-	nextSumState, err := json.Marshal(sumState)
-	if err != nil {
-		return nil, err
-	}
-
-	return &handlerpb.HandlerResponse{
-		StateMutationNamespaces: []*handlerpb.StateMutationNamespace{{
-			Namespace: "sum",
-			Mutations: []*handlerpb.StateMutation{{
-				Mutation: &handlerpb.StateMutation_Put{
-					Put: &handlerpb.PutMutation{
-						Key:   []byte("sum"),
-						Value: nextSumState,
-					},
-				},
-			}},
-		}},
-		SinkRequests: []*handlerpb.SinkRequest{{
-			Id:    "sink",
-			Value: nextSumState,
-		}},
+	return &handlerpb.ProcessEventBatchResponse{
+		SinkRequests: sinkRequests,
+		KeyResults:   keyResults,
 	}, nil
-}
-
-func (s *SummingHandler) OnTimerExpired(ctx context.Context, req *handlerpb.OnTimerExpiredRequest) (*handlerpb.HandlerResponse, error) {
-	panic("unused, handler sets no timers")
 }
 
 var _ proto.Handler = (*SummingHandler)(nil)

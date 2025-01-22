@@ -61,17 +61,8 @@ func (h *HandlerConnectClient) KeyEvent(ctx context.Context, event []byte) {
 	h.keyEventBatcher.Add(event)
 }
 
-func (h *HandlerConnectClient) OnEvent(ctx context.Context, req *handlerpb.OnEventRequest) (*handlerpb.HandlerResponse, error) {
-	resp, err := h.connectClient.OnEvent(ctx, connect.NewRequest(req))
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.Msg, nil
-}
-
-func (h *HandlerConnectClient) OnTimerExpired(ctx context.Context, req *handlerpb.OnTimerExpiredRequest) (*handlerpb.HandlerResponse, error) {
-	resp, err := h.connectClient.OnTimerExpired(ctx, connect.NewRequest(req))
+func (h *HandlerConnectClient) ProcessEventBatch(ctx context.Context, req *handlerpb.ProcessEventBatchRequest) (*handlerpb.ProcessEventBatchResponse, error) {
+	resp, err := h.connectClient.ProcessEventBatch(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, err
 	}

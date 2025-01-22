@@ -239,24 +239,78 @@ func (o *Operator) handleUserEvent(ctx context.Context, event *handlerpb.KeyedEv
 		return err
 	}
 	o.Logger.Info("calling user handler", "event", event)
-	resp, err := o.userHandler.OnEvent(ctx, &handlerpb.OnEventRequest{
-		Event:                event,
-		StateEntryNamespaces: state,
+	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
+		KeyStates: []*handlerpb.KeyState{{
+			Key:                  event.Key,
+			StateEntryNamespaces: state,
+		}},
+		Events: []*handlerpb.Event{{
+			Event: &handlerpb.Event_KeyedEvent{
+				KeyedEvent: event,
+			},
+		}},
 	})
 	if err != nil {
 		return err
 	}
-	for _, t := range resp.NewTimers {
-		o.Logger.Info("registering timer", "timer", t)
-		o.timerRegistry.SetTimer(event.Key, t.AsTime())
+
+	// Update state for each key result
+	for _, keyResult := range resp.KeyResults {
+		for _, t := range keyResult.NewTimers {
+			o.Logger.Info("registering timer", "timer", t)
+			o.timerRegistry.SetTimer(event.Key, t.AsTime())
+
+		}
+		if err := o.stateStore.ApplyMutations(event.Key, keyResult.StateMutationNamespaces); err != nil {
+			return err
+		}
 	}
+
+	// Send sink requests
 	for _, r := range resp.SinkRequests {
 		if err := o.sink.Write(r.Value); err != nil {
 			return err
 		}
 	}
-	if err := o.stateStore.ApplyMutations(event.Key, resp.StateMutationNamespaces); err != nil {
-		return err
+
+	return nil
+}
+
+func (o *Operator) handleWatermark(ctx context.Context, senderID string, wm *workerpb.Watermark) error {
+	for key, t := range o.timerRegistry.AdvanceWatermark(senderID, wm) {
+		state, err := o.stateStore.GetState(key)
+		if err != nil {
+			return fmt.Errorf("getting state for due timer: %v", err)
+		}
+
+		resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
+			KeyStates: []*handlerpb.KeyState{{
+				Key:                  key,
+				StateEntryNamespaces: state,
+			}},
+			Events: []*handlerpb.Event{{
+				Event: &handlerpb.Event_TimerExpired{
+					TimerExpired: &handlerpb.TimerExpired{
+						Key:       key,
+						Timestamp: timestamppb.New(t),
+					},
+				},
+			}},
+		})
+		if err != nil {
+			return fmt.Errorf("handler OnTimerExpired: %v", err)
+		}
+		for _, r := range resp.SinkRequests {
+			if err := o.sink.Write(r.Value); err != nil {
+				return fmt.Errorf("writing OnTimerExpired results to sink: %v", err)
+			}
+		}
+
+		for _, keyResult := range resp.KeyResults {
+			if err := o.stateStore.ApplyMutations(key, keyResult.StateMutationNamespaces); err != nil {
+				return fmt.Errorf("applying OnTimerExpired mutations: %v", err)
+			}
+		}
 	}
 
 	return nil
@@ -296,34 +350,6 @@ func (o *Operator) handleCheckpointBarrier(ctx context.Context, senderID string,
 		// Reset checkpoint to nil for next checkpoint
 		o.checkpoint = nil
 		return nil
-	}
-
-	return nil
-}
-
-func (o *Operator) handleWatermark(ctx context.Context, senderID string, wm *workerpb.Watermark) error {
-	for key, t := range o.timerRegistry.AdvanceWatermark(senderID, wm) {
-		state, err := o.stateStore.GetState(key)
-		if err != nil {
-			return fmt.Errorf("getting state for due timer: %v", err)
-		}
-		resp, err := o.userHandler.OnTimerExpired(ctx, &handlerpb.OnTimerExpiredRequest{
-			Key:                  key,
-			Timestamp:            timestamppb.New(t),
-			StateEntryNamespaces: state,
-		})
-		if err != nil {
-			return fmt.Errorf("handler OnTimerExpired: %v", err)
-		}
-		for _, r := range resp.SinkRequests {
-			if err := o.sink.Write(r.Value); err != nil {
-				return fmt.Errorf("writing OnTimerExpired results to sink: %v", err)
-			}
-		}
-
-		if err := o.stateStore.ApplyMutations(key, resp.StateMutationNamespaces); err != nil {
-			return fmt.Errorf("applying OnTimerExpired mutations: %v", err)
-		}
 	}
 
 	return nil

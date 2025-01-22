@@ -8,8 +8,7 @@ import (
 
 // The user's handler code for processing events
 type Handler interface {
-	OnEvent(ctx context.Context, req *handlerpb.OnEventRequest) (*handlerpb.HandlerResponse, error)
-	OnTimerExpired(ctx context.Context, req *handlerpb.OnTimerExpiredRequest) (*handlerpb.HandlerResponse, error)
+	ProcessEventBatch(ctx context.Context, req *handlerpb.ProcessEventBatchRequest) (*handlerpb.ProcessEventBatchResponse, error)
 	KeyEvent(ctx context.Context, event []byte)
 	KeyEventResults() <-chan []*handlerpb.KeyedEvent
 }
