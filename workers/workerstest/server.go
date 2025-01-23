@@ -66,6 +66,10 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 				},
 			})
 		},
+		EventBatching: batching.EventBatcherParams2{
+			MaxSize:  2,
+			MaxDelay: 5 * time.Millisecond,
+		},
 	})
 
 	mux := http.NewServeMux()

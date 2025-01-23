@@ -23,22 +23,25 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/util/size"
 )
 
 type Operator struct {
 	// Members initialized with NewOperator
-	id           string
-	host         string
-	job          proto.Job
-	userHandler  proto.Handler
-	Logger       *slog.Logger
-	mu           *sync.RWMutex
-	clock        clocks.Clock
-	events       chan func()
-	stop         context.CancelFunc
-	isHalting    atomic.Bool
-	isInAssembly atomic.Bool
+	id                  string
+	host                string
+	job                 proto.Job
+	userHandler         proto.Handler
+	Logger              *slog.Logger
+	mu                  *sync.RWMutex
+	clock               clocks.Clock
+	events              chan func()
+	stop                context.CancelFunc
+	isHalting           atomic.Bool
+	isInAssembly        atomic.Bool
+	eventBatcher        *batching.EventBatcher2[RxnHandlerEvent]
+	eventBatchingParams batching.EventBatcherParams2
 
 	// Members set in HandleStart
 	keySpace       *partitioning.KeySpace
@@ -53,12 +56,19 @@ type Operator struct {
 	checkpoint *checkpoint
 }
 
+// Events bound for the user's handler
+type RxnHandlerEvent struct {
+	key   []byte
+	event *handlerpb.Event
+}
+
 type NewOperatorParams struct {
-	ID          string // Optional ID to override ID generation
-	Host        string
-	Job         proto.Job
-	UserHandler proto.Handler
-	Clock       clocks.Clock
+	ID            string // Optional ID to override ID generation
+	Host          string
+	Job           proto.Job
+	UserHandler   proto.Handler
+	EventBatching batching.EventBatcherParams2
+	Clock         clocks.Clock
 }
 
 func NewOperator(params NewOperatorParams) *Operator {
@@ -76,15 +86,16 @@ func NewOperator(params NewOperatorParams) *Operator {
 	}
 	log := slog.With("instanceID", "operator-"+shortID)
 	return &Operator{
-		id:          params.ID,
-		host:        params.Host,
-		job:         params.Job,
-		userHandler: params.UserHandler,
-		Logger:      log,
-		mu:          &sync.RWMutex{},
-		clock:       params.Clock,
-		events:      make(chan func()),
-		stop:        func() {}, // initialize with noop
+		id:                  params.ID,
+		host:                params.Host,
+		job:                 params.Job,
+		userHandler:         params.UserHandler,
+		Logger:              log,
+		mu:                  &sync.RWMutex{},
+		clock:               params.Clock,
+		events:              make(chan func()),
+		stop:                func() {}, // initialize with noop
+		eventBatchingParams: params.EventBatching,
 	}
 }
 
@@ -106,7 +117,14 @@ func (o *Operator) Start(ctx context.Context) error {
 	}, "register")
 	o.registerPoller.Trigger() // Try to register immediately
 
-	go o.processEvents(ctx)
+	o.eventBatcher = batching.NewEventBatcher2[RxnHandlerEvent](ctx, o.eventBatchingParams)
+
+	go func() {
+		if err := o.processEvents(ctx); err != nil {
+			o.Logger.Error("processEvents failed", "err", err)
+		}
+		cancel()
+	}()
 
 	<-ctx.Done() // Afterward, begin shutdown
 
@@ -208,8 +226,7 @@ func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *worker
 		}
 	case *workerpb.Event_SourceComplete:
 		o.events <- func() {
-			o.handleSourceComplete(senderID)
-			respErr <- nil
+			respErr <- o.handleSourceComplete(senderID)
 		}
 	default:
 		return fmt.Errorf("unknown event to handle %v", typedEvent)
@@ -219,40 +236,53 @@ func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *worker
 }
 
 // Process events until the o.events channel is closed or the context is canceled.
-func (o *Operator) processEvents(ctx context.Context) {
+func (o *Operator) processEvents(ctx context.Context) error {
 	for {
 		select {
 		case event, ok := <-o.events:
 			if !ok {
-				return
+				return nil
 			}
 			event()
+		case batchToken, ok := <-o.eventBatcher.BatchTimedOut:
+			if !ok {
+				return nil
+			}
+			if err := o.processEventBatch(ctx, batchToken); err != nil {
+				return err
+			}
 		case <-ctx.Done():
-			return
+			return nil
 		}
 	}
 }
 
 func (o *Operator) handleUserEvent(ctx context.Context, event *handlerpb.KeyedEvent) error {
-	return o.processEventBatch(ctx, event.Key, &handlerpb.Event{
-		Event: &handlerpb.Event_KeyedEvent{
-			KeyedEvent: event,
-		},
+	o.eventBatcher.Add(RxnHandlerEvent{
+		key:   event.Key,
+		event: &handlerpb.Event{Event: &handlerpb.Event_KeyedEvent{KeyedEvent: event}},
 	})
+	if o.eventBatcher.IsFull() {
+		return o.processEventBatch(ctx, batching.CurrentBatch)
+	}
+	return nil
 }
 
 func (o *Operator) handleWatermark(ctx context.Context, senderID string, wm *workerpb.Watermark) error {
 	for key, t := range o.timerRegistry.AdvanceWatermark(senderID, wm) {
-		err := o.processEventBatch(ctx, key, &handlerpb.Event{
-			Event: &handlerpb.Event_TimerExpired{
+		o.eventBatcher.Add(RxnHandlerEvent{
+			key: key,
+			event: &handlerpb.Event{Event: &handlerpb.Event_TimerExpired{
 				TimerExpired: &handlerpb.TimerExpired{
 					Key:       key,
 					Timestamp: timestamppb.New(t),
 				},
-			},
+			}},
 		})
-		if err != nil {
-			return fmt.Errorf("operator handleWatermark: %v", err)
+		if o.eventBatcher.IsFull() {
+			if err := o.processEventBatch(ctx, batching.CurrentBatch); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -272,6 +302,7 @@ func (o *Operator) handleCheckpointBarrier(ctx context.Context, senderID string,
 	}
 
 	if o.checkpoint.hasAllBarriers() {
+		o.processEventBatch(ctx, batching.CurrentBatch) // Must flush any pending events before checkpointing
 		cp, err := o.db.Checkpoint(o.checkpoint.checkpointID)()
 		if err != nil {
 			return err
@@ -298,47 +329,53 @@ func (o *Operator) handleCheckpointBarrier(ctx context.Context, senderID string,
 	return nil
 }
 
-func (o *Operator) handleSourceComplete(sourceRunnerID string) {
+func (o *Operator) handleSourceComplete(sourceRunnerID string) error {
 	o.Logger.Info("got source complete event", "sourceRunnerID", sourceRunnerID)
+	if err := o.processEventBatch(context.Background(), batching.CurrentBatch); err != nil {
+		return err
+	}
 	o.sourceRunners.deactivate(sourceRunnerID)
 	if !o.sourceRunners.hasActive() {
 		o.stop()
 	}
+	return nil
 }
 
-func (o *Operator) processEventBatch(ctx context.Context, key []byte, event *handlerpb.Event) error {
-	state, err := o.stateStore.GetState(key)
-	if err != nil {
-		return fmt.Errorf("getting state for processEventBatch: %v", err)
-	}
-
-	o.Logger.Info("calling user handler", "event", event)
-	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
-		KeyStates: []*handlerpb.KeyState{{
-			Key:                  key,
-			StateEntryNamespaces: state,
-		}},
-		Events: []*handlerpb.Event{event},
-	})
-	if err != nil {
-		return err
-	}
-
-	// Update state for each key result
-	for _, keyResult := range resp.KeyResults {
-		for _, t := range keyResult.NewTimers {
-			o.Logger.Info("registering timer", "timer", t)
-			o.timerRegistry.SetTimer(key, t.AsTime())
+func (o *Operator) processEventBatch(ctx context.Context, batchToken batching.BatchToken) error {
+	for _, rxnEvent := range o.eventBatcher.Flush(batchToken) {
+		state, err := o.stateStore.GetState(rxnEvent.key)
+		if err != nil {
+			return fmt.Errorf("getting state for processEventBatch: %v", err)
 		}
-		if err := o.stateStore.ApplyMutations(key, keyResult.StateMutationNamespaces); err != nil {
+
+		o.Logger.Info("calling user handler", "event", rxnEvent.event)
+		resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
+			KeyStates: []*handlerpb.KeyState{{
+				Key:                  rxnEvent.key,
+				StateEntryNamespaces: state,
+			}},
+			Events: []*handlerpb.Event{rxnEvent.event},
+		})
+		if err != nil {
 			return err
 		}
-	}
 
-	// Send sink requests
-	for _, r := range resp.SinkRequests {
-		if err := o.sink.Write(r.Value); err != nil {
-			return err
+		// Update state for each key result
+		for _, keyResult := range resp.KeyResults {
+			for _, t := range keyResult.NewTimers {
+				o.Logger.Info("registering timer", "timer", t)
+				o.timerRegistry.SetTimer(rxnEvent.key, t.AsTime())
+			}
+			if err := o.stateStore.ApplyMutations(rxnEvent.key, keyResult.StateMutationNamespaces); err != nil {
+				return err
+			}
+		}
+
+		// Send sink requests
+		for _, r := range resp.SinkRequests {
+			if err := o.sink.Write(r.Value); err != nil {
+				return err
+			}
 		}
 	}
 

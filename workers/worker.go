@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/proto"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers/operator"
 	"reduction.dev/reduction/workers/sourcerunner"
 )
@@ -21,6 +22,7 @@ type NewParams struct {
 	Clock           clocks.Clock
 	LogPrefix       string // Optional log value to differentiate worker logs
 	OperatorFactory proto.OperatorFactory
+	EventBatching   batching.EventBatcherParams2
 }
 
 func New(params NewParams) *Worker {
@@ -32,10 +34,11 @@ func New(params NewParams) *Worker {
 	})
 
 	operator := operator.NewOperator(operator.NewOperatorParams{
-		Host:        params.Host,
-		Job:         params.Job,
-		UserHandler: params.Handler,
-		Clock:       params.Clock,
+		Host:          params.Host,
+		Job:           params.Job,
+		UserHandler:   params.Handler,
+		Clock:         params.Clock,
+		EventBatching: params.EventBatching,
 	})
 
 	if params.LogPrefix == "" {
