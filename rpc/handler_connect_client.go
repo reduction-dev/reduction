@@ -30,7 +30,7 @@ func NewHandlerConnectClient(params NewHandlerConnectClientParams) *HandlerConne
 		params.AsyncBufferSize = 1_000
 	}
 
-	connectClient := handlerpbconnect.NewHandlerClient(NewHTTPClient(), "http://"+params.Host, params.Opts...)
+	connectClient := handlerpbconnect.NewHandlerClient(NewHTTPClient("handler"), "http://"+params.Host, params.Opts...)
 	client := &HandlerConnectClient{
 		connectClient: connectClient,
 		keyEventBatcher: batching.NewEventBatcher[[]byte](context.Background(), batching.EventBatcherParams{

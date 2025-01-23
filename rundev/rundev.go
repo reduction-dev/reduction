@@ -15,9 +15,13 @@ import (
 	"reduction.dev/reduction/workers/workerserver"
 )
 
+type RunParams struct {
+	WorkerPort int
+}
+
 // Run starts a local cluster of job, worker, and handler for local development
 // feedback.
-func Run() error {
+func Run(params RunParams) error {
 	// Stop everything on ctrl-c
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -45,8 +49,9 @@ func Run() error {
 	})
 
 	// Start the worker
+	addr := fmt.Sprintf(":%d", params.WorkerPort)
 	worker := workerserver.NewServer(workerserver.NewServerParams{
-		Addr:         ":0",                            // Random port to avoid conflicts
+		Addr:         addr,
 		JobAddr:      job.RPCListener.Addr().String(), // Use job's random port
 		HandlerAddr:  ":8080",
 		DBDir:        "./storage/dkv",

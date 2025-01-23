@@ -69,10 +69,21 @@ func main() {
 		}, {
 			Name:  "dev",
 			Usage: "Start a self-contained cluster for local development",
+			Flags: []cli.Flag{
+				&cli.IntFlag{
+					Name:     "worker-port",
+					Value:    0,
+					Usage:    "the address used to call the worker server.",
+					Required: false,
+				},
+			},
 			Action: func(ctx *cli.Context) error {
 				logging.SetLevel(slog.LevelWarn)
 				slog.SetDefault(slog.New(logging.NewTextHandler()))
-				err := rundev.Run()
+				port := ctx.Int("worker-port")
+				err := rundev.Run(rundev.RunParams{
+					WorkerPort: port,
+				})
 				if err != nil {
 					fmt.Println(err)
 				}

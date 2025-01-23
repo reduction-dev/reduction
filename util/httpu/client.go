@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"reduction.dev/reduction/telemetry"
 )
 
 // Create a new http.Client that matches the default http client.
@@ -12,7 +14,7 @@ import (
 // http.DefaultTransport between clients. In tests this resulted in "new"
 // connections that http.Server.Shutdown() could never close. Using a different
 // instance of Transport and DialContext seems to avoid the issue.
-func NewClient() *http.Client {
+func NewClient(metricName string) *http.Client {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
@@ -26,6 +28,6 @@ func NewClient() *http.Client {
 	}
 
 	return &http.Client{
-		Transport: transport,
+		Transport: telemetry.NewMetricsTransport(metricName, transport),
 	}
 }

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -ue
+
+function start_containers() {
+    # Create Docker network
+    docker network create monitoring 2>/dev/null || true
+
+    # Start Prometheus
+    docker run -d \
+        --name prometheus \
+        --network monitoring \
+        -p 9090:9090 \
+        --add-host=host.docker.internal:host-gateway \
+        -v ${PWD}/prometheus.yml:/etc/prometheus/prometheus.yml \
+        -v ${PWD}/data/prometheus:/prometheus \
+        prom/prometheus \
+
+    # Start Grafana
+    docker run -d \
+        --name grafana \
+        --network monitoring \
+        -p 3000:3000 \
+        -v ${PWD}/grafana.ini:/etc/grafana/grafana.ini \
+        -v ${PWD}/data/grafana:/var/lib/grafana \
+        grafana/grafana
+}
+
+function stop_containers() {
+    docker stop prometheus grafana || true
+    docker rm prometheus grafana || true
+    docker network rm monitoring || true
+}
+
+# Check command line argument
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 [up|down]"
+    exit 1
+fi
+
+case "$1" in
+    "up")
+        start_containers
+        ;;
+    "down")
+        stop_containers
+        ;;
+    *)
+        echo "Invalid command. Use 'up' or 'down'"
+        exit 1
+        ;;
+esac

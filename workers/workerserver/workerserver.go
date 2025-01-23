@@ -9,11 +9,13 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/rpc/batching"
+	"reduction.dev/reduction/telemetry"
 	"reduction.dev/reduction/util/httpu"
 	"reduction.dev/reduction/workers"
 
@@ -55,7 +57,12 @@ func NewServer(params NewServerParams) *server {
 		Host: listener.Addr().String(),
 		Handler: rpc.NewHandlerConnectClient(rpc.NewHandlerConnectClientParams{
 			Host: params.HandlerAddr,
-			Opts: []connect.ClientOption{connect.WithInterceptors(rpc.NewLoggingInterceptor(logger))},
+			Opts: []connect.ClientOption{
+				connect.WithInterceptors(
+					rpc.NewLoggingInterceptor(logger),
+					telemetry.NewRPCInterceptor("handler"),
+				),
+			},
 			BatchingOptions: batching.EventBatcherParams{
 				MaxSize:  100,
 				MaxDelay: 10 * time.Millisecond,
@@ -72,6 +79,9 @@ func NewServer(params NewServerParams) *server {
 					MaxDelay: 10 * time.Millisecond,
 				},
 				ErrChan: errChan,
+				ConnectOptions: []connect.ClientOption{
+					connect.WithInterceptors(telemetry.NewRPCInterceptor("operator")),
+				},
 			})
 		},
 		EventBatching: batching.EventBatcherParams2{
@@ -88,6 +98,9 @@ func NewServer(params NewServerParams) *server {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// Prometheus metrics
+	mux.Handle("/metrics", promhttp.Handler())
 
 	path, handler := rpc.NewSourceRunnerConnectHandler(worker.SourceRunner)
 	mux.Handle(path, handler)

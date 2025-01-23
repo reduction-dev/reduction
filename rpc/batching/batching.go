@@ -21,7 +21,8 @@ type EventBatcher[T any] struct {
 	timer        clocks.Timer
 	mu           sync.Mutex // Guard batch
 	batch        []T
-	batchToken   *struct{} // Tracks the current batch
+	batchToken   BatchToken // Tracks the current batch
+	nextToken    BatchToken
 }
 
 func NewEventBatcher[T any](ctx context.Context, params EventBatcherParams) *EventBatcher[T] {
@@ -34,13 +35,16 @@ func NewEventBatcher[T any](ctx context.Context, params EventBatcherParams) *Eve
 		timer:        params.Timer,
 		maxSize:      params.MaxSize,
 		maxDelay:     params.MaxDelay,
+		batchToken:   0,
+		nextToken:    1,
 	}
 
 	go func() {
 		<-ctx.Done()
 		batcher.mu.Lock()
 		defer batcher.mu.Unlock()
-		batcher.batchToken = &struct{}{}
+		batcher.batchToken = batcher.nextToken
+		batcher.nextToken++
 	}()
 
 	return batcher
@@ -81,6 +85,7 @@ func (b *EventBatcher[T]) flushLocked() {
 	// Yield the current batch and start a new one
 	flushingBatch := b.batch
 	b.batch = make([]T, 0, len(flushingBatch))
-	b.batchToken = &struct{}{}
+	b.batchToken = b.nextToken
+	b.nextToken++
 	b.onBatchReady(flushingBatch)
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func NewJobConnectClient(host string, opts ...connect.ClientOption) *JobConnectClient {
-	client := jobpbconnect.NewJobClient(NewHTTPClient(), "http://"+host, opts...)
+	client := jobpbconnect.NewJobClient(NewHTTPClient("job_rpc"), "http://"+host, opts...)
 	return &JobConnectClient{
 		connClient: client,
 	}

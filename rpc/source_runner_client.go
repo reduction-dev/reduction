@@ -20,7 +20,7 @@ func NewSourceRunnerConnectClient(identity *jobpb.NodeIdentity, opts ...connect.
 	if identity.Host == "" {
 		panic("missing host")
 	}
-	sourceRunnerClient := workerpbconnect.NewSourceRunnerClient(NewHTTPClient(), "http://"+identity.Host, opts...)
+	sourceRunnerClient := workerpbconnect.NewSourceRunnerClient(NewHTTPClient("source_runner"), "http://"+identity.Host, opts...)
 	return &SourceRunnerConnectClient{
 		host:               identity.Host,
 		id:                 identity.Id,

@@ -16,9 +16,9 @@ type HTTPClient struct {
 
 type newOption func(c *HTTPClient)
 
-func NewHTTPClient(options ...newOption) *HTTPClient {
+func NewHTTPClient(metricName string, options ...newOption) *HTTPClient {
 	client := &HTTPClient{
-		goHTTPClient: httpu.NewClient(),
+		goHTTPClient: httpu.NewClient(metricName),
 	}
 
 	for _, o := range options {

@@ -27,7 +27,7 @@ func TestPostRetry(t *testing.T) {
 	}))
 	defer s.Close()
 
-	client := rpc.NewHTTPClient(rpc.WithInitialRetryDelay(0))
+	client := rpc.NewHTTPClient("dummy", rpc.WithInitialRetryDelay(0))
 
 	httpReq, err := http.NewRequestWithContext(context.Background(), "POST", s.URL, strings.NewReader("hello"))
 	require.NoError(t, err)

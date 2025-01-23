@@ -36,7 +36,7 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *Op
 	}
 
 	ctx, cancelFunc := context.WithCancelCause(context.Background())
-	connectClient := workerpbconnect.NewOperatorClient(NewHTTPClient(), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
+	connectClient := workerpbconnect.NewOperatorClient(NewHTTPClient("operator"), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
 	client = &OperatorConnectClient{
 		id:            params.OperatorNode.Id,
 		host:          params.OperatorNode.Host,
