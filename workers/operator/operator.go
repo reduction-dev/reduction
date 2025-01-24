@@ -342,40 +342,55 @@ func (o *Operator) handleSourceComplete(sourceRunnerID string) error {
 }
 
 func (o *Operator) processEventBatch(ctx context.Context, batchToken batching.BatchToken) error {
-	for _, rxnEvent := range o.eventBatcher.Flush(batchToken) {
+	batchEvents := o.eventBatcher.Flush(batchToken)
+	if len(batchEvents) == 0 {
+		return nil
+	}
+
+	// First collect all keyStates and events
+	keyStates := make([]*handlerpb.KeyState, len(batchEvents))
+	events := make([]*handlerpb.Event, len(batchEvents))
+	for i, rxnEvent := range batchEvents {
+		// State
 		state, err := o.stateStore.GetState(rxnEvent.key)
 		if err != nil {
 			return fmt.Errorf("getting state for processEventBatch: %v", err)
 		}
+		keyStates[i] = &handlerpb.KeyState{
+			Key:                  rxnEvent.key,
+			StateEntryNamespaces: state,
+		}
 
-		o.Logger.Info("calling user handler", "event", rxnEvent.event)
-		resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
-			KeyStates: []*handlerpb.KeyState{{
-				Key:                  rxnEvent.key,
-				StateEntryNamespaces: state,
-			}},
-			Events: []*handlerpb.Event{rxnEvent.event},
-		})
-		if err != nil {
+		// Event
+		events[i] = rxnEvent.event
+	}
+
+	// Make a single batch call to the handler
+	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
+		KeyStates: keyStates,
+		Events:    events,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Process results
+	for _, keyResult := range resp.KeyResults {
+		// Register any new timers
+		for _, t := range keyResult.NewTimers {
+			o.Logger.Info("registering timer", "timer", t)
+			o.timerRegistry.SetTimer(keyResult.Key, t.AsTime())
+		}
+		// Apply state mutations
+		if err := o.stateStore.ApplyMutations(keyResult.Key, keyResult.StateMutationNamespaces); err != nil {
 			return err
 		}
+	}
 
-		// Update state for each key result
-		for _, keyResult := range resp.KeyResults {
-			for _, t := range keyResult.NewTimers {
-				o.Logger.Info("registering timer", "timer", t)
-				o.timerRegistry.SetTimer(rxnEvent.key, t.AsTime())
-			}
-			if err := o.stateStore.ApplyMutations(rxnEvent.key, keyResult.StateMutationNamespaces); err != nil {
-				return err
-			}
-		}
-
-		// Send sink requests
-		for _, r := range resp.SinkRequests {
-			if err := o.sink.Write(r.Value); err != nil {
-				return err
-			}
+	// Send all sink requests
+	for _, r := range resp.SinkRequests {
+		if err := o.sink.Write(r.Value); err != nil {
+			return err
 		}
 	}
 
