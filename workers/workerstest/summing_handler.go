@@ -11,7 +11,7 @@ import (
 
 type SummingHandler struct{}
 
-func (s *SummingHandler) KeyEvent(ctx context.Context, event []byte) {
+func (s *SummingHandler) KeyEventBatch(ctx context.Context, events [][]byte) ([][]*handlerpb.KeyedEvent, error) {
 	panic("unused by operators")
 }
 

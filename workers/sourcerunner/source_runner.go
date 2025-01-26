@@ -11,6 +11,8 @@ import (
 
 	"github.com/segmentio/ksuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"reduction.dev/reduction-handler/handlerpb"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
@@ -18,6 +20,7 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
+	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers/wmark"
 )
 
@@ -38,6 +41,8 @@ type SourceRunner struct {
 	operatorFactory proto.OperatorFactory
 	errChan         chan error
 	outputStream    chan *workerpb.Event
+	keyEventBatcher *batching.EventBatcher2[[]byte]
+	keyEventResults chan []*handlerpb.KeyedEvent
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -76,6 +81,12 @@ func New(params NewParams) *SourceRunner {
 		operatorFactory:   params.OperatorFactory,
 		errChan:           make(chan error),
 		outputStream:      make(chan *workerpb.Event, 1_000),
+		// TODO: Parameterize the batching params
+		keyEventBatcher: batching.NewEventBatcher2[[]byte](context.Background(), batching.EventBatcherParams2{
+			MaxDelay: 10 * time.Millisecond,
+			MaxSize:  2,
+		}),
+		keyEventResults: make(chan []*handlerpb.KeyedEvent, 1_000),
 	}
 }
 
@@ -97,6 +108,18 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	}, "register")
 	r.registerPoller.Trigger() // Try to register immediately
 
+	// Listen for key event batch timeouts
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case token := <-r.keyEventBatcher.BatchTimedOut:
+				r.flushKeyEventBatch(ctx, token)
+			}
+		}
+	}()
+
 	// Listen for errors on the errChan
 	go func() {
 		cancel(<-r.errChan)
@@ -116,8 +139,6 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 			r.Logger.Warn("failed deregistration", "err", err)
 		}
 	}
-
-	close(r.errChan)
 
 	// Treat context.Canceled as a non-error case
 	if cause := context.Cause(ctx); cause != context.Canceled {
@@ -201,8 +222,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				if errors.Is(err, connectors.ErrEndOfInput) {
 					// EOI error case may still have returned events
 					for _, e := range events {
-						r.userHandler.KeyEvent(ctx, e)
-						r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
+						r.sendKeyEvent(ctx, e)
 					}
 
 					// Send the current watermark followed by source complete event
@@ -220,9 +240,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 			}
 
 			for _, e := range events {
-				// Key the event then put an empty KeyedEvent into the output stream as a placeholder.
-				r.userHandler.KeyEvent(ctx, e)
-				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
+				r.sendKeyEvent(ctx, e)
 			}
 		}
 	}
@@ -236,7 +254,7 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 	switch typedEvent := event.Event.(type) {
 	case *workerpb.Event_KeyedEvent:
 		// Get the async result for this placeholder event
-		asyncResult := <-r.userHandler.KeyEventResults()
+		asyncResult := <-r.keyEventResults
 		for _, event := range asyncResult {
 			r.watermarker.AdvanceTime(event.Timestamp.AsTime())
 			err := r.operators.routeEvent(context.Background(), event.Key, &workerpb.Event{
@@ -259,6 +277,29 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 	default:
 		return fmt.Errorf("unknown operator event type: %T", typedEvent)
 	}
+}
+
+func (r *SourceRunner) sendKeyEvent(ctx context.Context, event []byte) {
+	// Put a placeholder on the output stream that will be joined with the async result
+	r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
+	r.keyEventBatcher.Add(event)
+	if r.keyEventBatcher.IsFull() {
+		r.flushKeyEventBatch(ctx, batching.CurrentBatch)
+	}
+}
+
+func (r *SourceRunner) flushKeyEventBatch(ctx context.Context, batchToken batching.BatchToken) {
+	events := r.keyEventBatcher.Flush(batchToken)
+	go func() {
+		resp, err := r.userHandler.KeyEventBatch(ctx, events)
+		if err != nil {
+			r.errChan <- err
+			return
+		}
+		for _, result := range resp {
+			r.keyEventResults <- result
+		}
+	}()
 }
 
 // createCheckpoint gets checkpoint data from the source reader and notifies the job.

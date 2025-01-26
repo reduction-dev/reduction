@@ -45,7 +45,7 @@ func (ss SumState) Marshal() []byte {
 	return b
 }
 
-func (s *SumEachSecondHandler) KeyEvent(ctx context.Context, event []byte) {
+func (s *SumEachSecondHandler) KeyEventBatch(ctx context.Context, events [][]byte) ([][]*handlerpb.KeyedEvent, error) {
 	panic("unused for test")
 }
 
