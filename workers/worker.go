@@ -22,7 +22,7 @@ type NewParams struct {
 	Clock           clocks.Clock
 	LogPrefix       string // Optional log value to differentiate worker logs
 	OperatorFactory proto.OperatorFactory
-	EventBatching   batching.EventBatcherParams2
+	EventBatching   batching.EventBatcherParams
 }
 
 func New(params NewParams) *Worker {

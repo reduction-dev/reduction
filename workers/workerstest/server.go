@@ -62,7 +62,7 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 				OperatorNode: node,
 			})
 		},
-		EventBatching: batching.EventBatcherParams2{
+		EventBatching: batching.EventBatcherParams{
 			MaxSize:  2,
 			MaxDelay: 5 * time.Millisecond,
 		},

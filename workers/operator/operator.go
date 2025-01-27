@@ -40,8 +40,8 @@ type Operator struct {
 	stop                context.CancelFunc
 	isHalting           atomic.Bool
 	isInAssembly        atomic.Bool
-	eventBatcher        *batching.EventBatcher2[RxnHandlerEvent]
-	eventBatchingParams batching.EventBatcherParams2
+	eventBatcher        *batching.EventBatcher[RxnHandlerEvent]
+	eventBatchingParams batching.EventBatcherParams
 
 	// Members set in HandleStart
 	keySpace       *partitioning.KeySpace
@@ -67,7 +67,7 @@ type NewOperatorParams struct {
 	Host          string
 	Job           proto.Job
 	UserHandler   proto.Handler
-	EventBatching batching.EventBatcherParams2
+	EventBatching batching.EventBatcherParams
 	Clock         clocks.Clock
 }
 
@@ -117,7 +117,7 @@ func (o *Operator) Start(ctx context.Context) error {
 	}, "register")
 	o.registerPoller.Trigger() // Try to register immediately
 
-	o.eventBatcher = batching.NewEventBatcher2[RxnHandlerEvent](ctx, o.eventBatchingParams)
+	o.eventBatcher = batching.NewEventBatcher[RxnHandlerEvent](ctx, o.eventBatchingParams)
 
 	go func() {
 		if err := o.processEvents(ctx); err != nil {

@@ -20,7 +20,7 @@ type operatorCluster struct {
 type newClusterParams struct {
 	keyGroupCount  int
 	operators      []proto.Operator
-	batchingParams batching.EventBatcherParams2
+	batchingParams batching.EventBatcherParams
 	errChan        chan<- error
 }
 
@@ -57,15 +57,15 @@ func (c *operatorCluster) broadcastEvent(event gproto.Message) error {
 
 type batchingOperator struct {
 	op      proto.Operator
-	batcher *batching.EventBatcher2[*workerpb.Event]
+	batcher *batching.EventBatcher[*workerpb.Event]
 	errChan chan<- error
 	batches chan []*workerpb.Event
 }
 
-func newBatchingOperator(ctx context.Context, op proto.Operator, params batching.EventBatcherParams2, errChan chan<- error) *batchingOperator {
+func newBatchingOperator(ctx context.Context, op proto.Operator, params batching.EventBatcherParams, errChan chan<- error) *batchingOperator {
 	o := &batchingOperator{
 		op:      op,
-		batcher: batching.NewEventBatcher2[*workerpb.Event](ctx, params),
+		batcher: batching.NewEventBatcher[*workerpb.Event](ctx, params),
 		batches: make(chan []*workerpb.Event),
 		errChan: errChan,
 	}

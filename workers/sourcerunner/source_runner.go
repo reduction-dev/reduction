@@ -40,9 +40,9 @@ type SourceRunner struct {
 	stop            context.CancelCauseFunc // Signal to stop all source runner processes
 	operatorFactory proto.OperatorFactory
 	errChan         chan error
-	batchingParams  batching.EventBatcherParams2
+	batchingParams  batching.EventBatcherParams
 	outputStream    chan *workerpb.Event
-	keyEventBatcher *batching.EventBatcher2[[]byte]
+	keyEventBatcher *batching.EventBatcher[[]byte]
 	keyEventResults chan []*handlerpb.KeyedEvent
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
@@ -58,7 +58,7 @@ type NewParams struct {
 	Job             proto.Job
 	Clock           clocks.Clock
 	OperatorFactory proto.OperatorFactory
-	EventBatching   batching.EventBatcherParams2
+	EventBatching   batching.EventBatcherParams
 }
 
 func New(params NewParams) *SourceRunner {
@@ -84,7 +84,7 @@ func New(params NewParams) *SourceRunner {
 		errChan:           make(chan error),
 		batchingParams:    params.EventBatching,
 		outputStream:      make(chan *workerpb.Event, 1_000),
-		keyEventBatcher:   batching.NewEventBatcher2[[]byte](context.Background(), params.EventBatching),
+		keyEventBatcher:   batching.NewEventBatcher[[]byte](context.Background(), params.EventBatching),
 		keyEventResults:   make(chan []*handlerpb.KeyedEvent, 1_000),
 	}
 }

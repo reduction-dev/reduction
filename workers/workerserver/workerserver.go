@@ -79,7 +79,7 @@ func NewServer(params NewServerParams) *server {
 				},
 			})
 		},
-		EventBatching: batching.EventBatcherParams2{
+		EventBatching: batching.EventBatcherParams{
 			MaxSize:  100,
 			MaxDelay: 10 * time.Millisecond,
 		},

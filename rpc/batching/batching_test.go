@@ -6,94 +6,73 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/rpc/batching"
 )
 
-func TestEventBatcherFlushesOnSize(t *testing.T) {
+func TestEventBatcher2_FlushesOnSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	timer := &clocks.FakeTimer{}
-	receivedBatches := make(chan []int, 2)
-
-	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
-		MaxDelay: time.Second, // unused
-		MaxSize:  2,
-		Timer:    timer,
-	})
-	batcher.OnBatchReady(func(events []int) {
-		receivedBatches <- events
-	})
-
-	// Adding 2 events should trigger flush due to size, the 3rd event should be
-	// in the next batch.
-	batcher.Add(1)
-	batcher.Add(2)
-	batcher.Add(3)
-
-	batch := <-receivedBatches
-	require.Len(t, batch, 2)
-	assert.Equal(t, []int{1, 2}, batch)
-}
-
-func TestEventBatcherFlushesOnTime(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	timer := &clocks.FakeTimer{}
-	receivedBatches := make(chan []int, 2)
-
-	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
-		MaxDelay: time.Second, // unused
-		MaxSize:  10,
-		Timer:    timer,
-	})
-	batcher.OnBatchReady(func(events []int) {
-		receivedBatches <- events
-	})
-
-	// Add events but don't exceed size limit
-	batcher.Add(1)
-	batcher.Add(2)
-
-	// Trigger timer callback
-	timer.Trigger()
-
-	batch := <-receivedBatches
-	require.Len(t, batch, 2)
-}
-
-func TestEventBatcherResetsBatchAfterFlush(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	timer := &clocks.FakeTimer{}
-	receivedBatches := make(chan []int, 2)
-
 	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
 		MaxDelay: time.Second,
 		MaxSize:  2,
 		Timer:    timer,
 	})
-	batcher.OnBatchReady(func(events []int) {
-		receivedBatches <- events
+
+	batcher.Add(1)
+	assert.False(t, batcher.IsFull())
+
+	batcher.Add(2)
+	assert.True(t, batcher.IsFull())
+
+	batch := batcher.Flush(batching.CurrentBatch)
+	assert.Equal(t, []int{1, 2}, batch)
+}
+
+func TestEventBatcher2_FlushesOnTimer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	timer := &clocks.FakeTimer{}
+	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
+		MaxDelay: time.Second,
+		MaxSize:  10,
+		Timer:    timer,
 	})
 
-	// First batch
 	batcher.Add(1)
 	batcher.Add(2)
 
-	batch := <-receivedBatches
-	require.Len(t, batch, 2)
+	go timer.Trigger()
+	batchToken := <-batcher.BatchTimedOut
+	batch := batcher.Flush(batchToken)
 	assert.Equal(t, []int{1, 2}, batch)
+}
 
-	// Second batch
-	batcher.Add(3)
-	batcher.Add(4)
+func TestEventBatcher2_TokenInvalidation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	batch = <-receivedBatches
-	require.Len(t, batch, 2)
-	assert.Equal(t, []int{3, 4}, batch)
+	timer := &clocks.FakeTimer{}
+	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
+		MaxDelay: time.Second,
+		MaxSize:  10,
+		Timer:    timer,
+	})
+
+	batcher.Add(1) // First add sets the timer
+
+	// Trigger the timer and save the token
+	go timer.Trigger()
+	token := <-batcher.BatchTimedOut
+
+	// Flush the batch for which the timer was set
+	firstBatch := batcher.Flush(batching.CurrentBatch)
+	assert.Equal(t, []int{1}, firstBatch)
+
+	batcher.Add(2)
+	batch := batcher.Flush(token)
+	assert.Nil(t, batch, "Flush with old token should return nil")
 }
