@@ -31,6 +31,7 @@ func New(params NewParams) *Worker {
 		UserHandler:     params.Handler,
 		Job:             params.Job,
 		OperatorFactory: params.OperatorFactory,
+		EventBatching:   params.EventBatching,
 	})
 
 	operator := operator.NewOperator(operator.NewOperatorParams{

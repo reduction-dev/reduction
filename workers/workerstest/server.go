@@ -60,10 +60,6 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:     senderID,
 				OperatorNode: node,
-				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  2,
-					MaxDelay: 5 * time.Millisecond,
-				},
 			})
 		},
 		EventBatching: batching.EventBatcherParams2{

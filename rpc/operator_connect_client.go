@@ -2,13 +2,11 @@ package rpc
 
 import (
 	"context"
-	"errors"
 
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/workerpb"
 	workerpbconnect "reduction.dev/reduction/proto/workerpb/workerpbconnect"
-	"reduction.dev/reduction/rpc/batching"
 
 	"connectrpc.com/connect"
 )
@@ -18,16 +16,12 @@ type OperatorConnectClient struct {
 	host          string
 	senderID      string
 	connectClient workerpbconnect.OperatorClient
-	eventBatcher  *batching.EventBatcher[*workerpb.Event]
-	cancelFunc    context.CancelCauseFunc
 }
 
 type NewOperatorConnectClientParams struct {
-	SenderID        string
-	OperatorNode    *jobpb.NodeIdentity
-	ConnectOptions  []connect.ClientOption
-	BatchingOptions batching.EventBatcherParams
-	ErrChan         chan<- error
+	SenderID       string
+	OperatorNode   *jobpb.NodeIdentity
+	ConnectOptions []connect.ClientOption
 }
 
 func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *OperatorConnectClient) {
@@ -35,39 +29,14 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *Op
 		panic("missing host")
 	}
 
-	ctx, cancelFunc := context.WithCancelCause(context.Background())
-	connectClient := workerpbconnect.NewOperatorClient(NewHTTPClient("operator"), "http://"+params.OperatorNode.Host, params.ConnectOptions...)
-	client = &OperatorConnectClient{
-		id:            params.OperatorNode.Id,
-		host:          params.OperatorNode.Host,
-		senderID:      params.SenderID,
-		connectClient: connectClient,
-		eventBatcher:  batching.NewEventBatcher[*workerpb.Event](ctx, params.BatchingOptions),
-		cancelFunc:    cancelFunc,
+	return &OperatorConnectClient{
+		id:       params.OperatorNode.Id,
+		host:     params.OperatorNode.Host,
+		senderID: params.SenderID,
+		connectClient: workerpbconnect.NewOperatorClient(
+			NewHTTPClient("operator"),
+			"http://"+params.OperatorNode.Host, params.ConnectOptions...),
 	}
-
-	client.eventBatcher.OnBatchReady(func(batch []*workerpb.Event) {
-		req := &workerpb.HandleEventBatchRequest{
-			SenderId: client.senderID,
-			Events:   batch,
-		}
-		_, err := client.connectClient.HandleEventBatch(ctx, connect.NewRequest(req))
-		if params.ErrChan != nil && err != nil && !errors.Is(err, context.Canceled) {
-			params.ErrChan <- err
-		}
-	})
-
-	return client
-}
-
-func (c *OperatorConnectClient) HandleEvent(ctx context.Context, event *workerpb.Event) error {
-	c.eventBatcher.Add(event)
-	return nil
-}
-
-func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
-	_, err := c.connectClient.Start(ctx, connect.NewRequest(req))
-	return err
 }
 
 func (c *OperatorConnectClient) ID() string {
@@ -76,6 +45,19 @@ func (c *OperatorConnectClient) ID() string {
 
 func (c *OperatorConnectClient) Host() string {
 	return c.host
+}
+
+func (c *OperatorConnectClient) HandleEventBatch(ctx context.Context, events []*workerpb.Event) error {
+	_, err := c.connectClient.HandleEventBatch(ctx, connect.NewRequest(&workerpb.HandleEventBatchRequest{
+		SenderId: c.senderID,
+		Events:   events,
+	}))
+	return err
+}
+
+func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
+	_, err := c.connectClient.Start(ctx, connect.NewRequest(req))
+	return err
 }
 
 var _ proto.Operator = (*OperatorConnectClient)(nil)

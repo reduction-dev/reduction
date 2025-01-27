@@ -10,7 +10,7 @@ import (
 type Operator interface {
 	ID() string
 	Host() string
-	HandleEvent(ctx context.Context, event *workerpb.Event) error
+	HandleEventBatch(ctx context.Context, batch []*workerpb.Event) error
 	Start(ctx context.Context, req *workerpb.StartOperatorRequest) error
 }
 

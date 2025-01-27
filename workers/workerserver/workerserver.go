@@ -74,11 +74,6 @@ func NewServer(params NewServerParams) *server {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:     senderID,
 				OperatorNode: node,
-				BatchingOptions: batching.EventBatcherParams{
-					MaxSize:  100,
-					MaxDelay: 10 * time.Millisecond,
-				},
-				ErrChan: errChan,
 				ConnectOptions: []connect.ClientOption{
 					connect.WithInterceptors(telemetry.NewRPCInterceptor("operator")),
 				},

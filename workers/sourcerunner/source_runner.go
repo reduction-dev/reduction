@@ -40,6 +40,7 @@ type SourceRunner struct {
 	stop            context.CancelCauseFunc // Signal to stop all source runner processes
 	operatorFactory proto.OperatorFactory
 	errChan         chan error
+	batchingParams  batching.EventBatcherParams2
 	outputStream    chan *workerpb.Event
 	keyEventBatcher *batching.EventBatcher2[[]byte]
 	keyEventResults chan []*handlerpb.KeyedEvent
@@ -57,6 +58,7 @@ type NewParams struct {
 	Job             proto.Job
 	Clock           clocks.Clock
 	OperatorFactory proto.OperatorFactory
+	EventBatching   batching.EventBatcherParams2
 }
 
 func New(params NewParams) *SourceRunner {
@@ -80,13 +82,10 @@ func New(params NewParams) *SourceRunner {
 		stop:              func(err error) {}, // initialize with noop
 		operatorFactory:   params.OperatorFactory,
 		errChan:           make(chan error),
+		batchingParams:    params.EventBatching,
 		outputStream:      make(chan *workerpb.Event, 1_000),
-		// TODO: Parameterize the batching params
-		keyEventBatcher: batching.NewEventBatcher2[[]byte](context.Background(), batching.EventBatcherParams2{
-			MaxDelay: 10 * time.Millisecond,
-			MaxSize:  2,
-		}),
-		keyEventResults: make(chan []*handlerpb.KeyedEvent, 1_000),
+		keyEventBatcher:   batching.NewEventBatcher2[[]byte](context.Background(), params.EventBatching),
+		keyEventResults:   make(chan []*handlerpb.KeyedEvent, 1_000),
 	}
 }
 
@@ -122,7 +121,8 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 
 	// Listen for errors on the errChan
 	go func() {
-		cancel(<-r.errChan)
+		result := <-r.errChan
+		cancel(result)
 	}()
 
 	<-ctx.Done() // Afterward begin shutdown process
@@ -164,23 +164,27 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 	if len(msg.Sources) != 1 {
 		panic("exactly one source required")
 	}
+
+	r.watermarkTicker = time.NewTicker(time.Millisecond * 200)
+
 	r.sourceReader = config.NewSourceReaderFromProto(msg.Sources[0])
 	if err := r.sourceReader.SetSplits(msg.Splits); err != nil {
 		return err
 	}
 
+	loopCtx, cancel := context.WithCancel(context.Background())
+
 	ops := make([]proto.Operator, len(msg.Operators))
 	for i, op := range msg.Operators {
 		ops[i] = r.operatorFactory(r.ID, op, make(chan error))
 	}
-	r.operators = newOperatorCluster(&newClusterParams{
-		keyGroupCount: int(msg.KeyGroupCount),
-		operators:     ops,
+	r.operators = newOperatorCluster(loopCtx, &newClusterParams{
+		keyGroupCount:  int(msg.KeyGroupCount),
+		operators:      ops,
+		batchingParams: r.batchingParams,
+		errChan:        r.errChan,
 	})
 
-	r.watermarkTicker = time.NewTicker(time.Millisecond * 200)
-
-	loopCtx, cancel := context.WithCancel(context.Background())
 	r.stopLoop = cancel
 	go func() {
 		if err := r.processEvents(loopCtx); err != nil {
@@ -257,23 +261,20 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 		asyncResult := <-r.keyEventResults
 		for _, event := range asyncResult {
 			r.watermarker.AdvanceTime(event.Timestamp.AsTime())
-			err := r.operators.routeEvent(context.Background(), event.Key, &workerpb.Event{
+			r.operators.routeEvent(event.Key, &workerpb.Event{
 				Event: &workerpb.Event_KeyedEvent{
 					KeyedEvent: event,
 				},
 			})
-			if err != nil {
-				return err
-			}
 		}
 		return nil
 	case *workerpb.Event_Watermark:
 		typedEvent.Watermark.Timestamp = timestamppb.New(r.watermarker.CurrentWatermark())
-		return r.operators.broadcastEvent(context.Background(), typedEvent.Watermark)
+		return r.operators.broadcastEvent(typedEvent.Watermark)
 	case *workerpb.Event_CheckpointBarrier:
-		return r.operators.broadcastEvent(context.Background(), typedEvent.CheckpointBarrier)
+		return r.operators.broadcastEvent(typedEvent.CheckpointBarrier)
 	case *workerpb.Event_SourceComplete:
-		return r.operators.broadcastEvent(context.Background(), typedEvent.SourceComplete)
+		return r.operators.broadcastEvent(typedEvent.SourceComplete)
 	default:
 		return fmt.Errorf("unknown operator event type: %T", typedEvent)
 	}

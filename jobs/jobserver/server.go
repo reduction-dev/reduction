@@ -53,7 +53,6 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:     senderID,
 				OperatorNode: node,
-				ErrChan:      errChan,
 			})
 		},
 		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
