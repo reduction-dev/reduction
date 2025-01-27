@@ -64,13 +64,14 @@ func TestEventBatcher2_TokenInvalidation(t *testing.T) {
 
 	batcher.Add(1) // First add sets the timer
 
+	// Trigger the timer and save the token
+	go timer.Trigger()
+	token := <-batcher.BatchTimedOut
+
 	// Flush the batch for which the timer was set
 	firstBatch := batcher.Flush(batching.CurrentBatch)
 	assert.Equal(t, []int{1}, firstBatch)
 
-	// Reading from the channel unblocks timer.Trigger
-	go timer.Trigger()
-	token := <-batcher.BatchTimedOut
 	batcher.Add(2)
 	batch := batcher.Flush(token)
 	assert.Nil(t, batch, "Flush with old token should return nil")

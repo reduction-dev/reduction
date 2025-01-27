@@ -19,15 +19,15 @@ type EventBatcherParams2 struct {
 }
 
 type EventBatcher2[T any] struct {
-	onBatchReady  func([]T)
 	maxSize       int           // Max number of batched events before flushing
 	maxDelay      time.Duration // Max time to wait before flushing
 	timer         clocks.Timer
 	mu            sync.Mutex // Guard batch
 	batch         []T
 	batchToken    BatchToken
-	nextToken     BatchToken
 	BatchTimedOut chan BatchToken
+	ctx           context.Context
+	closed        bool
 }
 
 func NewEventBatcher2[T any](ctx context.Context, params EventBatcherParams2) *EventBatcher2[T] {
@@ -40,21 +40,19 @@ func NewEventBatcher2[T any](ctx context.Context, params EventBatcherParams2) *E
 	}
 
 	batcher := &EventBatcher2[T]{
-		onBatchReady:  func([]T) {}, // no-op by default
 		timer:         params.Timer,
 		maxSize:       params.MaxSize,
 		maxDelay:      params.MaxDelay,
 		batchToken:    0,
-		nextToken:     1,
+		batch:         make([]T, 0, params.MaxSize),
 		BatchTimedOut: make(chan BatchToken),
+		ctx:           ctx,
 	}
 
+	// Close the BatchTimedOut channel when the context is done
 	go func() {
 		<-ctx.Done()
-		batcher.mu.Lock()
-		defer batcher.mu.Unlock()
-		batcher.batchToken = batcher.nextToken
-		batcher.nextToken++
+		batcher.close()
 	}()
 
 	return batcher
@@ -68,7 +66,12 @@ func (b *EventBatcher2[T]) Add(event T) {
 	if len(b.batch) == 0 && b.maxDelay > 0 {
 		currentBatchToken := b.batchToken // Track the batch when setting timer
 		b.timer.Set(b.maxDelay, func() {
-			b.BatchTimedOut <- currentBatchToken
+			select {
+			case <-b.ctx.Done():
+				return
+			default:
+				b.BatchTimedOut <- currentBatchToken
+			}
 		})
 	}
 
@@ -95,7 +98,16 @@ func (b *EventBatcher2[T]) Flush(token BatchToken) []T {
 	// return the current batch and start a new one
 	flushingBatch := b.batch
 	b.batch = make([]T, 0, len(flushingBatch))
-	b.batchToken = b.nextToken
-	b.nextToken++
+	b.batchToken = b.batchToken + 1
+	b.timer.Stop()
 	return flushingBatch
+}
+
+func (b *EventBatcher2[T]) close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.closed {
+		close(b.BatchTimedOut)
+		b.closed = true
+	}
 }
