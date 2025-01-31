@@ -25,25 +25,26 @@ import (
 )
 
 type SourceRunner struct {
-	host            string // A host name used to contract this SourceRunner
-	ID              string
-	sourceReader    connectors.SourceReader
-	eoi             bool // Did the sourceReader reach end of input
-	userHandler     proto.Handler
-	operators       *operatorCluster
-	job             proto.Job
-	watermarker     *wmark.Watermarker
-	watermarkTicker *time.Ticker
-	clock           clocks.Clock
-	isHalting       atomic.Bool
-	stopLoop        context.CancelFunc      // Signal to stop the event loop if running
-	stop            context.CancelCauseFunc // Signal to stop all source runner processes
-	operatorFactory proto.OperatorFactory
-	errChan         chan error
-	batchingParams  batching.EventBatcherParams
-	outputStream    chan *workerpb.Event
-	keyEventBatcher *batching.EventBatcher[[]byte]
-	keyEventResults chan []*handlerpb.KeyedEvent
+	host                string // A host name used to contract this SourceRunner
+	ID                  string
+	sourceReader        connectors.SourceReader
+	eoi                 bool // Did the sourceReader reach end of input
+	userHandler         proto.Handler
+	operators           *operatorCluster
+	job                 proto.Job
+	watermarker         *wmark.Watermarker
+	watermarkTicker     *time.Ticker
+	clock               clocks.Clock
+	isHalting           atomic.Bool
+	stopLoop            context.CancelFunc      // Signal to stop the event loop if running
+	stop                context.CancelCauseFunc // Signal to stop all source runner processes
+	operatorFactory     proto.OperatorFactory
+	sourceReaderFactory func(*workerpb.Source) connectors.SourceReader
+	errChan             chan error
+	batchingParams      batching.EventBatcherParams
+	outputStream        chan *workerpb.Event
+	keyEventBatcher     *batching.EventBatcher[[]byte]
+	keyEventResults     chan []*handlerpb.KeyedEvent
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -53,12 +54,13 @@ type SourceRunner struct {
 }
 
 type NewParams struct {
-	Host            string
-	UserHandler     proto.Handler
-	Job             proto.Job
-	Clock           clocks.Clock
-	OperatorFactory proto.OperatorFactory
-	EventBatching   batching.EventBatcherParams
+	Host                string
+	UserHandler         proto.Handler
+	Job                 proto.Job
+	Clock               clocks.Clock
+	OperatorFactory     proto.OperatorFactory
+	SourceReaderFactory func(*workerpb.Source) connectors.SourceReader
+	EventBatching       batching.EventBatcherParams
 }
 
 func New(params NewParams) *SourceRunner {
@@ -66,26 +68,33 @@ func New(params NewParams) *SourceRunner {
 		params.Clock = clocks.NewSystemClock()
 	}
 
+	if params.SourceReaderFactory == nil {
+		params.SourceReaderFactory = func(source *workerpb.Source) connectors.SourceReader {
+			return config.NewSourceReaderFromProto(source)
+		}
+	}
+
 	id := ksuid.New().String()
 	log := slog.With("instanceID", "source-runner-"+id[len(id)-4:])
 	return &SourceRunner{
-		ID:                id,
-		host:              params.Host,
-		job:               params.Job,
-		watermarker:       &wmark.Watermarker{},
-		watermarkTicker:   time.NewTicker(math.MaxInt64), // initialize with ticker that never ticks
-		userHandler:       params.UserHandler,
-		checkpointBarrier: make(chan *workerpb.CheckpointBarrier, 1),
-		Logger:            log,
-		clock:             params.Clock,
-		stopLoop:          func() {},          // initialize with noop
-		stop:              func(err error) {}, // initialize with noop
-		operatorFactory:   params.OperatorFactory,
-		errChan:           make(chan error),
-		batchingParams:    params.EventBatching,
-		outputStream:      make(chan *workerpb.Event, 1_000),
-		keyEventBatcher:   batching.NewEventBatcher[[]byte](context.Background(), params.EventBatching),
-		keyEventResults:   make(chan []*handlerpb.KeyedEvent, 1_000),
+		ID:                  id,
+		host:                params.Host,
+		job:                 params.Job,
+		watermarker:         &wmark.Watermarker{},
+		watermarkTicker:     time.NewTicker(math.MaxInt64), // initialize with ticker that never ticks
+		userHandler:         params.UserHandler,
+		checkpointBarrier:   make(chan *workerpb.CheckpointBarrier, 1),
+		Logger:              log,
+		clock:               params.Clock,
+		stopLoop:            func() {},          // initialize with noop
+		stop:                func(err error) {}, // initialize with noop
+		operatorFactory:     params.OperatorFactory,
+		sourceReaderFactory: params.SourceReaderFactory,
+		errChan:             make(chan error),
+		batchingParams:      params.EventBatching,
+		outputStream:        make(chan *workerpb.Event, 1_000),
+		keyEventBatcher:     batching.NewEventBatcher[[]byte](context.Background(), params.EventBatching),
+		keyEventResults:     make(chan []*handlerpb.KeyedEvent, 1_000),
 	}
 }
 
@@ -167,7 +176,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 
 	r.watermarkTicker = time.NewTicker(time.Millisecond * 200)
 
-	r.sourceReader = config.NewSourceReaderFromProto(msg.Sources[0])
+	r.sourceReader = r.sourceReaderFactory(msg.Sources[0])
 	if err := r.sourceReader.SetSplits(msg.Splits); err != nil {
 		return err
 	}
