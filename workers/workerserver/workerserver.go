@@ -11,10 +11,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/telemetry"
 	"reduction.dev/reduction/util/httpu"
 	"reduction.dev/reduction/workers"

@@ -5,8 +5,8 @@ import (
 
 	"reduction.dev/reduction-handler/handlerpb"
 	"reduction.dev/reduction-handler/handlerpb/handlerpbconnect"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/proto"
-	"reduction.dev/reduction/rpc/batching"
 
 	"connectrpc.com/connect"
 )

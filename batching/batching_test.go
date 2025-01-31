@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
-	"reduction.dev/reduction/rpc/batching"
 )
 
 func TestEventBatcher2_FlushesOnSize(t *testing.T) {

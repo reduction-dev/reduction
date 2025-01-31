@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
@@ -20,7 +21,6 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers/wmark"
 )
 

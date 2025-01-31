@@ -7,9 +7,9 @@ import (
 	"log/slog"
 
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/proto"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers/operator"
 	"reduction.dev/reduction/workers/sourcerunner"
 )

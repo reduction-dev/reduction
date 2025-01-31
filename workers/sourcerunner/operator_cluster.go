@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	gproto "google.golang.org/protobuf/proto"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/partitioning"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/workerpb"
-	"reduction.dev/reduction/rpc/batching"
 )
 
 type operatorCluster struct {

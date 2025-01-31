@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/rpc/batching"
 	"reduction.dev/reduction/workers"
 
 	"connectrpc.com/connect"
