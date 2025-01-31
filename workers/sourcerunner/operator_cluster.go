@@ -55,6 +55,12 @@ func (c *operatorCluster) broadcastEvent(event gproto.Message) error {
 	return nil
 }
 
+func (c *operatorCluster) flush() {
+	for _, op := range c.operators {
+		op.Flush()
+	}
+}
+
 type batchingOperator struct {
 	op      proto.Operator
 	batcher *batching.EventBatcher[*workerpb.Event]
@@ -93,6 +99,10 @@ func newBatchingOperator(ctx context.Context, op proto.Operator, params batching
 func (o *batchingOperator) HandleEvent(event *workerpb.Event) {
 	o.batcher.Add(event)
 	if o.batcher.IsFull() {
-		o.batches <- o.batcher.Flush(batching.CurrentBatch)
+		o.Flush()
 	}
+}
+
+func (o *batchingOperator) Flush() {
+	o.batches <- o.batcher.Flush(batching.CurrentBatch)
 }

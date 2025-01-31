@@ -28,7 +28,6 @@ type SourceRunner struct {
 	host                string // A host name used to contract this SourceRunner
 	ID                  string
 	sourceReader        connectors.SourceReader
-	eoi                 bool // Did the sourceReader reach end of input
 	userHandler         proto.Handler
 	operators           *operatorCluster
 	job                 proto.Job
@@ -150,7 +149,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	}
 
 	// Treat context.Canceled as a non-error case
-	if cause := context.Cause(ctx); cause != context.Canceled {
+	if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
 		return cause
 	}
 	return nil
@@ -213,6 +212,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 }
 
 func (r *SourceRunner) processEvents(ctx context.Context) error {
+	sourceReaderEOI := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -226,7 +226,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 			}
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
 		default: // Read from source
-			if r.eoi { // Never read source events again after reaching end of input
+			if sourceReaderEOI { // Never read source events again after reaching end of input
 				continue
 			}
 
@@ -237,6 +237,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 					for _, e := range events {
 						r.sendKeyEvent(ctx, e)
 					}
+					r.flushKeyEventBatch(ctx, batching.CurrentBatch)
 
 					// Send the current watermark followed by source complete event
 					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
@@ -244,7 +245,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 					}}
 					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
 
-					r.eoi = true
+					sourceReaderEOI = true
 					continue
 				}
 
@@ -283,7 +284,11 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 	case *workerpb.Event_CheckpointBarrier:
 		return r.operators.broadcastEvent(typedEvent.CheckpointBarrier)
 	case *workerpb.Event_SourceComplete:
-		return r.operators.broadcastEvent(typedEvent.SourceComplete)
+		if err := r.operators.broadcastEvent(typedEvent.SourceComplete); err != nil {
+			return err
+		}
+		r.operators.flush()
+		return nil
 	default:
 		return fmt.Errorf("unknown operator event type: %T", typedEvent)
 	}

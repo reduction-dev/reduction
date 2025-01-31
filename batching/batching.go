@@ -27,7 +27,6 @@ type EventBatcher[T any] struct {
 	batchToken    BatchToken
 	BatchTimedOut chan BatchToken
 	ctx           context.Context
-	closed        bool
 }
 
 func NewEventBatcher[T any](ctx context.Context, params EventBatcherParams) *EventBatcher[T] {
@@ -48,12 +47,6 @@ func NewEventBatcher[T any](ctx context.Context, params EventBatcherParams) *Eve
 		BatchTimedOut: make(chan BatchToken),
 		ctx:           ctx,
 	}
-
-	// Close the BatchTimedOut channel when the context is done
-	go func() {
-		<-ctx.Done()
-		batcher.close()
-	}()
 
 	return batcher
 }
@@ -101,13 +94,4 @@ func (b *EventBatcher[T]) Flush(token BatchToken) []T {
 	b.batchToken = b.batchToken + 1
 	b.timer.Stop()
 	return flushingBatch
-}
-
-func (b *EventBatcher[T]) close() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.closed {
-		close(b.BatchTimedOut)
-		b.closed = true
-	}
 }
