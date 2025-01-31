@@ -26,7 +26,7 @@ type SummingHandler struct {
 
 func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
 	var sum IntegerState
-	if err := user.State(&sum); err != nil {
+	if err := user.LoadState(&sum); err != nil {
 		return fmt.Errorf("getting sum state: %w", err)
 	}
 

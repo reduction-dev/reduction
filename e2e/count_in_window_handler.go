@@ -145,7 +145,7 @@ func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, r
 	}
 
 	var tsList TimeList
-	err = user.State(&tsList)
+	err = user.LoadState(&tsList)
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, r
 
 func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Subject, timer time.Time) error {
 	var tsList TimeList
-	err := user.State(&tsList)
+	err := user.LoadState(&tsList)
 	if err != nil {
 		return err
 	}
