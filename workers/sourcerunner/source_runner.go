@@ -42,8 +42,8 @@ type SourceRunner struct {
 	errChan             chan error
 	batchingParams      batching.EventBatcherParams
 	outputStream        chan *workerpb.Event
-	keyEventBatcher     *batching.EventBatcher[[]byte]
-	keyEventResults     chan []*handlerpb.KeyedEvent
+	keyEventChannel     *batching.ReorderFetcher[[]byte, []*handlerpb.KeyedEvent]
+	initDone            chan struct{} // Used by HandleStart to wait until Start finishes initializing
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -92,8 +92,7 @@ func New(params NewParams) *SourceRunner {
 		errChan:             make(chan error),
 		batchingParams:      params.EventBatching,
 		outputStream:        make(chan *workerpb.Event, 1_000),
-		keyEventBatcher:     batching.NewEventBatcher[[]byte](context.Background(), params.EventBatching),
-		keyEventResults:     make(chan []*handlerpb.KeyedEvent, 1_000),
+		initDone:            make(chan struct{}),
 	}
 }
 
@@ -115,23 +114,22 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	}, "register")
 	r.registerPoller.Trigger() // Try to register immediately
 
-	// Listen for key event batch timeouts
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case token := <-r.keyEventBatcher.BatchTimedOut:
-				r.flushKeyEventBatch(ctx, token)
-			}
-		}
-	}()
-
 	// Listen for errors on the errChan
 	go func() {
 		result := <-r.errChan
 		cancel(result)
 	}()
+
+	r.keyEventChannel = batching.NewReorderFetcher(ctx, batching.NewReorderFetcherParams[[]byte, []*handlerpb.KeyedEvent]{
+		Batcher: batching.NewEventBatcher[[]byte](ctx, r.batchingParams),
+		FetchBatch: func(ctx context.Context, events [][]byte) ([][]*handlerpb.KeyedEvent, error) {
+			return r.userHandler.KeyEventBatch(ctx, events)
+		},
+		ErrChan:    r.errChan,
+		BufferSize: r.batchingParams.MaxSize,
+	})
+
+	close(r.initDone) // Signal that initialization is done
 
 	<-ctx.Done() // Afterward begin shutdown process
 
@@ -169,6 +167,8 @@ func (r *SourceRunner) Halt() {
 
 // HandleStart is invoked by the Job when the SourceRunner has joined an assembly.
 func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourceRunnerRequest) error {
+	<-r.initDone // Wait for Start to finish initializing
+
 	if len(msg.Sources) != 1 {
 		panic("exactly one source required")
 	}
@@ -237,7 +237,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 					for _, e := range events {
 						r.sendKeyEvent(ctx, e)
 					}
-					r.flushKeyEventBatch(ctx, batching.CurrentBatch)
+					r.keyEventChannel.Flush(ctx)
 
 					// Send the current watermark followed by source complete event
 					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
@@ -268,7 +268,7 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 	switch typedEvent := event.Event.(type) {
 	case *workerpb.Event_KeyedEvent:
 		// Get the async result for this placeholder event
-		asyncResult := <-r.keyEventResults
+		asyncResult := <-r.keyEventChannel.Output
 		for _, event := range asyncResult {
 			r.watermarker.AdvanceTime(event.Timestamp.AsTime())
 			r.operators.routeEvent(event.Key, &workerpb.Event{
@@ -297,24 +297,7 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 func (r *SourceRunner) sendKeyEvent(ctx context.Context, event []byte) {
 	// Put a placeholder on the output stream that will be joined with the async result
 	r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
-	r.keyEventBatcher.Add(event)
-	if r.keyEventBatcher.IsFull() {
-		r.flushKeyEventBatch(ctx, batching.CurrentBatch)
-	}
-}
-
-func (r *SourceRunner) flushKeyEventBatch(ctx context.Context, batchToken batching.BatchToken) {
-	events := r.keyEventBatcher.Flush(batchToken)
-	go func() {
-		resp, err := r.userHandler.KeyEventBatch(ctx, events)
-		if err != nil {
-			r.errChan <- err
-			return
-		}
-		for _, result := range resp {
-			r.keyEventResults <- result
-		}
-	}()
+	r.keyEventChannel.Add(ctx, event)
 }
 
 // createCheckpoint gets checkpoint data from the source reader and notifies the job.
