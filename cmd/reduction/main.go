@@ -11,6 +11,7 @@ import (
 	"reduction.dev/reduction/jobs/jobserver"
 	"reduction.dev/reduction/logging"
 	"reduction.dev/reduction/rundev"
+	"reduction.dev/reduction/testrun"
 	"reduction.dev/reduction/workers/workerserver"
 )
 
@@ -85,9 +86,20 @@ func main() {
 					WorkerPort: port,
 				})
 				if err != nil {
-					fmt.Println(err)
+					slog.Error("terminated with error", "error", err)
 				}
 				return err
+			},
+		}, {
+			Name:  "testrun",
+			Usage: "Run an integration test against a handler over stdin/stdout",
+			Action: func(ctx *cli.Context) error {
+				slog.SetDefault(slog.New(logging.NewTextHandler()))
+				if err := testrun.Run(os.Stdin, os.Stdout); err != nil {
+					slog.Error("terminated with error", "error", err)
+					return err
+				}
+				return nil
 			},
 		}},
 	}

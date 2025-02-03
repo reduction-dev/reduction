@@ -57,9 +57,9 @@ func NewSourceReaderFromProto(source *workerpb.Source) connectors.SourceReader {
 		})
 	case *workerpb.Source_EmbeddedConfig:
 		return embedded.NewSourceReader(embedded.SourceConfig{
-			SplitCount: int(t.EmbeddedConfig.SplitCount),
-			BatchSize:  int(t.EmbeddedConfig.BatchSize),
-			Generator:  t.EmbeddedConfig.Generator,
+			SplitCount:  int(t.EmbeddedConfig.SplitCount),
+			BatchSize:   int(t.EmbeddedConfig.BatchSize),
+			GeneratorID: t.EmbeddedConfig.Generator,
 		})
 	default:
 		panic("unknown proto source type")

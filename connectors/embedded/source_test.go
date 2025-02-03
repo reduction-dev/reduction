@@ -14,9 +14,9 @@ import (
 
 func TestGeneratingIncNums(t *testing.T) {
 	config := embedded.SourceConfig{
-		SplitCount: 2,
-		BatchSize:  3,
-		Generator:  "inc-nums",
+		SplitCount:  2,
+		BatchSize:   3,
+		GeneratorID: "inc-nums",
 	}
 	ss := embedded.NewSourceSplitter(config)
 

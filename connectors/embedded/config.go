@@ -6,9 +6,9 @@ import (
 )
 
 type SourceConfig struct {
-	SplitCount int
-	BatchSize  int
-	Generator  string
+	SplitCount  int
+	BatchSize   int
+	GeneratorID string
 }
 
 func (s SourceConfig) Validate() error {
@@ -25,7 +25,7 @@ func (s SourceConfig) ProtoMessage() *workerpb.Source {
 			EmbeddedConfig: &workerpb.Source_Embedded{
 				SplitCount: int32(s.SplitCount),
 				BatchSize:  int32(s.BatchSize),
-				Generator:  s.Generator,
+				Generator:  s.GeneratorID,
 			},
 		},
 	}

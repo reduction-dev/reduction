@@ -98,6 +98,7 @@ func New(params NewParams) *SourceRunner {
 
 // Start begins registration attempts and is called during boot.
 func (r *SourceRunner) Start(ctx context.Context) error {
+	r.Logger.Info("starting")
 	defer r.Logger.Info("stopped event loop")
 
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -295,7 +296,8 @@ func (r *SourceRunner) sendOperatorEvent(event *workerpb.Event) error {
 }
 
 func (r *SourceRunner) sendKeyEvent(ctx context.Context, event []byte) {
-	// Put a placeholder on the output stream that will be joined with the async result
+	// Put a placeholder on the output stream that will be joined with the async
+	// KeyEvent result.
 	r.outputStream <- &workerpb.Event{Event: &workerpb.Event_KeyedEvent{}}
 	r.keyEventChannel.Add(ctx, event)
 }
