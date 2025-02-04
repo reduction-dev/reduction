@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -178,7 +177,7 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 		}
 	}
 	o.db = dkv.Open(dkv.DBOptions{
-		FileSystem: storage.NewFileSystemFromLocation(filepath.Join(req.StorageLocation, o.id)),
+		FileSystem: storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
 	}, ckptHandles)
 	o.stateStore = NewKeyedStateStore(o.db, o.keySpace)
 	o.timerRegistry = NewTimerRegistry(NewTimerStore(o.db, o.keySpace, o.keyGroupRange, size.GB), req.SourceRunnerIds)

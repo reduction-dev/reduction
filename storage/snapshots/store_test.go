@@ -79,7 +79,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	require.NoError(t, err)
 
 	db = dkv.Open(dkv.DBOptions{
-		FileSystem:   storage.NewLocalFilesystem(filepath.Join(testDir, "op2")),
+		FileSystem:   storage.NewLocalFilesystem(storage.Join(testDir, "op2")),
 		MemTableSize: 5 * 10_000,
 	}, []recovery.CheckpointHandle{cpHandle})
 
