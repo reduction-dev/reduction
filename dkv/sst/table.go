@@ -25,6 +25,12 @@ var (
 	filterFP   = metrics.NewCounter("table_filter_fp")
 )
 
+func ResetMetrics() {
+	filterHit.Set(0)
+	filterMiss.Set(0)
+	filterFP.Set(0)
+}
+
 type Table struct {
 	file           storage.File
 	size           int64

@@ -30,6 +30,7 @@ func TestTable_Get(t *testing.T) {
 }
 
 func TestTable_Load(t *testing.T) {
+	sst.ResetMetrics()
 	fs := storage.NewMemoryFilesystem()
 	tw := sst.NewTableWriter(fs, 0)
 	entries := dkvtest.SequentialEntriesSeq(100, 10)
