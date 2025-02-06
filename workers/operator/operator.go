@@ -368,6 +368,7 @@ func (o *Operator) processEventBatch(ctx context.Context, batchToken batching.Ba
 	resp, err := o.userHandler.ProcessEventBatch(ctx, &handlerpb.ProcessEventBatchRequest{
 		KeyStates: keyStates,
 		Events:    events,
+		Watermark: timestamppb.New(o.timerRegistry.watermark),
 	})
 	if err != nil {
 		return err
