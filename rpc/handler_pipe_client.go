@@ -8,23 +8,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-handler/testrunpb"
 	rxnproto "reduction.dev/reduction/proto"
 )
 
-const (
-	methodKeyEventBatch     byte = 0x01
-	methodProcessEventBatch byte = 0x02
-)
-
-// HandlerPipeClient communicates with a handler over stdin/stdout. The protocol is:
-//
-// Send a message:
-//
-//	<4 bytes: uint32 length of message><1 byte: method><proto message>
-//
-// Receive a response:
-//
-//	<4 bytes: uint32 length of message><proto message>
 type HandlerPipeClient struct {
 	input  io.Reader
 	output io.Writer
@@ -35,7 +22,15 @@ func NewHandlerPipeClient(input io.Reader, output io.Writer) *HandlerPipeClient 
 }
 
 func (h *HandlerPipeClient) ProcessEventBatch(ctx context.Context, req *handlerpb.ProcessEventBatchRequest) (*handlerpb.ProcessEventBatchResponse, error) {
-	if err := h.writeMessage(methodProcessEventBatch, req); err != nil {
+	cmd := &testrunpb.HandlerCommand{
+		Command: &testrunpb.HandlerCommand_ProcessEventBatch{
+			ProcessEventBatch: &testrunpb.ProcessEventBatch{
+				ProcessEventBatchRequest: req,
+			},
+		},
+	}
+
+	if err := h.writeMessage(cmd); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +44,15 @@ func (h *HandlerPipeClient) ProcessEventBatch(ctx context.Context, req *handlerp
 
 func (h *HandlerPipeClient) KeyEventBatch(ctx context.Context, events [][]byte) ([][]*handlerpb.KeyedEvent, error) {
 	req := &handlerpb.KeyEventBatchRequest{Values: events}
-	if err := h.writeMessage(methodKeyEventBatch, req); err != nil {
+	cmd := &testrunpb.HandlerCommand{
+		Command: &testrunpb.HandlerCommand_KeyEventBatch{
+			KeyEventBatch: &testrunpb.KeyEventBatch{
+				KeyEventBatchRequest: req,
+			},
+		},
+	}
+
+	if err := h.writeMessage(cmd); err != nil {
 		return nil, err
 	}
 
@@ -66,27 +69,16 @@ func (h *HandlerPipeClient) KeyEventBatch(ctx context.Context, events [][]byte) 
 	return keyedEvents, nil
 }
 
-// writeMessage writes a method byte and a protobuf parameter to output.
-func (h *HandlerPipeClient) writeMessage(methodType byte, msg proto.Message) error {
+func (h *HandlerPipeClient) writeMessage(msg proto.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// 1 byte for message type
-	msgLen := 1 + len(data)
-
-	// Write message length
-	if err := binary.Write(h.output, binary.BigEndian, uint32(msgLen)); err != nil {
+	if err := binary.Write(h.output, binary.BigEndian, uint32(len(data))); err != nil {
 		return fmt.Errorf("failed to write message length: %w", err)
 	}
 
-	// Write method byte
-	if _, err := h.output.Write([]byte{methodType}); err != nil {
-		return fmt.Errorf("failed to write method type: %w", err)
-	}
-
-	// Write parameter
 	if _, err := h.output.Write(data); err != nil {
 		return fmt.Errorf("failed to write message data: %w", err)
 	}
@@ -94,7 +86,6 @@ func (h *HandlerPipeClient) writeMessage(methodType byte, msg proto.Message) err
 	return nil
 }
 
-// readMessage reads a protobuf return value from input.
 func (h *HandlerPipeClient) readMessage(msg proto.Message) error {
 	// Read message length
 	var length uint32

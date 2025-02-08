@@ -1,34 +1,24 @@
 package testrun
 
 import (
-	"bufio"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-	"reduction.dev/reduction/batching"
-	"reduction.dev/reduction/connectors"
+	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"reduction.dev/reduction-handler/testrunpb"
 	"reduction.dev/reduction/proto"
-	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/workers/operator"
-	"reduction.dev/reduction/workers/sourcerunner"
 )
-
-var batchingParams = batching.EventBatcherParams{
-	MaxDelay: 10 * time.Millisecond,
-	MaxSize:  100,
-}
 
 func Run(input io.Reader, output io.Writer) error {
 	// First phase: collect all events
-	reader := bufio.NewReader(os.Stdin)
-	events, err := readEvents(reader)
+	events, err := readEvents(input)
 	if err != nil {
 		return fmt.Errorf("failed to read events: %w", err)
 	}
@@ -40,37 +30,15 @@ func Run(input io.Reader, output io.Writer) error {
 		Job:         &proto.NoopJob{},
 		UserHandler: rpc.NewHandlerPipeClient(input, output),
 	})
-	sr := sourcerunner.New(sourcerunner.NewParams{
-		Host:        "testrun",
-		UserHandler: rpc.NewHandlerPipeClient(input, output),
-		Job:         &proto.NoopJob{},
-		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
-			return rpc.NewOperatorEmbeddedClient(rpc.NewOperatorEmbeddedClientParams{
-				Operator: op,
-				SenderID: senderID,
-				Host:     node.Host,
-				ID:       node.Id,
-			})
-		},
-		SourceReaderFactory: func(s *workerpb.Source) connectors.SourceReader {
-			return &fixtureSourceReader{events}
-		},
-		EventBatching: batchingParams,
-	})
 
-	eg, ctx := errgroup.WithContext(context.Background())
-	ctx, cancel := context.WithCancel(ctx)
-	eg.Go(func() error {
-		return sr.Start(ctx)
-	})
-	eg.Go(func() error {
-		defer cancel()
-		return op.Start(ctx) // Will end on EOI
-	})
+	opResult := make(chan error, 1)
+	go func() {
+		opResult <- op.Start(context.Background())
+	}()
 
 	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
 		OperatorIds:     []string{"testrun"},
-		SourceRunnerIds: []string{sr.ID},
+		SourceRunnerIds: []string{"testrun"},
 		KeyGroupCount:   1,
 		Sinks:           []*workerpb.Sink{},
 		StorageLocation: "memory:///storage",
@@ -79,41 +47,30 @@ func Run(input io.Reader, output io.Writer) error {
 		return fmt.Errorf("failed to start operator: %w", err)
 	}
 
-	err = sr.HandleStart(context.Background(), &workerpb.StartSourceRunnerRequest{
-		KeyGroupCount: 1,
-		Splits: []*workerpb.SourceSplit{{
-			SplitId:  "testrun",
-			SourceId: "testrun",
-		}},
-		Operators: []*jobpb.NodeIdentity{{Id: "testrun", Host: "testrun"}},
-
-		Sources: []*workerpb.Source{{Config: &workerpb.Source_EmbeddedConfig{
-			EmbeddedConfig: &workerpb.Source_Embedded{},
-		}}},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start source runner: %w", err)
+	for _, event := range events {
+		if err = op.HandleEvent(context.Background(), "testrun", event); err != nil {
+			return fmt.Errorf("failed to handle event: %w", err)
+		}
 	}
 
-	return eg.Wait()
+	if err := op.Stop(); err != nil {
+		return fmt.Errorf("failed to stop operator: %w", err)
+	}
+	return <-opResult
 }
 
-// Read events from reader until reaching zero-length message.
-func readEvents(reader *bufio.Reader) ([][]byte, error) {
-	var events [][]byte
+// Read events from reader until reaching Run command
+func readEvents(reader io.Reader) ([]*workerpb.Event, error) {
+	var events []*workerpb.Event
+	watermarkTime := time.Unix(0, 0)
 
 	for {
 		var length uint32
 		if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
 			if err == io.EOF {
-				return nil, fmt.Errorf("unexpected EOF before delimiter")
+				return nil, fmt.Errorf("unexpected EOF before Run command")
 			}
 			return nil, fmt.Errorf("failed to read message length: %w", err)
-		}
-
-		// Zero-length message signals end of input
-		if length == 0 {
-			return events, nil
 		}
 
 		data := make([]byte, length)
@@ -121,6 +78,36 @@ func readEvents(reader *bufio.Reader) ([][]byte, error) {
 			return nil, fmt.Errorf("failed to read message data: %w", err)
 		}
 
-		events = append(events, data)
+		var cmd testrunpb.RunnerCommand
+		if err := gproto.Unmarshal(data, &cmd); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal RunnerCommand: %w", err)
+		}
+
+		switch c := cmd.Command.(type) {
+		case *testrunpb.RunnerCommand_AddKeyedEvent:
+			events = append(events, &workerpb.Event{
+				Event: &workerpb.Event_KeyedEvent{
+					KeyedEvent: c.AddKeyedEvent.KeyedEvent,
+				},
+			})
+
+			// Advance watermark time
+			ts := c.AddKeyedEvent.KeyedEvent.Timestamp.AsTime()
+			if ts.After(watermarkTime) {
+				watermarkTime = ts
+			}
+
+		case *testrunpb.RunnerCommand_AddWatermark:
+			events = append(events, &workerpb.Event{
+				Event: &workerpb.Event_Watermark{
+					Watermark: &workerpb.Watermark{
+						Timestamp: timestamppb.New(watermarkTime),
+					},
+				},
+			})
+
+		case *testrunpb.RunnerCommand_Run:
+			return events, nil
+		}
 	}
 }
