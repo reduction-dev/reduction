@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/rxn"
 )
 
-func NewSummingHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent], topic string) *SummingHandler {
+func NewSummingHandler(sink connectors.SinkRuntime[*httpapi.SinkEvent], topic string) *SummingHandler {
 	return &SummingHandler{
 		sink:  sink,
 		topic: topic,
@@ -20,7 +21,7 @@ func NewSummingHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent], t
 }
 
 type SummingHandler struct {
-	sink  connectors.SinkRuntime[*connectors.HTTPSinkEvent]
+	sink  connectors.SinkRuntime[*httpapi.SinkEvent]
 	topic string
 }
 
@@ -45,7 +46,7 @@ func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEven
 		return err
 	}
 
-	h.sink.Collect(ctx, &connectors.HTTPSinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkEvent{
 		Topic: h.topic,
 		Data:  nextSumBytes,
 	})

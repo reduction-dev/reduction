@@ -3,24 +3,24 @@ package config_test
 import (
 	"testing"
 
-	"reduction.dev/reduction-go/connectors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	clienthttpapi "reduction.dev/reduction-go/connectors/httpapi"
+	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/jobs"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestUnmarshal(t *testing.T) {
 	job := &jobs.Job{WorkerCount: 2}
-	source := connectors.NewKinesisSource(job, "Source", &connectors.KinesisSourceParams{
+	source := clientkinesis.NewSource(job, "Source", &clientkinesis.SourceParams{
 		StreamARN: "stream-arn",
 		Endpoint:  "http://localhost:12345",
 	})
 	operator := jobs.NewOperator(job, "Operator", &jobs.OperatorParams{})
-	sink := connectors.NewHTTPAPISink(job, "Sink", &connectors.HTTPAPISinkParams{
+	sink := clienthttpapi.NewSink(job, "Sink", &clienthttpapi.SinkParams{
 		Addr: "http-api-sink-addr",
 	})
 	source.Connect(operator)

@@ -6,16 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"reduction.dev/reduction-go/connectors/httpapi"
 	rxnjobs "reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/storage/localfs"
 	"reduction.dev/reduction/workers/workerstest"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type Event struct {
@@ -42,12 +41,12 @@ func TestCountInWindow(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"user-events"},
 		KeyEvent: KeyEvent,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
@@ -110,12 +109,12 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"user-events"},
 		KeyEvent: KeyEvent,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{

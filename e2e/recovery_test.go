@@ -8,7 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
+	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
@@ -18,10 +22,6 @@ import (
 	"reduction.dev/reduction/util/binu"
 	"reduction.dev/reduction/util/iteru"
 	"reduction.dev/reduction/workers/workerstest"
-
-	"connectrpc.com/connect"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRestartFromSavepoint(t *testing.T) {
@@ -39,12 +39,12 @@ func TestRestartFromSavepoint(t *testing.T) {
 		WorkingStorageLocation:   t.TempDir(),
 		SavepointStorageLocation: filepath.Join(testDir, "savepoints"),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
@@ -139,12 +139,12 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
@@ -219,12 +219,12 @@ func TestScaleOutWorkers(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
@@ -321,12 +321,12 @@ func TestScaleInWorkers(t *testing.T) {
 		WorkerCount:            2,
 		WorkingStorageLocation: testDir,
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
@@ -426,12 +426,12 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: testDir,
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{

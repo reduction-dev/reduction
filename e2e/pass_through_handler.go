@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/connectors/httpapi"
+	"reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/rxn"
 )
 
-func NewPassThroughHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent], topic string) *PassThroughHandler {
+func NewPassThroughHandler(sink *httpapi.Sink, topic string) *PassThroughHandler {
 	return &PassThroughHandler{
 		sink:  sink,
 		topic: topic,
@@ -16,12 +17,12 @@ func NewPassThroughHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent
 }
 
 type PassThroughHandler struct {
-	sink  connectors.SinkRuntime[*connectors.HTTPSinkEvent]
+	sink  *httpapi.Sink
 	topic string
 }
 
 func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
-	h.sink.Collect(ctx, &connectors.HTTPSinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkEvent{
 		Topic: h.topic,
 		Data:  rawEvent,
 	})
@@ -32,7 +33,7 @@ func (h *PassThroughHandler) OnTimerExpired(ctx context.Context, user *rxn.Subje
 	return nil
 }
 
-func KeyKinesisEventWithRawKeyAndZeroTimestamp(ctx context.Context, record *connectors.KinesisRecord) ([]rxn.KeyedEvent, error) {
+func KeyKinesisEventWithRawKeyAndZeroTimestamp(ctx context.Context, record *kinesis.Record) ([]rxn.KeyedEvent, error) {
 	return []rxn.KeyedEvent{{
 		Key:       record.Data,
 		Timestamp: time.Unix(0, 0),

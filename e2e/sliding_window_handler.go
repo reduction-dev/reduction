@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/rxn"
 )
 
 type SlidingWindowHandler struct {
-	sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]
+	sink connectors.SinkRuntime[*httpapi.SinkEvent]
 }
 
 type SlidingWindowOutput struct {
@@ -24,7 +25,7 @@ type SlidingWindowEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewSlidingWindowHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]) *SlidingWindowHandler {
+func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkEvent]) *SlidingWindowHandler {
 	return &SlidingWindowHandler{
 		sink: sink,
 	}
@@ -88,7 +89,7 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	if err != nil {
 		return err
 	}
-	h.sink.Collect(ctx, &connectors.HTTPSinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkEvent{
 		Topic: "windows",
 		Data:  data,
 	})

@@ -7,7 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"reduction.dev/reduction-go/connectors"
+
+	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -28,12 +29,13 @@ func TestSlidingWindow(t *testing.T) {
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+
+	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
 		Addr:     httpAPIServer.URL(),
 		Topics:   []string{"events"},
 		KeyEvent: KeySlidingWindowEvent,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{

@@ -8,7 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	clienthttpapi "reduction.dev/reduction-go/connectors/httpapi"
+	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/connectors/kinesis"
@@ -17,10 +22,6 @@ import (
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/util/sliceu"
 	"reduction.dev/reduction/workers/workerstest"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestKinesis(t *testing.T) {
@@ -62,12 +63,12 @@ func TestKinesis(t *testing.T) {
 		WorkerCount:            2,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	source := connectors.NewKinesisSource(jobDef, "source", &connectors.KinesisSourceParams{
+	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
 		StreamARN: streamARN,
 		Endpoint:  kinesisService.URL,
 		KeyEvent:  e2e.KeyKinesisEventWithRawKeyAndZeroTimestamp,
 	})
-	sink := connectors.NewHTTPAPISink(jobDef, "sink", &connectors.HTTPAPISinkParams{
+	sink := clienthttpapi.NewSink(jobDef, "sink", &clienthttpapi.SinkParams{
 		Addr: sinkServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{

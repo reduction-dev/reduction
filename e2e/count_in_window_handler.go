@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction/proto/e2epb"
 
 	"google.golang.org/protobuf/proto"
 )
 
-func NewCountInWindowHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]) *CountInWindowHandler {
+func NewCountInWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkEvent]) *CountInWindowHandler {
 	return &CountInWindowHandler{
 		sink: sink,
 	}
 }
 
 type CountInWindowHandler struct {
-	sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]
+	sink connectors.SinkRuntime[*httpapi.SinkEvent]
 }
 
 var _ rxn.OperatorHandler = (*CountInWindowHandler)(nil)
@@ -187,7 +188,7 @@ func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	if err != nil {
 		return err
 	}
-	h.sink.Collect(ctx, &connectors.HTTPSinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkEvent{
 		Topic: "egress-events",
 		Data:  egressEventJSON,
 	})
