@@ -169,17 +169,7 @@ func (c *Client) DeleteStream(ctx context.Context, params *DeleteStreamParams) e
 	return nil
 }
 
-type EventBatch struct {
-	Events []Event
-	Cursor string
-}
-
-type Event struct {
-	Timestamp time.Time
-	Data      []byte
-}
-
-func (c *Client) ReadEvents(ctx context.Context, streamARN, shardID, shardIterator string) (*EventBatch, error) {
+func (c *Client) ReadEvents(ctx context.Context, streamARN, shardID, shardIterator string) (*kinesis.GetRecordsOutput, error) {
 	if shardIterator == "" {
 		var err error
 		shardIterator, err = c.getShardIterator(ctx, streamARN, shardID, types.ShardIteratorTypeTrimHorizon)
@@ -197,18 +187,7 @@ func (c *Client) ReadEvents(ctx context.Context, streamARN, shardID, shardIterat
 		return nil, err
 	}
 
-	eventBatch := EventBatch{
-		Cursor: *out.NextShardIterator,
-		Events: make([]Event, len(out.Records)),
-	}
-	for i, r := range out.Records {
-		eventBatch.Events[i] = Event{
-			Timestamp: *r.ApproximateArrivalTimestamp,
-			Data:      r.Data,
-		}
-	}
-
-	return &eventBatch, nil
+	return out, nil
 }
 
 func (c *Client) getShardIterator(ctx context.Context, streamARN, shardID string, startingType types.ShardIteratorType) (string, error) {

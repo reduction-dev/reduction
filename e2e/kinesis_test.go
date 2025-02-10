@@ -24,7 +24,6 @@ import (
 )
 
 func TestKinesis(t *testing.T) {
-	t.Skip("TODO: Need to adjust kinesis source item type")
 	t.Parallel()
 
 	kinesisService := kinesisfake.StartFake()

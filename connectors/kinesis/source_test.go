@@ -9,8 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
+	"reduction.dev/reduction/connectors/kinesis/kinesispb"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -71,7 +73,14 @@ func TestCheckpointing(t *testing.T) {
 	for _, sr := range srs.All() {
 		events, err := sr.ReadEvents()
 		require.NoError(t, err)
-		readEvents = append(readEvents, events...)
+
+		// Unmarshal each protobuf record to get the raw data
+		for _, event := range events {
+			var record kinesispb.Record
+			err := proto.Unmarshal(event, &record)
+			require.NoError(t, err)
+			readEvents = append(readEvents, record.Data)
+		}
 	}
 
 	// Checkpoint
@@ -105,7 +114,14 @@ func TestCheckpointing(t *testing.T) {
 	for _, sr := range srs.All() {
 		events, err := sr.ReadEvents()
 		require.NoError(t, err)
-		readEvents = append(readEvents, events...)
+
+		// Unmarshal each protobuf record to get the raw data
+		for _, event := range events {
+			var record kinesispb.Record
+			err := proto.Unmarshal(event, &record)
+			require.NoError(t, err)
+			readEvents = append(readEvents, record.Data)
+		}
 	}
 
 	assert.Len(t, readEvents, len(records), "all 100 records read")

@@ -11,6 +11,7 @@ import (
 	"reduction.dev/reduction/proto/workerpb"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
@@ -31,7 +32,7 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 		var err error
 		config.Client, err = NewClient(&NewClientParams{
 			Endpoint:    config.Endpoint,
-			Region:      "us-west-2",
+			Region:      "us-east-2", // Match the region used in tests
 			Credentials: aws.AnonymousCredentials{},
 		})
 		if err != nil {
@@ -52,15 +53,23 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	s.assignedShards.ready.Wait()
 	shard := s.assignedShards.next()
 
-	eventBatch, err := s.client.ReadEvents(context.Background(), s.streamARN, shard.id, shard.cursor)
+	records, err := s.client.ReadEvents(context.Background(), s.streamARN, shard.id, shard.cursor)
 	if err != nil {
 		return nil, fmt.Errorf("kinesis SourceReader ReadEvents: %w", err)
 	}
-	shard.cursor = eventBatch.Cursor
+	shard.cursor = *records.NextShardIterator
 
-	events := make([][]byte, len(eventBatch.Events))
-	for i, r := range eventBatch.Events {
-		events[i] = r.Data
+	events := make([][]byte, len(records.Records))
+	for i, r := range records.Records {
+		pbRecord := &kinesispb.Record{
+			Data:      r.Data,
+			Timestamp: timestamppb.New(*r.ApproximateArrivalTimestamp),
+		}
+		data, err := proto.Marshal(pbRecord)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal record: %w", err)
+		}
+		events[i] = data
 	}
 
 	return events, nil

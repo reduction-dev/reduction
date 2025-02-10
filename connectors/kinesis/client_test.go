@@ -86,7 +86,7 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	require.NoError(t, err)
 
 	var shard1Data []string
-	for _, e := range eventBatch1.Events {
+	for _, e := range eventBatch1.Records {
 		shard1Data = append(shard1Data, string(e.Data))
 	}
 	assert.Equal(t, []string{"data-1", "data-3", "data-7"}, shard1Data)
@@ -95,7 +95,7 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	require.NoError(t, err)
 
 	var shard2Data []string
-	for _, e := range eventBatch2.Events {
+	for _, e := range eventBatch2.Records {
 		shard2Data = append(shard2Data, string(e.Data))
 	}
 	assert.Equal(t, []string{"data-0", "data-2", "data-4", "data-5", "data-6", "data-8", "data-9"}, shard2Data)
