@@ -3,7 +3,7 @@ package proto
 import (
 	"context"
 
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 )
 
 // The user's handler code for processing events

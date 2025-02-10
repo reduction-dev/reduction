@@ -3,8 +3,8 @@ package rpc
 import (
 	"context"
 
-	"reduction.dev/reduction-handler/handlerpb"
-	"reduction.dev/reduction-handler/handlerpb/handlerpbconnect"
+	"reduction.dev/reduction-protocol/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb/handlerpbconnect"
 	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/proto"
 

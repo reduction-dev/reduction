@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/dkv"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/partitioning"

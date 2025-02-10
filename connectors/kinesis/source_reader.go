@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
 	"reduction.dev/reduction/proto/workerpb"
@@ -61,7 +62,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 
 	events := make([][]byte, len(records.Records))
 	for i, r := range records.Records {
-		pbRecord := &kinesispb.Record{
+		pbRecord := &protocol.Record{
 			Data:      r.Data,
 			Timestamp: timestamppb.New(*r.ApproximateArrivalTimestamp),
 		}

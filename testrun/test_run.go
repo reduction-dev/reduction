@@ -9,7 +9,7 @@ import (
 
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"reduction.dev/reduction-handler/testrunpb"
+	"reduction.dev/reduction-protocol/testrunpb"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/rpc"

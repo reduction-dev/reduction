@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/proto"
 )
 

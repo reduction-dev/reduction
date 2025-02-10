@@ -11,7 +11,7 @@ import (
 
 	"github.com/segmentio/ksuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors"

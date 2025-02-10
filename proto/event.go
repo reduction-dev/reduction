@@ -3,7 +3,7 @@ package proto
 import (
 	"fmt"
 
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/proto/workerpb"
 
 	"google.golang.org/protobuf/proto"

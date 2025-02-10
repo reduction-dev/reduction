@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"reduction.dev/reduction-handler/handlerpb"
+	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"

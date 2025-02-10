@@ -18,7 +18,7 @@ require (
 	golang.org/x/text v0.21.0
 	google.golang.org/protobuf v1.36.3
 	reduction.dev/reduction-go v0.0.0-00010101000000-000000000000
-	reduction.dev/reduction-handler v0.0.0-00010101000000-000000000000
+	reduction.dev/reduction-protocol v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -34,7 +34,7 @@ require (
 
 replace (
 	reduction.dev/reduction-go => ../reduction-go
-	reduction.dev/reduction-handler => ../reduction-handler
+	reduction.dev/reduction-protocol => ../reduction-protocol
 )
 
 require (
