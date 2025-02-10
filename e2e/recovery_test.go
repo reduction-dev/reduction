@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
-	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/rpc"
@@ -35,26 +34,31 @@ func TestRestartFromSavepoint(t *testing.T) {
 
 	// Start the job server
 	testDir := t.TempDir()
-	jobConfig := &cfg.Config{
+	jobDef := &jobs.Job{
 		WorkerCount:              1,
+		WorkingStorageLocation:   t.TempDir(),
 		SavepointStorageLocation: filepath.Join(testDir, "savepoints"),
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
-		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
 
 	jobStore := localfs.NewDirectory(t.TempDir())
-	job, stop := jobstest.Run(jobConfig, jobstest.WithStore(jobStore))
+	job, stop := jobstest.Run(jobDef, jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler server
-	handler := NewSummingHandler("sink", "sums")
-	handlerServer, stop := RunHandler(handler)
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker
@@ -91,15 +95,15 @@ func TestRestartFromSavepoint(t *testing.T) {
 	handlerServer.Stop()
 
 	// Remove all working files but not the savepoint
-	err = os.RemoveAll(jobConfig.SavepointStorageLocation)
+	err = os.RemoveAll(jobDef.WorkingStorageLocation)
 	require.NoError(t, err)
 
 	// Start up the job server again with savepoint URI
-	job, stop = jobstest.Run(jobConfig, jobstest.WithSavepoint(savepointURI), jobstest.WithStore(jobStore))
+	job, stop = jobstest.Run(jobDef, jobstest.WithSavepoint(savepointURI), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler again
-	handlerServer, stop = RunHandler(handler)
+	handlerServer, stop = RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker again
@@ -131,30 +135,36 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1))
 
 	// Start the job server
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
-	testDir := t.TempDir()
-	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	jobStore := localfs.NewDirectory(filepath.Join(t.TempDir(), "job"))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler server
-	handler, stop := RunHandler(NewSummingHandler("sink", "sums"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker
 	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
@@ -177,7 +187,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 
 	// Start a new worker
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
@@ -205,31 +215,38 @@ func TestScaleOutWorkers(t *testing.T) {
 	}
 
 	// Start the job server
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
 	testDir := t.TempDir()
 	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler server
-	handler, stop := RunHandler(NewSummingHandler("sink", "sums"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker
 	worker1, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-1",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
@@ -258,21 +275,21 @@ func TestScaleOutWorkers(t *testing.T) {
 	}
 
 	// Start the job server again but with 2 workers
-	jobConfig.WorkerCount = 2
-	job, stop = jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	jobDef.WorkerCount = 2
+	job, stop = jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start 2 new workers
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-2",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
 
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-3",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
@@ -300,30 +317,37 @@ func TestScaleInWorkers(t *testing.T) {
 
 	// Start the job server for two workers
 	testDir := t.TempDir()
-	jobConfig := &cfg.Config{
-		WorkerCount: 2,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            2,
 		WorkingStorageLocation: testDir,
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
 	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler server
-	handler, stop := RunHandler(NewSummingHandler("sink", "sums"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the first worker
 	worker1, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-1",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 		Clock:       clock,
 	})
@@ -332,7 +356,7 @@ func TestScaleInWorkers(t *testing.T) {
 	// Start the second worker
 	worker2, stop := workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-2",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 		Clock:       clock,
 	})
@@ -363,14 +387,14 @@ func TestScaleInWorkers(t *testing.T) {
 	}
 
 	// Start the job server again but with 1 worker
-	jobConfig.WorkerCount = 1
-	job, stop = jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	jobDef.WorkerCount = 1
+	job, stop = jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the third worker
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
 		LogPrefix:   "worker-3",
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()
@@ -398,29 +422,36 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 
 	// Start the job server
 	testDir := t.TempDir()
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: testDir,
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
 	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the handler server
-	handler, stop := RunHandler(NewSummingHandler("sink", "sums"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the first worker
 	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 		Clock:       clock,
 	})
@@ -469,12 +500,12 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	}
 
 	// Start the job server again
-	job, stop = jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	job, stop = jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
 	// Start the next worker
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
-		HandlerAddr: handler.Addr(),
+		HandlerAddr: handlerServer.Addr(),
 		JobAddr:     job.RPCAddr(),
 	})
 	defer stop()

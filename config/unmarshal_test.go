@@ -3,6 +3,7 @@ package config_test
 import (
 	"testing"
 
+	"reduction.dev/reduction-go/connectors"
 	"reduction.dev/reduction-go/jobs"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors/httpapi"
@@ -13,18 +14,17 @@ import (
 )
 
 func TestUnmarshal(t *testing.T) {
-	source := jobs.NewKinesisSource("Source", &jobs.KinesisSourceParams{
+	job := &jobs.Job{WorkerCount: 2}
+	source := connectors.NewKinesisSource(job, "Source", &connectors.KinesisSourceParams{
 		StreamARN: "stream-arn",
 		Endpoint:  "http://localhost:12345",
 	})
-	sink := jobs.NewHTTPAPISink("Sink", &jobs.HTTPAPISinkParams{
+	operator := jobs.NewOperator(job, "Operator", &jobs.OperatorParams{})
+	sink := connectors.NewHTTPAPISink(job, "Sink", &connectors.HTTPAPISinkParams{
 		Addr: "http-api-sink-addr",
 	})
-	job := jobs.NewJob("Job", &jobs.JobParams{
-		WorkerCount: 2,
-		Sources:     []jobs.Source{source},
-		Sinks:       []jobs.Sink{sink},
-	})
+	source.Connect(operator)
+	operator.Connect(sink)
 
 	defJson := job.Marshal()
 	t.Log(string(defJson))

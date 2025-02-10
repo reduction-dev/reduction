@@ -12,15 +12,15 @@ import (
 	"reduction.dev/reduction-go/rxn"
 )
 
-func NewSummingHandler(sinkID string, topic string) *SummingHandler {
+func NewSummingHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent], topic string) *SummingHandler {
 	return &SummingHandler{
-		sink:  &connectors.HTTPAPISink{ID: sinkID},
+		sink:  sink,
 		topic: topic,
 	}
 }
 
 type SummingHandler struct {
-	sink  *connectors.HTTPAPISink
+	sink  connectors.SinkRuntime[*connectors.HTTPSinkEvent]
 	topic string
 }
 
@@ -32,7 +32,7 @@ func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEven
 
 	var eventInt int64
 	reader := bytes.NewReader(rawEvent)
-	err := binary.Read(reader, binary.LittleEndian, &eventInt)
+	err := binary.Read(reader, binary.BigEndian, &eventInt)
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("reading rawEvent (data: %v): %w", rawEvent, err)
 	}
@@ -56,7 +56,16 @@ func (h *SummingHandler) OnTimerExpired(ctx context.Context, user *rxn.Subject, 
 	return nil
 }
 
+// TODO: Remove
 func (h *SummingHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
+	return []rxn.KeyedEvent{{
+		Key:       []byte("static"),
+		Timestamp: time.Unix(0, 0),
+		Value:     rawEvent,
+	}}, nil
+}
+
+func KeyEventWithUniformKeyAndZeroTimestamp(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	return []rxn.KeyedEvent{{
 		Key:       []byte("static"),
 		Timestamp: time.Unix(0, 0),
@@ -100,7 +109,7 @@ func (s *IntegerState) Mutations() ([]rxn.StateMutation, error) {
 
 func (s *IntegerState) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
-	err := binary.Write(&buf, binary.LittleEndian, int64(s.value))
+	err := binary.Write(&buf, binary.BigEndian, int64(s.value))
 	return buf.Bytes(), err
 }
 
@@ -110,7 +119,7 @@ func (s *IntegerState) Name() string {
 
 func (s *IntegerState) Unmarshal(data []byte) error {
 	reader := bytes.NewReader(data)
-	err := binary.Read(reader, binary.LittleEndian, &s.value)
+	err := binary.Read(reader, binary.BigEndian, &s.value)
 	if err == io.EOF {
 		return nil
 	}

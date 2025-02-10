@@ -8,15 +8,15 @@ import (
 	"reduction.dev/reduction-go/rxn"
 )
 
-func NewPassThroughHandler(sinkID string, topic string) *PassThroughHandler {
+func NewPassThroughHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent], topic string) *PassThroughHandler {
 	return &PassThroughHandler{
-		sink:  &connectors.HTTPAPISink{ID: sinkID},
+		sink:  sink,
 		topic: topic,
 	}
 }
 
 type PassThroughHandler struct {
-	sink  *connectors.HTTPAPISink
+	sink  connectors.SinkRuntime[*connectors.HTTPSinkEvent]
 	topic string
 }
 
@@ -32,11 +32,20 @@ func (h *PassThroughHandler) OnTimerExpired(ctx context.Context, user *rxn.Subje
 	return nil
 }
 
+// TODO: Remove
 func (h *PassThroughHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	return []rxn.KeyedEvent{{
 		Key:       rawEvent,
 		Timestamp: time.Unix(0, 0),
 		Value:     rawEvent,
+	}}, nil
+}
+
+func KeyKinesisEventWithRawKeyAndZeroTimestamp(ctx context.Context, record *connectors.KinesisRecord) ([]rxn.KeyedEvent, error) {
+	return []rxn.KeyedEvent{{
+		Key:       record.Data,
+		Timestamp: time.Unix(0, 0),
+		Value:     record.Data,
 	}}, nil
 }
 

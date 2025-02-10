@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"reduction.dev/reduction-go/connectors"
+	rxnjobs "reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
-	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/storage/localfs"
@@ -39,22 +38,28 @@ func TestCountInWindow(t *testing.T) {
 		Event{"user-1", time.UnixMilli(100)}, // High event to close the last window
 	})
 
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"user-events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &rxnjobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	job, stop := jobstest.Run(jobConfig)
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"user-events"},
+		KeyEvent: KeyEvent,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
+		Handler: NewCountInWindowHandler(sink),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
+	job, stop := jobstest.Run(jobDef)
 	defer stop()
 
-	handler := NewCountInWindowHandler()
-	handlerServer, stop := RunHandler(handler)
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{
@@ -101,24 +106,30 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	})
 
 	testDir := t.TempDir()
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"user-events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
-		WorkingStorageLocation: testDir,
+	jobDef := &rxnjobs.Job{
+		WorkerCount:            1,
+		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"user-events"},
+		KeyEvent: KeyEvent,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
+		Handler: NewCountInWindowHandler(sink),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
 	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
-	handler := NewCountInWindowHandler()
-	handlerServer, stop := RunHandler(handler)
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	worker, stop := workerstest.Run(t, workerstest.NewServerParams{
@@ -149,7 +160,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 		Event{"user-1", time.UnixMilli(100)}, // High event to close the last window
 	})
 
-	job, stop = jobstest.Run(jobConfig, jobstest.WithStore(jobStore))
+	job, stop = jobstest.Run(jobDef, jobstest.WithStore(jobStore))
 	defer stop()
 
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{

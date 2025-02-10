@@ -5,10 +5,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
-	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/util/binu"
@@ -24,23 +23,29 @@ func TestWorkerRegistrationAfterShutdown(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1, 1))
 
 	// Start the job server
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
-	job, stop := jobstest.Run(jobConfig)
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
+	job, stop := jobstest.Run(jobDef)
 	defer stop()
 
 	// Start the handler server
-	handler := NewSummingHandler("sink", "sums")
-	handlerServer, stop := RunHandler(handler)
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker
@@ -82,24 +87,30 @@ func TestWorkerRegistrationAfterKilled(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1, 1))
 
 	// Start the job server
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock))
 	defer stop()
 
 	// Start the handler server
-	handler := NewSummingHandler("sink", "sums")
-	handlerServer, stop := RunHandler(handler)
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the worker
@@ -144,23 +155,30 @@ func TestAddingStandbyWorker(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1))
 
 	// Start the job server
-	jobConfig := &cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
+	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSummingHandler(sink, "sums"),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
 	clock := clocks.NewFrozenClock()
-	job, stop := jobstest.Run(jobConfig, jobstest.WithClock(clock))
+	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock))
 	defer stop()
 
 	// Start the handler server
-	handlerServer, stop := RunHandler(NewSummingHandler("sink", "sums"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	// Start the first worker

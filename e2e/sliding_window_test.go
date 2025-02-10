@@ -7,9 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/connectors/httpapi"
+	"reduction.dev/reduction-go/connectors"
+	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/workers/workerstest"
@@ -25,20 +24,28 @@ func TestSlidingWindow(t *testing.T) {
 	httpAPIServer := httpapitest.StartServer(httpapitest.WithUnboundedReading())
 	defer httpAPIServer.Close()
 
-	job, stop := jobstest.Run(&cfg.Config{
-		WorkerCount: 1,
-		Sources: []connectors.SourceConfig{httpapi.SourceConfig{
-			Addr:   httpAPIServer.URL(),
-			Topics: []string{"events"},
-		}},
-		Sinks: []connectors.SinkConfig{httpapi.SinkConfig{
-			Addr: httpAPIServer.URL(),
-		}},
+	jobDef := &jobs.Job{
+		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
+	}
+	source := connectors.NewHTTPAPISource(jobDef, "Source", &connectors.HTTPAPISourceParams{
+		Addr:     httpAPIServer.URL(),
+		Topics:   []string{"events"},
+		KeyEvent: KeySlidingWindowEvent,
 	})
+	sink := connectors.NewHTTPAPISink(jobDef, "Sink", &connectors.HTTPAPISinkParams{
+		Addr: httpAPIServer.URL(),
+	})
+	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
+		Handler: NewSlidingWindowHandler(sink),
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
+	job, stop := jobstest.Run(jobDef)
 	defer stop()
 
-	handlerServer, stop := RunHandler(NewSlidingWindowHandler("sink"))
+	handlerServer, stop := RunHandler(jobDef)
 	defer stop()
 
 	_, stop = workerstest.Run(t, workerstest.NewServerParams{

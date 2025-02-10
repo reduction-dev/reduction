@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
+	rxnjobs "reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction/clocks"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
@@ -24,10 +25,10 @@ import (
 )
 
 // Create a new local job server for testing.
-func NewServer(jd *cfg.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) *Server {
+func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) *Server {
 	logger := slog.With("instanceID", "job")
 	jobParams := &jobs.NewParams{
-		JobConfig: jd,
+		JobConfig: jobConfig,
 		Clock:     clocks.NewSystemClock(),
 		Logger:    logger,
 		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, _errChan chan<- error) proto.Operator {
@@ -77,7 +78,12 @@ type ServerParams struct {
 }
 
 // Create and run a local job server without blocking. Panics on any error.
-func Run(jd *cfg.Config, options ...func(*ServerParams)) (server *Server, stop func()) {
+func Run(jd *rxnjobs.Job, options ...func(*ServerParams)) (server *Server, stop func()) {
+	jobConfig, err := cfg.Unmarshal(jd.Marshal())
+	if err != nil {
+		panic(err)
+	}
+
 	params := &ServerParams{
 		rpcAddr: ":0",
 		uiAddr:  ":0",
@@ -96,12 +102,12 @@ func Run(jd *cfg.Config, options ...func(*ServerParams)) (server *Server, stop f
 		panic(err)
 	}
 
-	if err := jd.Validate(); err != nil {
+	if err := jobConfig.Validate(); err != nil {
 		slog.Error("invalid job config", "err", err, "trace", string(debug.Stack()))
 		os.Exit(1)
 	}
 
-	server = NewServer(jd, rpcListener, uiListener, params.jobOptions...)
+	server = NewServer(jobConfig, rpcListener, uiListener, params.jobOptions...)
 
 	go func() {
 		err := server.Start()

@@ -10,7 +10,7 @@ import (
 )
 
 type SlidingWindowHandler struct {
-	sink *connectors.HTTPAPISink
+	sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]
 }
 
 type SlidingWindowOutput struct {
@@ -24,9 +24,9 @@ type SlidingWindowEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewSlidingWindowHandler(sinkID string) *SlidingWindowHandler {
+func NewSlidingWindowHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]) *SlidingWindowHandler {
 	return &SlidingWindowHandler{
-		sink: &connectors.HTTPAPISink{ID: sinkID},
+		sink: sink,
 	}
 }
 
@@ -100,7 +100,21 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	return nil
 }
 
+// TODO: Remove
 func (h *SlidingWindowHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
+	var event SlidingWindowEvent
+	if err := json.Unmarshal(rawEvent, &event); err != nil {
+		return nil, err
+	}
+
+	return []rxn.KeyedEvent{{
+		Key:       []byte(event.Key),
+		Timestamp: event.Timestamp,
+		Value:     rawEvent,
+	}}, nil
+}
+
+func KeySlidingWindowEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	var event SlidingWindowEvent
 	if err := json.Unmarshal(rawEvent, &event); err != nil {
 		return nil, err

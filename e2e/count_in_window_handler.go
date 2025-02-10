@@ -13,17 +13,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func NewCountInWindowHandler() *CountInWindowHandler {
+func NewCountInWindowHandler(sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]) *CountInWindowHandler {
 	return &CountInWindowHandler{
-		sink: &connectors.HTTPAPISink{ID: "sink"},
+		sink: sink,
 	}
 }
 
 type CountInWindowHandler struct {
-	sink *connectors.HTTPAPISink
+	sink connectors.SinkRuntime[*connectors.HTTPSinkEvent]
 }
 
-var _ rxn.Handler = (*CountInWindowHandler)(nil)
+var _ rxn.OperatorHandler = (*CountInWindowHandler)(nil)
 
 // Defining the state item
 
@@ -129,13 +129,16 @@ type CountInWindowEgressEvent struct {
 	Count  int
 }
 
-func (h *CountInWindowHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
+func KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	event, err := NewUserEventFromBytes(rawEvent)
+	if err != nil {
+		return nil, err
+	}
 	return []rxn.KeyedEvent{{
 		Key:       []byte(event.UserID),
 		Timestamp: event.Timestamp,
 		Value:     rawEvent,
-	}}, err
+	}}, nil
 }
 
 func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
