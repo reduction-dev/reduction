@@ -11,7 +11,7 @@ import (
 )
 
 type SlidingWindowHandler struct {
-	sink connectors.SinkRuntime[*httpapi.SinkEvent]
+	sink connectors.SinkRuntime[*httpapi.SinkRecord]
 }
 
 type SlidingWindowOutput struct {
@@ -25,7 +25,7 @@ type SlidingWindowEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkEvent]) *SlidingWindowHandler {
+func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord]) *SlidingWindowHandler {
 	return &SlidingWindowHandler{
 		sink: sink,
 	}
@@ -89,7 +89,7 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	if err != nil {
 		return err
 	}
-	h.sink.Collect(ctx, &httpapi.SinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkRecord{
 		Topic: "windows",
 		Data:  data,
 	})

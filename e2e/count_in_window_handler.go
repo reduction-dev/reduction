@@ -14,14 +14,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func NewCountInWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkEvent]) *CountInWindowHandler {
+func NewCountInWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord]) *CountInWindowHandler {
 	return &CountInWindowHandler{
 		sink: sink,
 	}
 }
 
 type CountInWindowHandler struct {
-	sink connectors.SinkRuntime[*httpapi.SinkEvent]
+	sink connectors.SinkRuntime[*httpapi.SinkRecord]
 }
 
 var _ rxn.OperatorHandler = (*CountInWindowHandler)(nil)
@@ -188,7 +188,7 @@ func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	if err != nil {
 		return err
 	}
-	h.sink.Collect(ctx, &httpapi.SinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkRecord{
 		Topic: "egress-events",
 		Data:  egressEventJSON,
 	})

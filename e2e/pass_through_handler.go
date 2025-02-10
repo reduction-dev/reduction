@@ -22,7 +22,7 @@ type PassThroughHandler struct {
 }
 
 func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
-	h.sink.Collect(ctx, &httpapi.SinkEvent{
+	h.sink.Collect(ctx, &httpapi.SinkRecord{
 		Topic: h.topic,
 		Data:  rawEvent,
 	})
