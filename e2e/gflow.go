@@ -18,7 +18,7 @@ func RunHandler(jobDef *jobs.Job) (server *rxn.HTTPServer, stop func()) {
 		panic(err)
 	}
 
-	server = rxn.NewServer(synthesis, rxn.WithListener(listener))
+	server = rxn.NewServer(synthesis.Handler, rxn.WithListener(listener))
 	go func() {
 		err := server.Start()
 		if err != nil {

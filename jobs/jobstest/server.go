@@ -79,7 +79,11 @@ type ServerParams struct {
 
 // Create and run a local job server without blocking. Panics on any error.
 func Run(jd *rxnjobs.Job, options ...func(*ServerParams)) (server *Server, stop func()) {
-	jobConfig, err := cfg.Unmarshal(jd.Marshal())
+	synthesis, err := jd.Synthesize()
+	if err != nil {
+		panic(err)
+	}
+	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal())
 	if err != nil {
 		panic(err)
 	}

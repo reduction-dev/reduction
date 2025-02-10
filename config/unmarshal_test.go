@@ -26,9 +26,11 @@ func TestUnmarshal(t *testing.T) {
 	source.Connect(operator)
 	operator.Connect(sink)
 
-	defJson := job.Marshal()
-	t.Log(string(defJson))
-	def, err := cfg.Unmarshal(defJson)
+	synthesis, err := job.Synthesize()
+	require.NoError(t, err)
+
+	t.Log(string(synthesis.Config.Marshal()))
+	def, err := cfg.Unmarshal(synthesis.Config.Marshal())
 	require.NoError(t, err)
 
 	assert.Equal(t, def.WorkerCount, 2)
