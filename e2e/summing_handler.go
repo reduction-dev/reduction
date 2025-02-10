@@ -56,15 +56,6 @@ func (h *SummingHandler) OnTimerExpired(ctx context.Context, user *rxn.Subject, 
 	return nil
 }
 
-// TODO: Remove
-func (h *SummingHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
-	return []rxn.KeyedEvent{{
-		Key:       []byte("static"),
-		Timestamp: time.Unix(0, 0),
-		Value:     rawEvent,
-	}}, nil
-}
-
 func KeyEventWithUniformKeyAndZeroTimestamp(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	return []rxn.KeyedEvent{{
 		Key:       []byte("static"),
@@ -73,7 +64,7 @@ func KeyEventWithUniformKeyAndZeroTimestamp(ctx context.Context, rawEvent []byte
 	}}, nil
 }
 
-var _ rxn.Handler = (*SummingHandler)(nil)
+var _ rxn.OperatorHandler = (*SummingHandler)(nil)
 
 type IntegerState struct {
 	value int64

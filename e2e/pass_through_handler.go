@@ -32,15 +32,6 @@ func (h *PassThroughHandler) OnTimerExpired(ctx context.Context, user *rxn.Subje
 	return nil
 }
 
-// TODO: Remove
-func (h *PassThroughHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
-	return []rxn.KeyedEvent{{
-		Key:       rawEvent,
-		Timestamp: time.Unix(0, 0),
-		Value:     rawEvent,
-	}}, nil
-}
-
 func KeyKinesisEventWithRawKeyAndZeroTimestamp(ctx context.Context, record *connectors.KinesisRecord) ([]rxn.KeyedEvent, error) {
 	return []rxn.KeyedEvent{{
 		Key:       record.Data,
@@ -49,4 +40,4 @@ func KeyKinesisEventWithRawKeyAndZeroTimestamp(ctx context.Context, record *conn
 	}}, nil
 }
 
-var _ rxn.Handler = (*PassThroughHandler)(nil)
+var _ rxn.OperatorHandler = (*PassThroughHandler)(nil)

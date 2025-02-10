@@ -100,20 +100,6 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	return nil
 }
 
-// TODO: Remove
-func (h *SlidingWindowHandler) KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
-	var event SlidingWindowEvent
-	if err := json.Unmarshal(rawEvent, &event); err != nil {
-		return nil, err
-	}
-
-	return []rxn.KeyedEvent{{
-		Key:       []byte(event.Key),
-		Timestamp: event.Timestamp,
-		Value:     rawEvent,
-	}}, nil
-}
-
 func KeySlidingWindowEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	var event SlidingWindowEvent
 	if err := json.Unmarshal(rawEvent, &event); err != nil {
@@ -127,7 +113,7 @@ func KeySlidingWindowEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEve
 	}}, nil
 }
 
-var _ rxn.Handler = (*SlidingWindowHandler)(nil)
+var _ rxn.OperatorHandler = (*SlidingWindowHandler)(nil)
 
 type SlidingWindowState struct {
 	Buckets map[time.Time]int `json:"buckets"`
