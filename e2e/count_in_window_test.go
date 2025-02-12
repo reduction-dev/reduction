@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction-go/connectors/httpapi"
 	rxnjobs "reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -50,7 +51,9 @@ func TestCountInWindow(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
-		Handler: NewCountInWindowHandler(sink),
+		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
+			return NewCountInWindowHandler(sink)
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)
@@ -118,7 +121,9 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
-		Handler: NewCountInWindowHandler(sink),
+		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
+			return NewCountInWindowHandler(sink)
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)

@@ -39,6 +39,11 @@ func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEven
 	}
 
 	nextSum := sum.Add(eventInt)
+
+	// Register state usage before updating
+	user.RegisterStateUse(nextSum.Name(), func() ([]rxn.StateMutation, error) {
+		return nextSum.Mutations()
+	})
 	user.UpdateState(nextSum)
 
 	nextSumBytes, err := nextSum.Marshal()

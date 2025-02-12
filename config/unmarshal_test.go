@@ -8,6 +8,7 @@ import (
 	clienthttpapi "reduction.dev/reduction-go/connectors/httpapi"
 	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/rxn"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
@@ -19,7 +20,11 @@ func TestUnmarshal(t *testing.T) {
 		StreamARN: "stream-arn",
 		Endpoint:  "http://localhost:12345",
 	})
-	operator := jobs.NewOperator(job, "Operator", &jobs.OperatorParams{})
+	operator := jobs.NewOperator(job, "Operator", &jobs.OperatorParams{
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return nil
+		},
+	})
 	sink := clienthttpapi.NewSink(job, "Sink", &clienthttpapi.SinkParams{
 		Addr: "http-api-sink-addr",
 	})

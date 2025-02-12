@@ -15,6 +15,7 @@ import (
 	clienthttpapi "reduction.dev/reduction-go/connectors/httpapi"
 	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
@@ -72,7 +73,9 @@ func TestKinesis(t *testing.T) {
 		Addr: sinkServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: e2e.NewPassThroughHandler(sink, "main"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return e2e.NewPassThroughHandler(sink, "main")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)

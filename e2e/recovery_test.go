@@ -14,6 +14,7 @@ import (
 
 	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -48,7 +49,9 @@ func TestRestartFromSavepoint(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSummingHandler(sink, "sums"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSummingHandler(sink, "sums")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)
@@ -148,7 +151,9 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSummingHandler(sink, "sums"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSummingHandler(sink, "sums")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)
@@ -228,7 +233,9 @@ func TestScaleOutWorkers(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSummingHandler(sink, "sums"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSummingHandler(sink, "sums")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)
@@ -330,7 +337,9 @@ func TestScaleInWorkers(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSummingHandler(sink, "sums"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSummingHandler(sink, "sums")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)
@@ -435,7 +444,9 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSummingHandler(sink, "sums"),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSummingHandler(sink, "sums")
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)

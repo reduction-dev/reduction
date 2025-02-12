@@ -155,6 +155,11 @@ func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, r
 	}
 
 	tsList.timestamps = append(tsList.timestamps, event.Timestamp)
+
+	// Register state usage before updating
+	user.RegisterStateUse(tsList.Name(), func() ([]rxn.StateMutation, error) {
+		return tsList.Mutations()
+	})
 	user.UpdateState(&tsList)
 
 	user.SetTimer(event.Timestamp.Add(time.Millisecond).Round(time.Millisecond * 2))
@@ -180,7 +185,10 @@ func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 	}
 
 	tsList.timestamps = remainingTSList
-	user.UpdateState(&tsList)
+
+	user.RegisterStateUse(tsList.Name(), func() ([]rxn.StateMutation, error) {
+		return tsList.Mutations()
+	})
 
 	egressEvent := CountInWindowEgressEvent{UserID: string(user.Key()), Count: len(closingTSList)}
 

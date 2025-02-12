@@ -10,6 +10,7 @@ import (
 
 	"reduction.dev/reduction-go/connectors/httpapi"
 	"reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/workers/workerstest"
@@ -39,7 +40,9 @@ func TestSlidingWindow(t *testing.T) {
 		Addr: httpAPIServer.URL(),
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: NewSlidingWindowHandler(sink),
+		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+			return NewSlidingWindowHandler(sink)
+		},
 	})
 	source.Connect(operator)
 	operator.Connect(sink)

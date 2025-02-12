@@ -49,6 +49,11 @@ func (h *SlidingWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, r
 		state.Buckets = make(map[time.Time]int)
 	}
 	state.Buckets[bucketTS]++
+
+	// Register state usage before updating
+	user.RegisterStateUse(state.Name(), func() ([]rxn.StateMutation, error) {
+		return state.Mutations()
+	})
 	user.UpdateState(&state)
 
 	// Set timer for next minute
@@ -73,6 +78,11 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 			delete(state.Buckets, ts)
 		}
 	}
+
+	// Register state usage before updating
+	user.RegisterStateUse(state.Name(), func() ([]rxn.StateMutation, error) {
+		return state.Mutations()
+	})
 	user.UpdateState(&state)
 
 	// If we have no data don't emit or set any more timers
