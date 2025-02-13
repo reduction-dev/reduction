@@ -8,7 +8,7 @@ import (
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
-	"reduction.dev/reduction/connectors/print"
+	"reduction.dev/reduction/connectors/stdio"
 	"reduction.dev/reduction/util/sliceu"
 )
 
@@ -91,6 +91,12 @@ func sourceFromConstruct(cons construct) (connectors.SourceConfig, error) {
 			return nil, err
 		}
 		return config, nil
+	case "Source:Stdio":
+		var config stdio.SourceConfig
+		if err := json.Unmarshal(cons.Params, &config); err != nil {
+			return nil, err
+		}
+		return &config, nil
 	default:
 		return nil, fmt.Errorf("unknown source type %s", cons.Type)
 	}
@@ -104,8 +110,8 @@ func sinkFromConstruct(cons construct) (connectors.SinkConfig, error) {
 			return nil, err
 		}
 		return config, nil
-	case "Sink:Print":
-		return &print.SinkConfig{}, nil
+	case "Sink:Stdio":
+		return &stdio.SinkConfig{}, nil
 	default:
 		return nil, fmt.Errorf("unknown sink type %s", cons.Type)
 	}

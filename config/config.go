@@ -8,7 +8,7 @@ import (
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
-	"reduction.dev/reduction/connectors/print"
+	"reduction.dev/reduction/connectors/stdio"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
@@ -61,6 +61,12 @@ func NewSourceReaderFromProto(source *workerpb.Source) connectors.SourceReader {
 			BatchSize:   int(t.EmbeddedConfig.BatchSize),
 			GeneratorID: t.EmbeddedConfig.Generator,
 		})
+	case *workerpb.Source_StdioConfig:
+		return stdio.NewSourceReader(stdio.SourceConfig{
+			Framing: stdio.Framing{
+				Delimiter: t.StdioConfig.GetFraming().GetDelimited().Delimiter,
+			},
+		})
 	default:
 		panic("unknown proto source type")
 	}
@@ -72,8 +78,8 @@ func NewSinkFromProto(sink *workerpb.Sink) connectors.SinkWriter {
 		return httpapi.NewSink(httpapi.SinkConfig{
 			Addr: t.HttpApiConfig.Addr,
 		})
-	case *workerpb.Sink_PrintConfig:
-		return print.NewSink(print.SinkConfig{})
+	case *workerpb.Sink_StdioConfig:
+		return stdio.NewSink(stdio.SinkConfig{})
 	default:
 		panic("unknown proto sink type")
 	}

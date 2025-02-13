@@ -2,6 +2,7 @@ package rundev
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 
 type RunParams struct {
 	WorkerPort int
+	Executable string
 }
 
 // Run starts a local cluster of job, worker, and handler for local development
@@ -30,29 +32,32 @@ func Run(params RunParams) error {
 	defer cancel(nil)
 	g, ctx := errgroup.WithContext(ctx)
 
-	// Start the handler first and wait for it to become healthy.
+	// Get config from executable first
+	jconf, err := jobConfig(ctx, params.Executable)
+	if err != nil {
+		return fmt.Errorf("failed to get job config: %v", err)
+	}
+
+	// Start the job server
+	jobServer := jobserver.NewServer(jconf, jobserver.WithRPCAddress(":0"), jobserver.WithUIAddress(":9009"))
 	g.Go(func() error {
-		return handlerCmd(ctx).Run()
+		return jobServer.Start(ctx)
+	})
+
+	// Start the handler process
+	g.Go(func() error {
+		return handlerCmd(ctx, params.Executable).Run()
 	})
 	if err := waitUntilHealthy(ctx, ":8080", 100*time.Millisecond, 2*time.Second); err != nil {
 		cancel(err)
 		return err
 	}
 
-	// Start the job
-	job, err := jobServer()
-	if err != nil {
-		return err
-	}
-	g.Go(func() error {
-		return job.Start(ctx)
-	})
-
 	// Start the worker
 	addr := fmt.Sprintf(":%d", params.WorkerPort)
 	worker := workerserver.NewServer(workerserver.NewServerParams{
 		Addr:         addr,
-		JobAddr:      job.RPCListener.Addr().String(), // Use job's random port
+		JobAddr:      jobServer.RPCListener.Addr().String(), // Use job's random port
 		HandlerAddr:  ":8080",
 		DBDir:        "./storage/dkv",
 		SavepointDir: "./storage/savepoints",
@@ -64,8 +69,8 @@ func Run(params RunParams) error {
 	return g.Wait()
 }
 
-func handlerCmd(ctx context.Context) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "./run")
+func handlerCmd(ctx context.Context, executable string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, executable, "start")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -78,20 +83,25 @@ func handlerCmd(ctx context.Context) *exec.Cmd {
 	return cmd
 }
 
-func jobServer() (*jobserver.Server, error) {
-	data, err := os.ReadFile("./job.json")
+func jobConfig(ctx context.Context, executable string) (*config.Config, error) {
+	cmd := exec.CommandContext(ctx, executable, "config")
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get config from executable: %v", err)
 	}
-	c, err := config.Unmarshal(data)
+
+	if !json.Valid(output) {
+		return nil, fmt.Errorf("invalid JSON config output from executable")
+	}
+
+	c, err := config.Unmarshal(output)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal config: %v", err)
 	}
 
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("job definition validation error: %v", err)
 	}
 
-	server := jobserver.NewServer(c, jobserver.WithRPCAddress(":0"), jobserver.WithUIAddress(":9009"))
-	return server, nil
+	return c, nil
 }

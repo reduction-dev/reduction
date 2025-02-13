@@ -78,12 +78,19 @@ func main() {
 					Required: false,
 				},
 			},
+			Args:      true,
+			ArgsUsage: "<executable>",
 			Action: func(ctx *cli.Context) error {
 				logging.SetLevel(slog.LevelWarn)
 				slog.SetDefault(slog.New(logging.NewTextHandler()))
+				executable := ctx.Args().First()
+				if executable == "" {
+					return fmt.Errorf("executable path is required")
+				}
 				port := ctx.Int("worker-port")
 				err := rundev.Run(rundev.RunParams{
 					WorkerPort: port,
+					Executable: executable,
 				})
 				if err != nil {
 					slog.Error("terminated with error", "error", err)

@@ -32,11 +32,11 @@ message Sink {
     string addr = 1;
   }
 
-  message Print {}
+  message Stdio {}
 
   oneof config {
     HTTPAPI http_api_config = 1;
-    Print print_config = 2;
+    Stdio stdio_config = 2;
   }
 }
 
@@ -100,10 +100,27 @@ message Source {
     string generator = 3;
   }
 
+  message Stdio {
+    StdioFraming framing = 1;
+  }
+
   oneof config {
     HTTPAPI http_api_config = 1;
     Kinesis kinesis_config = 2;
     Embedded embedded_config = 3;
+    Stdio stdio_config = 4;
   }
 }
 
+message StdioFraming {
+  message LengthEncoded {}
+  
+  message Delimited {
+    bytes delimiter = 1;
+  }
+
+  oneof config {
+    LengthEncoded length_encoded = 1;
+    Delimited delimited = 2;
+  }
+}
