@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - test-release
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # We install reduction and reduction-protocol "side-by-side" so we need to set
+        # the working directory to the reduction repository directory.
+        working-directory: reduction
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          path: reduction
+
+      # Get access to the shared protocol files for proto imports
+      - name: Checkout Protocol
+        uses: actions/checkout@v3
+        with:
+          repository: reduction-dev/reduction-protocol
+          ref: master
+          path: reduction-protocol
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.24.0'
+
+      - name: Setup Tools
+        run: ./scripts/setup
+
+      - name: Debug Environment
+        run: |
+          echo "github.workspace=${{ github.workspace }}"
+          echo "Current directory: $(pwd)"
+          echo "Protocol directory contents:"
+          ls -la ../reduction-protocol
+          ls -la ./
+
+      - name: Generate Code
+        run: ./scripts/gen
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --snapshot
+          workdir: reduction
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_REPO_TOKEN: ${{ secrets.HOMEBREW_REPO_TOKEN }}

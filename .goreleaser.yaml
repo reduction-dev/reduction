@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+project_name: reduction
+
+before:
+  hooks:
+    - ./scripts/setup
+    - ./scripts/gen
+    - go mod tidy
+
+builds:
+  - main: ./cmd/reduction
+    flags: 
+      - -trimpath
+    goos:
+      - linux
+      - darwin
+
+archives:
+  - formats: binary
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+    ---
+    See the documentation at [reduction.dev/docs](https://redution.dev/docs).
+
+brews:
+  - name: reduction
+    homepage: https://reduction.dev
+    description: Stream processing engine
+    license: Apache-2.0
+    repository:
+      owner: reduction
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
+    commit_author:
+      name: Reduction Automation
+      email: automation@reduction.dev
+    test: |
+      system "#{bin}/reduction version"

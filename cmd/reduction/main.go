@@ -15,11 +15,22 @@ import (
 	"reduction.dev/reduction/workers/workerserver"
 )
 
+// version is set during build by GoReleaser
+var version = "development"
+
 func main() {
 	app := &cli.App{
-		Name:  "reduction",
-		Usage: "Aggregate information from streams of events",
+		Name:    "reduction",
+		Usage:   "Aggregate information from streams of events",
+		Version: version,
 		Commands: []*cli.Command{{
+			Name:  "version",
+			Usage: "Display version information",
+			Action: func(ctx *cli.Context) error {
+				fmt.Printf("reduction version %s\n", version)
+				return nil
+			},
+		}, {
 			Name:  "job",
 			Usage: "Start a Reduction Job",
 			Flags: []cli.Flag{
