@@ -17,8 +17,8 @@ require (
 	golang.org/x/sync v0.10.0
 	golang.org/x/text v0.21.0
 	google.golang.org/protobuf v1.36.3
-	reduction.dev/reduction-go v0.0.0-00010101000000-000000000000
-	reduction.dev/reduction-protocol v0.0.0-00010101000000-000000000000
+	reduction.dev/reduction-go v0.0.0-20250210214717-06a503b6cdff
+	reduction.dev/reduction-protocol v0.0.0-20250210143955-557cf6435194
 )
 
 require (
@@ -30,11 +30,6 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-)
-
-replace (
-	reduction.dev/reduction-go => ../reduction-go
-	reduction.dev/reduction-protocol => ../reduction-protocol
 )
 
 require (
