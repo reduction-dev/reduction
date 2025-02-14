@@ -3,9 +3,10 @@ set -ue
 shopt -s globstar
 
 TOOLS_BIN="./bin"
+PROTOCOL_PATH="${PROTOCOL_PATH:-../reduction-protocol}"
 
 ./bin/protoc/bin/protoc \
-  -I ../reduction-protocol \
+  -I ${PROTOCOL_PATH} \
   -I . \
   --plugin=protoc-gen-go=./bin/protoc-gen-go \
   --go_opt=paths=source_relative \

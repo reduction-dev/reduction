@@ -7,3 +7,6 @@ todo.md
 /bin
 .vscode
 /data
+
+# Ignore the dist directory for goreleaser
+dist/

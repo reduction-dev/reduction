@@ -8,8 +8,16 @@ TOOLS_DIR="./bin"
 # Make temporary directory for downloads
 TMP_DIR=$(mktemp -d)
 
-# Download and upzip file
-PROTOC_RELEASE=https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-osx-aarch_64.zip
+# Determine platform based on environment
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    PLATFORM="linux-x86_64"
+else
+    PLATFORM="osx-aarch_64"
+fi
+
+# Download and unzip file
+PROTOC_VERSION="29.3"
+PROTOC_RELEASE="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${PLATFORM}.zip"
 curl --location $PROTOC_RELEASE --output ${TMP_DIR}/protoc.zip
 mkdir -p ${TOOLS_DIR}/protoc
 unzip -o ${TMP_DIR}/protoc.zip -d ${TOOLS_DIR}/protoc
