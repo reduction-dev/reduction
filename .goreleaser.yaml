@@ -18,6 +18,9 @@ builds:
     goos:
       - linux
       - darwin
+    goarch:
+      - amd64
+      - arm64
 
 archives:
   - formats: binary
@@ -31,8 +34,13 @@ changelog:
 
 release:
   footer: >-
+
     ---
+
     See the documentation at [reduction.dev/docs](https://redution.dev/docs).
+
+source:
+  enabled: false
 
 brews:
   - name: reduction
@@ -40,7 +48,7 @@ brews:
     description: Stream processing engine
     license: Apache-2.0
     repository:
-      owner: reduction
+      owner: reduction-dev
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
     commit_author:
