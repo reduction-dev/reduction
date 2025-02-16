@@ -23,16 +23,6 @@ type split struct {
 }
 
 func NewSourceReader(config SourceConfig) *SourceReader {
-	// Default to 1 split
-	if config.SplitCount == 0 {
-		config.SplitCount = 1
-	}
-
-	// Default batch size to 10
-	if config.BatchSize == 0 {
-		config.BatchSize = 10
-	}
-
 	return &SourceReader{
 		generator: &eventGenerator{
 			splitCount: config.SplitCount,

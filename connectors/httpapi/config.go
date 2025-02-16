@@ -1,35 +1,47 @@
 package httpapi
 
 import (
+	"encoding/json"
+
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
+// ParseSourceConfig parses and validates an HTTP API source configuration
+func ParseSourceConfig(data []byte) (SourceConfig, error) {
+	var config SourceConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return SourceConfig{}, err
+	}
+	return config, nil
+}
+
+// SourceConfig contains configuration for the HTTP API source connector
 type SourceConfig struct {
 	Addr   string
 	Topics []string
 }
 
-func (s SourceConfig) Validate() error {
-	return connectors.ValidateURL(s.Addr)
+func (c SourceConfig) Validate() error {
+	return connectors.ValidateURL(c.Addr)
 }
 
-func (s SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
-	return NewSourceSplitter(s)
+func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
+	return NewSourceSplitter(c)
 }
 
-func (s SourceConfig) ProtoMessage() *workerpb.Source {
+func (c SourceConfig) ProtoMessage() *workerpb.Source {
 	return &workerpb.Source{
 		Config: &workerpb.Source_HttpApiConfig{
 			HttpApiConfig: &workerpb.Source_HTTPAPI{
-				Addr:   s.Addr,
-				Topics: s.Topics,
+				Addr:   c.Addr,
+				Topics: c.Topics,
 			},
 		},
 	}
 }
 
-func (s SourceConfig) IsSourceConfig() {}
+func (c SourceConfig) IsSourceConfig() {}
 
 var _ connectors.SourceConfig = SourceConfig{}
 

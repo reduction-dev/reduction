@@ -1,10 +1,31 @@
 package embedded
 
 import (
+	"encoding/json"
+
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
+// ParseSourceConfig parses and sets defaults for an embedded source configuration
+func ParseSourceConfig(data []byte) (SourceConfig, error) {
+	var config SourceConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return SourceConfig{}, err
+	}
+
+	// Set defaults
+	if config.SplitCount == 0 {
+		config.SplitCount = 1
+	}
+	if config.BatchSize == 0 {
+		config.BatchSize = 1_000
+	}
+
+	return config, nil
+}
+
+// SourceConfig contains configuration for the embedded source connector
 type SourceConfig struct {
 	SplitCount  int
 	BatchSize   int

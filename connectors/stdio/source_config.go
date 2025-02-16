@@ -1,12 +1,23 @@
 package stdio
 
 import (
+	"encoding/json"
+
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
 type SourceConfig struct {
 	Framing Framing
+}
+
+// ParseSourceConfig parses and validates a stdio source configuration
+func ParseSourceConfig(data []byte) (*SourceConfig, error) {
+	var config *SourceConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return &SourceConfig{}, err
+	}
+	return config, nil
 }
 
 type Framing struct {

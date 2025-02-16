@@ -1,6 +1,7 @@
 package kinesis
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -8,35 +9,45 @@ import (
 	"reduction.dev/reduction/proto/workerpb"
 )
 
+// ParseSourceConfig parses and validates a Kinesis source configuration
+func ParseSourceConfig(data []byte) (SourceConfig, error) {
+	var config SourceConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return SourceConfig{}, err
+	}
+	return config, nil
+}
+
+// SourceConfig contains configuration for the Kinesis source connector
 type SourceConfig struct {
 	StreamARN string
 	Endpoint  string
 	Client    *Client
 }
 
-func (s SourceConfig) Validate() error {
-	_, err := url.Parse(s.Endpoint)
+func (c SourceConfig) Validate() error {
+	_, err := url.Parse(c.Endpoint)
 	if err != nil {
-		return fmt.Errorf("invalid kinesis Source endpoint: %s", s.Endpoint)
+		return fmt.Errorf("invalid kinesis Source endpoint: %s", c.Endpoint)
 	}
 	return nil
 }
 
-func (s SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
-	return NewSourceSplitter(s)
+func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
+	return NewSourceSplitter(c)
 }
 
-func (s SourceConfig) ProtoMessage() *workerpb.Source {
+func (c SourceConfig) ProtoMessage() *workerpb.Source {
 	return &workerpb.Source{
 		Config: &workerpb.Source_KinesisConfig{
 			KinesisConfig: &workerpb.Source_Kinesis{
-				StreamArn: s.StreamARN,
-				Endpoint:  s.Endpoint,
+				StreamArn: c.StreamARN,
+				Endpoint:  c.Endpoint,
 			},
 		},
 	}
 }
 
-func (s SourceConfig) IsSourceConfig() {}
+func (c SourceConfig) IsSourceConfig() {}
 
 var _ connectors.SourceConfig = SourceConfig{}

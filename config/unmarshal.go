@@ -74,29 +74,13 @@ type construct struct {
 func sourceFromConstruct(cons construct) (connectors.SourceConfig, error) {
 	switch cons.Type {
 	case "Source:Kinesis":
-		var config kinesis.SourceConfig
-		if err := json.Unmarshal(cons.Params, &config); err != nil {
-			return nil, err
-		}
-		return config, nil
+		return kinesis.ParseSourceConfig(cons.Params)
 	case "Source:HTTPAPI":
-		var config httpapi.SourceConfig
-		if err := json.Unmarshal(cons.Params, &config); err != nil {
-			return nil, err
-		}
-		return config, nil
+		return httpapi.ParseSourceConfig(cons.Params)
 	case "Source:Embedded":
-		var config embedded.SourceConfig
-		if err := json.Unmarshal(cons.Params, &config); err != nil {
-			return nil, err
-		}
-		return config, nil
+		return embedded.ParseSourceConfig(cons.Params)
 	case "Source:Stdio":
-		var config stdio.SourceConfig
-		if err := json.Unmarshal(cons.Params, &config); err != nil {
-			return nil, err
-		}
-		return &config, nil
+		return stdio.ParseSourceConfig(cons.Params)
 	default:
 		return nil, fmt.Errorf("unknown source type %s", cons.Type)
 	}
