@@ -4,7 +4,7 @@
 *.snapshot
 todo.md
 /build
-/bin
+/vendor
 .vscode
 /data
 

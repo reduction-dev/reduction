@@ -2,15 +2,15 @@
 set -ue
 shopt -s globstar
 
-TOOLS_BIN="./bin"
+TOOLS_BIN="./vendor"
 
-./bin/protoc/bin/protoc \
+./vendor/protoc/bin/protoc \
   -I ../reduction-protocol \
   -I . \
-  --plugin=protoc-gen-go=./bin/protoc-gen-go \
+  --plugin=protoc-gen-go=./vendor/protoc-gen-go \
   --go_opt=paths=source_relative \
   --go_out=. \
-  --plugin=protoc-gen-connect-go=./bin/protoc-gen-connect-go \
+  --plugin=protoc-gen-connect-go=./vendor/protoc-gen-connect-go \
   --connect-go_opt=paths=source_relative \
   --connect-go_out=. \
   proto/**/*.proto connectors/**/*.proto
