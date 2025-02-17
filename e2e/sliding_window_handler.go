@@ -31,14 +31,14 @@ func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord]) *
 	}
 }
 
-func (h *SlidingWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
+func (h *SlidingWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, keyedEvent rxn.KeyedEvent) error {
 	var state SlidingWindowState
 	if err := user.LoadState(&state); err != nil {
 		return err
 	}
 
 	var event SlidingWindowEvent
-	if err := json.Unmarshal(rawEvent, &event); err != nil {
+	if err := json.Unmarshal(keyedEvent.Value, &event); err != nil {
 		return err
 	}
 

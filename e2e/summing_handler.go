@@ -25,17 +25,17 @@ type SummingHandler struct {
 	topic string
 }
 
-func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
+func (h *SummingHandler) OnEvent(ctx context.Context, user *rxn.Subject, event rxn.KeyedEvent) error {
 	var sum IntegerState
 	if err := user.LoadState(&sum); err != nil {
 		return fmt.Errorf("getting sum state: %w", err)
 	}
 
 	var eventInt int64
-	reader := bytes.NewReader(rawEvent)
+	reader := bytes.NewReader(event.Value)
 	err := binary.Read(reader, binary.BigEndian, &eventInt)
 	if err != nil && err != io.EOF {
-		return fmt.Errorf("reading rawEvent (data: %v): %w", rawEvent, err)
+		return fmt.Errorf("reading rawEvent (data: %v): %w", event.Value, err)
 	}
 
 	nextSum := sum.Add(eventInt)

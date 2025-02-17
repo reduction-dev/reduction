@@ -21,10 +21,10 @@ type PassThroughHandler struct {
 	topic string
 }
 
-func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
+func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, event rxn.KeyedEvent) error {
 	h.sink.Collect(ctx, &httpapi.SinkRecord{
 		Topic: h.topic,
-		Data:  rawEvent,
+		Data:  event.Value,
 	})
 	return nil
 }

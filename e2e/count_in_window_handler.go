@@ -142,8 +142,8 @@ func KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	}}, nil
 }
 
-func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, rawEvent []byte) error {
-	event, err := NewUserEventFromBytes(rawEvent)
+func (h *CountInWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, keyedEvent rxn.KeyedEvent) error {
+	event, err := NewUserEventFromBytes(keyedEvent.Value)
 	if err != nil {
 		return err
 	}
