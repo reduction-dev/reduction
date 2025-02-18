@@ -106,7 +106,7 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 
 	// Ensure a timer is fired on the next watermark in case there are no more events
 	// for this subject.
-	user.SetTimer(rxn.CurrentWatermark(ctx).Add(time.Minute).Truncate(time.Minute))
+	user.SetTimer(rxn.Watermark(ctx).Add(time.Minute).Truncate(time.Minute))
 
 	return nil
 }
