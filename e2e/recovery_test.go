@@ -50,7 +50,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSummingHandler(sink, "sums")
+			return NewSummingHandler(sink, "sums", op)
 		},
 	})
 	source.Connect(operator)
@@ -152,7 +152,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSummingHandler(sink, "sums")
+			return NewSummingHandler(sink, "sums", op)
 		},
 	})
 	source.Connect(operator)
@@ -234,7 +234,7 @@ func TestScaleOutWorkers(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSummingHandler(sink, "sums")
+			return NewSummingHandler(sink, "sums", op)
 		},
 	})
 	source.Connect(operator)
@@ -338,7 +338,7 @@ func TestScaleInWorkers(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSummingHandler(sink, "sums")
+			return NewSummingHandler(sink, "sums", op)
 		},
 	})
 	source.Connect(operator)
@@ -445,7 +445,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSummingHandler(sink, "sums")
+			return NewSummingHandler(sink, "sums", op)
 		},
 	})
 	source.Connect(operator)
