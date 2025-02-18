@@ -7,12 +7,9 @@ import (
 
 	"reduction.dev/reduction-go/connectors"
 	"reduction.dev/reduction-go/connectors/httpapi"
+	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
 )
-
-type SlidingWindowHandler struct {
-	sink connectors.SinkRuntime[*httpapi.SinkRecord]
-}
 
 type SlidingWindowOutput struct {
 	Key      string `json:"key"`
@@ -25,73 +22,85 @@ type SlidingWindowEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord]) *SlidingWindowHandler {
+type CountByMinuteCodec struct{}
+
+func (c CountByMinuteCodec) DecodeValue(b []byte) (map[time.Time]int, error) {
+	var buckets map[time.Time]int
+	if err := json.Unmarshal(b, &buckets); err != nil {
+		return nil, err
+	}
+	return buckets, nil
+}
+
+func (c CountByMinuteCodec) EncodeValue(value map[time.Time]int) ([]byte, error) {
+	return json.Marshal(value)
+}
+
+var _ rxn.ValueStateCodec[map[time.Time]int] = CountByMinuteCodec{}
+
+type SlidingWindowHandler struct {
+	sink              connectors.SinkRuntime[*httpapi.SinkRecord]
+	countByMinuteSpec rxn.ValueSpec[map[time.Time]int]
+}
+
+func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord], op *jobs.Operator) *SlidingWindowHandler {
 	return &SlidingWindowHandler{
-		sink: sink,
+		sink:              sink,
+		countByMinuteSpec: rxn.NewValueSpec(op, "window-state", CountByMinuteCodec{}),
 	}
 }
 
-func (h *SlidingWindowHandler) OnEvent(ctx context.Context, user *rxn.Subject, keyedEvent rxn.KeyedEvent) error {
-	var state SlidingWindowState
-	if err := user.LoadState(&state); err != nil {
-		return err
-	}
-
+func (h *SlidingWindowHandler) OnEvent(ctx context.Context, subject *rxn.Subject, keyedEvent rxn.KeyedEvent) error {
 	var event SlidingWindowEvent
 	if err := json.Unmarshal(keyedEvent.Value, &event); err != nil {
 		return err
 	}
 
 	// Round to minute bucket
-	bucketTS := event.Timestamp.Truncate(time.Minute)
+	minute := event.Timestamp.Truncate(time.Minute)
 
-	if state.Buckets == nil {
-		state.Buckets = make(map[time.Time]int)
+	countByMinute := h.countByMinuteSpec.StateFor(subject)
+	state := countByMinute.Value()
+	if state == nil {
+		state = make(map[time.Time]int)
 	}
-	state.Buckets[bucketTS]++
-
-	// Register state usage before updating
-	user.RegisterStateUse(state.Name(), func() ([]rxn.StateMutation, error) {
-		return state.Mutations()
-	})
-	user.UpdateState(&state)
+	state[minute]++
+	countByMinute.Set(state)
 
 	// Set timer for next minute
-	nextMin := event.Timestamp.Truncate(time.Minute).Add(time.Minute)
-	user.SetTimer(nextMin)
+	nextMinute := event.Timestamp.Truncate(time.Minute).Add(time.Minute)
+	subject.SetTimer(nextMinute)
 
 	return nil
 }
 
-func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Subject, timer time.Time) error {
-	var state SlidingWindowState
-	if err := user.LoadState(&state); err != nil {
-		return err
+func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, subject *rxn.Subject, timer time.Time) error {
+	countByMinute := h.countByMinuteSpec.StateFor(subject)
+	state := countByMinute.Value()
+	if state == nil {
+		return nil
 	}
 
 	currentWindow := newWindow(timer.Truncate(time.Minute), time.Hour)
 	sum := 0
-	for ts := range state.Buckets {
+	newState := make(map[time.Time]int)
+	for ts, count := range state {
 		if currentWindow.contains(ts) {
-			sum += state.Buckets[ts]
-		} else if currentWindow.isPast(ts) {
-			delete(state.Buckets, ts)
+			sum += count
+			newState[ts] = count
+		} else if !currentWindow.isPast(ts) {
+			newState[ts] = count
 		}
 	}
+	countByMinute.Set(newState)
 
-	// Register state usage before updating
-	user.RegisterStateUse(state.Name(), func() ([]rxn.StateMutation, error) {
-		return state.Mutations()
-	})
-	user.UpdateState(&state)
-
-	// If we have no data don't emit or set any more timers
-	if sum == 0 {
+	// If we have any data in state don't emit or set any more timers
+	if len(newState) == 0 {
 		return nil
 	}
 
 	output := SlidingWindowOutput{
-		Key:      string(user.Key()),
+		Key:      string(subject.Key()),
 		Sum:      sum,
 		Interval: currentWindow.intervalString(),
 	}
@@ -106,7 +115,7 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, user *rxn.Sub
 
 	// Ensure a timer is fired on the next watermark in case there are no more events
 	// for this subject.
-	user.SetTimer(rxn.Watermark(ctx).Add(time.Minute).Truncate(time.Minute))
+	subject.SetTimer(rxn.Watermark(ctx).Add(time.Minute).Truncate(time.Minute))
 
 	return nil
 }
@@ -122,35 +131,6 @@ func KeySlidingWindowEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEve
 		Timestamp: event.Timestamp,
 		Value:     rawEvent,
 	}}, nil
-}
-
-var _ rxn.OperatorHandler = (*SlidingWindowHandler)(nil)
-
-type SlidingWindowState struct {
-	Buckets map[time.Time]int `json:"buckets"`
-}
-
-func (s *SlidingWindowState) Load(entries []rxn.StateEntry) error {
-	if len(entries) == 0 {
-		s.Buckets = make(map[time.Time]int)
-		return nil
-	}
-	return json.Unmarshal(entries[0].Value, s)
-}
-
-func (s *SlidingWindowState) Mutations() ([]rxn.StateMutation, error) {
-	data, err := json.Marshal(s)
-	if err != nil {
-		return nil, err
-	}
-	return []rxn.StateMutation{&rxn.PutMutation{
-		Key:   []byte(s.Name()),
-		Value: data,
-	}}, nil
-}
-
-func (s *SlidingWindowState) Name() string {
-	return "window-state"
 }
 
 type window struct {

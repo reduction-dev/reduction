@@ -41,7 +41,7 @@ func TestSlidingWindow(t *testing.T) {
 	})
 	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
 		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
-			return NewSlidingWindowHandler(sink)
+			return NewSlidingWindowHandler(sink, op)
 		},
 	})
 	source.Connect(operator)
