@@ -95,7 +95,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 	// Stop the cluster
 	job.Stop()
 	worker.Stop()
-	handlerServer.Stop()
+	handlerServer.Stop(context.Background())
 
 	// Remove all working files but not the savepoint
 	err = os.RemoveAll(jobDef.WorkingStorageLocation)
