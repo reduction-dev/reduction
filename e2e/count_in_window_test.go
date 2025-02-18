@@ -52,7 +52,7 @@ func TestCountInWindow(t *testing.T) {
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
 		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
-			return NewCountInWindowHandler(sink)
+			return NewCountInWindowHandler(sink, op)
 		},
 	})
 	source.Connect(operator)
@@ -122,7 +122,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	})
 	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
 		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
-			return NewCountInWindowHandler(sink)
+			return NewCountInWindowHandler(sink, op)
 		},
 	})
 	source.Connect(operator)
