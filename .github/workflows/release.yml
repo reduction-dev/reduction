@@ -43,16 +43,10 @@ jobs:
       - name: Setup Tools
         run: ./scripts/setup
 
-      - name: Debug Environment
-        run: |
-          echo "github.workspace=${{ github.workspace }}"
-          echo "Current directory: $(pwd)"
-          echo "Protocol directory contents:"
-          ls -la ../reduction-protocol
-          ls -la ./
-
       - name: Generate Code
-        run: ./scripts/gen
+        run: |
+          ./scripts/gen
+          rm -rf vendor
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
