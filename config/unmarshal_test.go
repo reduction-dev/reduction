@@ -7,21 +7,21 @@ import (
 	"github.com/stretchr/testify/require"
 	clienthttpapi "reduction.dev/reduction-go/connectors/httpapi"
 	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
 )
 
 func TestUnmarshal(t *testing.T) {
-	job := &jobs.Job{WorkerCount: 2}
+	job := &topology.Job{WorkerCount: 2}
 	source := clientkinesis.NewSource(job, "Source", &clientkinesis.SourceParams{
 		StreamARN: "stream-arn",
 		Endpoint:  "http://localhost:12345",
 	})
-	operator := jobs.NewOperator(job, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(job, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return nil
 		},
 	})

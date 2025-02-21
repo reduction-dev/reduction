@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -35,7 +35,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 
 	// Start the job server
 	testDir := t.TempDir()
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:              1,
 		WorkingStorageLocation:   t.TempDir(),
 		SavepointStorageLocation: filepath.Join(testDir, "savepoints"),
@@ -48,8 +48,8 @@ func TestRestartFromSavepoint(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -138,7 +138,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1))
 
 	// Start the job server
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -150,8 +150,8 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -220,7 +220,7 @@ func TestScaleOutWorkers(t *testing.T) {
 	}
 
 	// Start the job server
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -232,8 +232,8 @@ func TestScaleOutWorkers(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -324,7 +324,7 @@ func TestScaleInWorkers(t *testing.T) {
 
 	// Start the job server for two workers
 	testDir := t.TempDir()
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            2,
 		WorkingStorageLocation: testDir,
 	}
@@ -336,8 +336,8 @@ func TestScaleInWorkers(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -431,7 +431,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 
 	// Start the job server
 	testDir := t.TempDir()
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: testDir,
 	}
@@ -443,8 +443,8 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})

@@ -21,7 +21,7 @@ type PassThroughHandler struct {
 	topic string
 }
 
-func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, event rxn.KeyedEvent) error {
+func (h *PassThroughHandler) OnEvent(ctx context.Context, user rxn.Subject, event rxn.KeyedEvent) error {
 	h.sink.Collect(ctx, &httpapi.SinkRecord{
 		Topic: h.topic,
 		Data:  event.Value,
@@ -29,7 +29,7 @@ func (h *PassThroughHandler) OnEvent(ctx context.Context, user *rxn.Subject, eve
 	return nil
 }
 
-func (h *PassThroughHandler) OnTimerExpired(ctx context.Context, user *rxn.Subject, timer time.Time) error {
+func (h *PassThroughHandler) OnTimerExpired(ctx context.Context, user rxn.Subject, timer time.Time) error {
 	return nil
 }
 

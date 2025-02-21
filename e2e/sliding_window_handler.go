@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 )
 
 type SlidingWindowOutput struct {
@@ -24,7 +23,7 @@ type SlidingWindowEvent struct {
 
 type CountByMinuteCodec struct{}
 
-func (c CountByMinuteCodec) DecodeValue(b []byte) (map[time.Time]int, error) {
+func (c CountByMinuteCodec) Decode(b []byte) (map[time.Time]int, error) {
 	var buckets map[time.Time]int
 	if err := json.Unmarshal(b, &buckets); err != nil {
 		return nil, err
@@ -32,25 +31,25 @@ func (c CountByMinuteCodec) DecodeValue(b []byte) (map[time.Time]int, error) {
 	return buckets, nil
 }
 
-func (c CountByMinuteCodec) EncodeValue(value map[time.Time]int) ([]byte, error) {
+func (c CountByMinuteCodec) Encode(value map[time.Time]int) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-var _ rxn.ValueStateCodec[map[time.Time]int] = CountByMinuteCodec{}
+var _ rxn.ValueCodec[map[time.Time]int] = CountByMinuteCodec{}
 
 type SlidingWindowHandler struct {
-	sink              connectors.SinkRuntime[*httpapi.SinkRecord]
+	sink              rxn.Sink[*httpapi.SinkRecord]
 	countByMinuteSpec rxn.ValueSpec[map[time.Time]int]
 }
 
-func NewSlidingWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord], op *jobs.Operator) *SlidingWindowHandler {
+func NewSlidingWindowHandler(sink rxn.Sink[*httpapi.SinkRecord], op *topology.Operator) *SlidingWindowHandler {
 	return &SlidingWindowHandler{
 		sink:              sink,
-		countByMinuteSpec: rxn.NewValueSpec(op, "window-state", CountByMinuteCodec{}),
+		countByMinuteSpec: topology.NewValueSpec(op, "window-state", CountByMinuteCodec{}),
 	}
 }
 
-func (h *SlidingWindowHandler) OnEvent(ctx context.Context, subject *rxn.Subject, keyedEvent rxn.KeyedEvent) error {
+func (h *SlidingWindowHandler) OnEvent(ctx context.Context, subject rxn.Subject, keyedEvent rxn.KeyedEvent) error {
 	var event SlidingWindowEvent
 	if err := json.Unmarshal(keyedEvent.Value, &event); err != nil {
 		return err
@@ -74,7 +73,7 @@ func (h *SlidingWindowHandler) OnEvent(ctx context.Context, subject *rxn.Subject
 	return nil
 }
 
-func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, subject *rxn.Subject, timer time.Time) error {
+func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, subject rxn.Subject, timer time.Time) error {
 	countByMinute := h.countByMinuteSpec.StateFor(subject)
 	state := countByMinute.Value()
 	if state == nil {
@@ -115,7 +114,7 @@ func (h *SlidingWindowHandler) OnTimerExpired(ctx context.Context, subject *rxn.
 
 	// Ensure a timer is fired on the next watermark in case there are no more events
 	// for this subject.
-	subject.SetTimer(rxn.Watermark(ctx).Add(time.Minute).Truncate(time.Minute))
+	subject.SetTimer(subject.Watermark().Add(time.Minute).Truncate(time.Minute))
 
 	return nil
 }

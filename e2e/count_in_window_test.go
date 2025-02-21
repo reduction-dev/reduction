@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction-go/connectors/httpapi"
-	rxnjobs "reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -38,7 +38,7 @@ func TestCountInWindow(t *testing.T) {
 		Event{"user-1", time.UnixMilli(100)}, // High event to close the last window
 	})
 
-	jobDef := &rxnjobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -50,8 +50,8 @@ func TestCountInWindow(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
-		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewCountInWindowHandler(sink, op)
 		},
 	})
@@ -108,7 +108,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	})
 
 	testDir := t.TempDir()
-	jobDef := &rxnjobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -120,8 +120,8 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := rxnjobs.NewOperator(jobDef, "Operator", &rxnjobs.OperatorParams{
-		Handler: func(op *rxnjobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewCountInWindowHandler(sink, op)
 		},
 	})

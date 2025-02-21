@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
@@ -24,7 +24,7 @@ func TestWorkerRegistrationAfterShutdown(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1, 1))
 
 	// Start the job server
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -36,8 +36,8 @@ func TestWorkerRegistrationAfterShutdown(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -90,7 +90,7 @@ func TestWorkerRegistrationAfterKilled(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1, 1))
 
 	// Start the job server
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -102,8 +102,8 @@ func TestWorkerRegistrationAfterKilled(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})
@@ -160,7 +160,7 @@ func TestAddingStandbyWorker(t *testing.T) {
 	httpAPIServer.WriteBatch("events", binu.IntBytesList(1))
 
 	// Start the job server
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -172,8 +172,8 @@ func TestAddingStandbyWorker(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSummingHandler(sink, "sums", op)
 		},
 	})

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/workers/workerstest"
@@ -26,7 +26,7 @@ func TestSlidingWindow(t *testing.T) {
 	httpAPIServer := httpapitest.StartServer(httpapitest.WithUnboundedReading())
 	defer httpAPIServer.Close()
 
-	jobDef := &jobs.Job{
+	jobDef := &topology.Job{
 		WorkerCount:            1,
 		WorkingStorageLocation: t.TempDir(),
 	}
@@ -39,8 +39,8 @@ func TestSlidingWindow(t *testing.T) {
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
 		Addr: httpAPIServer.URL(),
 	})
-	operator := jobs.NewOperator(jobDef, "Operator", &jobs.OperatorParams{
-		Handler: func(op *jobs.Operator) rxn.OperatorHandler {
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
 			return NewSlidingWindowHandler(sink, op)
 		},
 	})
@@ -114,6 +114,6 @@ func TestSlidingWindow(t *testing.T) {
 		{Interval: "2025-01-01T09:02:00Z/2025-01-01T10:02:00Z", Sum: 4, Key: "user1"},
 
 		// A window for user1 due to user2 advancing time
-		{Interval: "2025-01-01T09:30:00Z/2025-01-01T10:30:00Z", Sum: 4, Key: "user1"},
+		{Interval: "2025-01-01T09:30:00Z/2025-01-01T10:30:00Z", Sum: 4, Key: "user1"}, // This window is missing
 	}, user1Windows)
 }

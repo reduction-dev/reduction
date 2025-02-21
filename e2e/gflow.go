@@ -5,12 +5,12 @@ import (
 	"net"
 	"time"
 
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxnsvr"
+	"reduction.dev/reduction-go/topology"
 )
 
 // One command to start and run an http server for a user handler. Any errors panic.
-func RunHandler(jobDef *jobs.Job) (server *rxnsvr.Server, stop func()) {
+func RunHandler(jobDef *topology.Job) (server *rxnsvr.Server, stop func()) {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		panic(err)

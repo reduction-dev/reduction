@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 )
 
 type UserEvent struct {
@@ -36,7 +35,7 @@ type CountInWindowEgressEvent struct {
 
 type TimestampsCodec struct{}
 
-func (c TimestampsCodec) DecodeValue(b []byte) ([]time.Time, error) {
+func (c TimestampsCodec) Decode(b []byte) ([]time.Time, error) {
 	var ts []time.Time
 	if err := json.Unmarshal(b, &ts); err != nil {
 		return nil, err
@@ -44,20 +43,20 @@ func (c TimestampsCodec) DecodeValue(b []byte) ([]time.Time, error) {
 	return ts, nil
 }
 
-func (c TimestampsCodec) EncodeValue(value []time.Time) ([]byte, error) {
+func (c TimestampsCodec) Encode(value []time.Time) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-var _ rxn.ValueStateCodec[[]time.Time] = TimestampsCodec{}
+var _ rxn.ValueCodec[[]time.Time] = TimestampsCodec{}
 
 type CountInWindowHandler struct {
-	sink           connectors.SinkRuntime[*httpapi.SinkRecord]
+	sink           rxn.Sink[*httpapi.SinkRecord]
 	timestampsSpec rxn.ValueSpec[[]time.Time]
 }
 
-func NewCountInWindowHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord], op *jobs.Operator) *CountInWindowHandler {
+func NewCountInWindowHandler(sink rxn.Sink[*httpapi.SinkRecord], op *topology.Operator) *CountInWindowHandler {
 	return &CountInWindowHandler{
-		timestampsSpec: rxn.NewValueSpec(op, "timestamps", TimestampsCodec{}),
+		timestampsSpec: topology.NewValueSpec(op, "timestamps", TimestampsCodec{}),
 		sink:           sink,
 	}
 }
@@ -74,7 +73,7 @@ func KeyEvent(ctx context.Context, rawEvent []byte) ([]rxn.KeyedEvent, error) {
 	}}, nil
 }
 
-func (h *CountInWindowHandler) OnEvent(ctx context.Context, subject *rxn.Subject, event rxn.KeyedEvent) error {
+func (h *CountInWindowHandler) OnEvent(ctx context.Context, subject rxn.Subject, event rxn.KeyedEvent) error {
 	userEvent, err := NewUserEventFromBytes(event.Value)
 	if err != nil {
 		return err
@@ -94,7 +93,7 @@ func (h *CountInWindowHandler) OnEvent(ctx context.Context, subject *rxn.Subject
 	return nil
 }
 
-func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, subject *rxn.Subject, timer time.Time) error {
+func (h *CountInWindowHandler) OnTimerExpired(ctx context.Context, subject rxn.Subject, timer time.Time) error {
 	timestamps := h.timestampsSpec.StateFor(subject)
 	ts := timestamps.Value()
 	if ts == nil {

@@ -8,27 +8,26 @@ import (
 	"io"
 	"time"
 
-	"reduction.dev/reduction-go/connectors"
 	"reduction.dev/reduction-go/connectors/httpapi"
-	"reduction.dev/reduction-go/jobs"
 	"reduction.dev/reduction-go/rxn"
+	"reduction.dev/reduction-go/topology"
 )
 
 type SummingHandler struct {
-	sink    connectors.SinkRuntime[*httpapi.SinkRecord]
+	sink    rxn.Sink[*httpapi.SinkRecord]
 	topic   string
 	sumSpec rxn.ValueSpec[int64]
 }
 
-func NewSummingHandler(sink connectors.SinkRuntime[*httpapi.SinkRecord], topic string, op *jobs.Operator) *SummingHandler {
+func NewSummingHandler(sink rxn.Sink[*httpapi.SinkRecord], topic string, op *topology.Operator) *SummingHandler {
 	return &SummingHandler{
 		sink:    sink,
 		topic:   topic,
-		sumSpec: rxn.NewValueSpec(op, "sum", rxn.ScalarCodec[int64]{}),
+		sumSpec: topology.NewValueSpec(op, "sum", rxn.ScalarValueCodec[int64]{}),
 	}
 }
 
-func (h *SummingHandler) OnEvent(ctx context.Context, subject *rxn.Subject, event rxn.KeyedEvent) error {
+func (h *SummingHandler) OnEvent(ctx context.Context, subject rxn.Subject, event rxn.KeyedEvent) error {
 	var eventInt int64
 	reader := bytes.NewReader(event.Value)
 	err := binary.Read(reader, binary.BigEndian, &eventInt)
@@ -52,7 +51,7 @@ func (h *SummingHandler) OnEvent(ctx context.Context, subject *rxn.Subject, even
 	return nil
 }
 
-func (h *SummingHandler) OnTimerExpired(ctx context.Context, subject *rxn.Subject, timer time.Time) error {
+func (h *SummingHandler) OnTimerExpired(ctx context.Context, subject rxn.Subject, timer time.Time) error {
 	return nil
 }
 

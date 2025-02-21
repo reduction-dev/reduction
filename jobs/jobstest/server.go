@@ -13,7 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
-	rxnjobs "reduction.dev/reduction-go/jobs"
+	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
@@ -78,7 +78,7 @@ type ServerParams struct {
 }
 
 // Create and run a local job server without blocking. Panics on any error.
-func Run(jd *rxnjobs.Job, options ...func(*ServerParams)) (server *Server, stop func()) {
+func Run(jd *topology.Job, options ...func(*ServerParams)) (server *Server, stop func()) {
 	synthesis, err := jd.Synthesize()
 	if err != nil {
 		panic(err)
