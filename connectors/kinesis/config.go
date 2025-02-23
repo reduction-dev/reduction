@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
@@ -49,5 +50,12 @@ func (c SourceConfig) ProtoMessage() *workerpb.Source {
 }
 
 func (c SourceConfig) IsSourceConfig() {}
+
+func SourceConfigFromProto(pb *jobconfigpb.KinesisSource) SourceConfig {
+	return SourceConfig{
+		StreamARN: pb.StreamArn,
+		Endpoint:  pb.Endpoint,
+	}
+}
 
 var _ connectors.SourceConfig = SourceConfig{}

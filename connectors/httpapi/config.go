@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
@@ -43,6 +44,13 @@ func (c SourceConfig) ProtoMessage() *workerpb.Source {
 
 func (c SourceConfig) IsSourceConfig() {}
 
+func SourceConfigFromProto(pb *jobconfigpb.HTTPAPISource) SourceConfig {
+	return SourceConfig{
+		Addr:   pb.Addr,
+		Topics: pb.Topics,
+	}
+}
+
 var _ connectors.SourceConfig = SourceConfig{}
 
 type SinkConfig struct {
@@ -64,5 +72,11 @@ func (s SinkConfig) ProtoMessage() *workerpb.Sink {
 }
 
 func (s SinkConfig) IsSinkConfig() {}
+
+func SinkConfigFromProto(pb *jobconfigpb.HTTPAPISink) SinkConfig {
+	return SinkConfig{
+		Addr: pb.Addr,
+	}
+}
 
 var _ connectors.SinkConfig = SinkConfig{}

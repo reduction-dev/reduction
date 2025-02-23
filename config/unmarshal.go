@@ -1,9 +1,10 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/connectors/httpapi"
@@ -12,91 +13,77 @@ import (
 	"reduction.dev/reduction/util/sliceu"
 )
 
-// Unmarshal the format produced by gflow/jobs. This decoding is done in the
-// core module rather than in gflow/jobs because gflow/jobs is planned to be
-// implemented in several languages.
+// Unmarshal parses a job configuration from JSON format that was marshaled using
+// protojson.Marshal(jobconfigpb.JobConfig)
 func Unmarshal(data []byte) (*Config, error) {
-	// Unmarshal as constructs of unknown types according to the shape of the JSON
-	// input.
-	var doc struct {
-		Job     construct
-		Sources map[string]construct
-		Sinks   map[string]construct
-	}
-	err := json.Unmarshal(data, &doc)
-	if err != nil {
+	var pb jobconfigpb.JobConfig
+	if err := protojson.Unmarshal(data, &pb); err != nil {
 		return nil, fmt.Errorf("invalid config document format: %v", err)
 	}
 
-	// Unmarshal the top level Config object which corresponds to "Job" in the
-	// JSON.
-	var config Config
-	if err := json.Unmarshal(doc.Job.Params, &config); err != nil {
-		return nil, fmt.Errorf("job params invalid: %v, %v", err, string(doc.Job.Params))
+	// Create the config object from the Job parameters
+	config := &Config{
+		WorkerCount:              int(pb.Job.WorkerCount),
+		KeyGroupCount:            int(pb.Job.KeyGroupCount),
+		SavepointStorageLocation: pb.Job.SavepointStorageLocation,
+		WorkingStorageLocation:   pb.Job.WorkingStorageLocation,
 	}
 
-	// Parse each source construct into concrete types.
-	config.allSources = make(map[string]connectors.SourceConfig, len(doc.Sources))
-	for id, s := range doc.Sources {
+	// Parse each source into concrete types
+	config.allSources = make(map[string]connectors.SourceConfig, len(pb.Sources))
+	for _, s := range pb.Sources {
 		var err error
-		if config.allSources[id], err = sourceFromConstruct(s); err != nil {
+		if config.allSources[s.Id], err = sourceFromProto(s); err != nil {
 			return nil, err
 		}
+		config.SourceIDs = append(config.SourceIDs, s.Id)
 	}
 
-	// Resolve the job references to sources
+	// Create the source list in the same order as SourceIDs
 	config.Sources = sliceu.Map(config.SourceIDs, func(id string) connectors.SourceConfig {
 		return config.allSources[id]
 	})
 
-	// Parse each sink construct into concrete types.
-	config.allSinks = make(map[string]connectors.SinkConfig, len(doc.Sinks))
-	for id, s := range doc.Sinks {
+	// Parse each sink into concrete types
+	config.allSinks = make(map[string]connectors.SinkConfig, len(pb.Sinks))
+	for _, s := range pb.Sinks {
 		var err error
-		if config.allSinks[id], err = sinkFromConstruct(s); err != nil {
+		if config.allSinks[s.Id], err = sinkFromProto(s); err != nil {
 			return nil, err
 		}
+		config.SinkIDs = append(config.SinkIDs, s.Id)
 	}
 
-	// Resolve the job references to Sinks
+	// Create the sink list in the same order as SinkIDs
 	config.Sinks = sliceu.Map(config.SinkIDs, func(id string) connectors.SinkConfig {
 		return config.allSinks[id]
 	})
 
-	return &config, nil
+	return config, nil
 }
 
-type construct struct {
-	Type   string
-	Params json.RawMessage
-}
-
-func sourceFromConstruct(cons construct) (connectors.SourceConfig, error) {
-	switch cons.Type {
-	case "Source:Kinesis":
-		return kinesis.ParseSourceConfig(cons.Params)
-	case "Source:HTTPAPI":
-		return httpapi.ParseSourceConfig(cons.Params)
-	case "Source:Embedded":
-		return embedded.ParseSourceConfig(cons.Params)
-	case "Source:Stdio":
-		return stdio.ParseSourceConfig(cons.Params)
+func sourceFromProto(source *jobconfigpb.Source) (connectors.SourceConfig, error) {
+	switch c := source.Config.(type) {
+	case *jobconfigpb.Source_Kinesis:
+		return kinesis.SourceConfigFromProto(c.Kinesis), nil
+	case *jobconfigpb.Source_HttpApi:
+		return httpapi.SourceConfigFromProto(c.HttpApi), nil
+	case *jobconfigpb.Source_Embedded:
+		return embedded.SourceConfigFromProto(c.Embedded), nil
+	case *jobconfigpb.Source_Stdio:
+		return stdio.SourceConfigFromProto(c.Stdio), nil
 	default:
-		return nil, fmt.Errorf("unknown source type %s", cons.Type)
+		return nil, fmt.Errorf("unknown source type %T", source.Config)
 	}
 }
 
-func sinkFromConstruct(cons construct) (connectors.SinkConfig, error) {
-	switch cons.Type {
-	case "Sink:HTTPAPI":
-		var config httpapi.SinkConfig
-		if err := json.Unmarshal(cons.Params, &config); err != nil {
-			return nil, err
-		}
-		return config, nil
-	case "Sink:Stdio":
-		return &stdio.SinkConfig{}, nil
+func sinkFromProto(sink *jobconfigpb.Sink) (connectors.SinkConfig, error) {
+	switch c := sink.Config.(type) {
+	case *jobconfigpb.Sink_HttpApi:
+		return httpapi.SinkConfigFromProto(c.HttpApi), nil
+	case *jobconfigpb.Sink_Stdio:
+		return stdio.SinkConfigFromProto(c.Stdio), nil
 	default:
-		return nil, fmt.Errorf("unknown sink type %s", cons.Type)
+		return nil, fmt.Errorf("unknown sink type %T", sink.Config)
 	}
 }

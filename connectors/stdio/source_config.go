@@ -3,6 +3,7 @@ package stdio
 import (
 	"encoding/json"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
@@ -49,6 +50,14 @@ func (s *SourceConfig) Validate() error {
 
 func (s *SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return &SourceSplitter{}
+}
+
+func SourceConfigFromProto(pb *jobconfigpb.StdioSource) *SourceConfig {
+	return &SourceConfig{
+		Framing: Framing{
+			Delimiter: pb.Framing.Delimiter,
+		},
+	}
 }
 
 var _ connectors.SourceConfig = (*SourceConfig)(nil)

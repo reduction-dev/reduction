@@ -3,6 +3,7 @@ package embedded
 import (
 	"encoding/json"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
@@ -53,5 +54,13 @@ func (s SourceConfig) ProtoMessage() *workerpb.Source {
 }
 
 func (s SourceConfig) IsSourceConfig() {}
+
+func SourceConfigFromProto(pb *jobconfigpb.EmbeddedSource) SourceConfig {
+	return SourceConfig{
+		SplitCount:  int(pb.SplitCount),
+		BatchSize:   int(pb.BatchSize),
+		GeneratorID: jobconfigpb.EmbeddedSource_GeneratorType_name[int32(pb.Generator)],
+	}
+}
 
 var _ connectors.SourceConfig = SourceConfig{}
