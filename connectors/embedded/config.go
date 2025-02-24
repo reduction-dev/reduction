@@ -37,8 +37,6 @@ func (s SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	}
 }
 
-func (s SourceConfig) IsSourceConfig() {}
-
 func SourceConfigFromProto(pb *jobconfigpb.EmbeddedSource) SourceConfig {
 	config := SourceConfig{
 		SplitCount:  int(pb.SplitCount),

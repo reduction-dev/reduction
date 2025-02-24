@@ -42,8 +42,6 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	}
 }
 
-func (c SourceConfig) IsSourceConfig() {}
-
 func SourceConfigFromProto(pb *jobconfigpb.KinesisSource) SourceConfig {
 	return SourceConfig{
 		StreamARN: pb.StreamArn,

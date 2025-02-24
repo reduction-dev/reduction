@@ -34,8 +34,6 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	}
 }
 
-func (c SourceConfig) IsSourceConfig() {}
-
 func SourceConfigFromProto(pb *jobconfigpb.HTTPAPISource) SourceConfig {
 	return SourceConfig{
 		Addr:   pb.Addr,

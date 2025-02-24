@@ -7,8 +7,6 @@ import (
 
 type SinkConfig struct{}
 
-func (s *SinkConfig) IsSinkConfig() {}
-
 func (s *SinkConfig) ProtoMessage() *jobconfigpb.Sink {
 	return &jobconfigpb.Sink{
 		Config: &jobconfigpb.Sink_Stdio{},

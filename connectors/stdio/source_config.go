@@ -14,8 +14,6 @@ type Framing struct {
 	LengthEncoded bool
 }
 
-func (s SourceConfig) IsSourceConfig() {}
-
 func (s SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_Stdio{

@@ -41,7 +41,6 @@ type SinkWriter interface {
 
 type SourceConfig interface {
 	Validate() error
-	IsSourceConfig()
 	NewSourceSplitter() SourceSplitter
 	NewSourceReader() SourceReader
 	ProtoMessage() *jobconfigpb.Source
@@ -50,7 +49,6 @@ type SourceConfig interface {
 type SinkConfig interface {
 	Validate() error
 	ProtoMessage() *jobconfigpb.Sink
-	IsSinkConfig()
 	NewSink() SinkWriter
 }
 
