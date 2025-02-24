@@ -20,6 +20,10 @@ func (s SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(s)
 }
 
+func (s SourceConfig) NewSourceReader() connectors.SourceReader {
+	return NewSourceReader(s)
+}
+
 func (s SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	generatorEnumValue := jobconfigpb.EmbeddedSource_GeneratorType_value[s.GeneratorID]
 	return &jobconfigpb.Source{

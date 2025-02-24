@@ -15,6 +15,10 @@ func (s *SinkConfig) ProtoMessage() *jobconfigpb.Sink {
 	}
 }
 
+func (s *SinkConfig) NewSink() connectors.SinkWriter {
+	return &Sink{}
+}
+
 func (s *SinkConfig) Validate() error {
 	return nil
 }

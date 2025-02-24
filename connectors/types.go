@@ -43,6 +43,7 @@ type SourceConfig interface {
 	Validate() error
 	IsSourceConfig()
 	NewSourceSplitter() SourceSplitter
+	NewSourceReader() SourceReader
 	ProtoMessage() *jobconfigpb.Source
 }
 
@@ -50,6 +51,7 @@ type SinkConfig interface {
 	Validate() error
 	ProtoMessage() *jobconfigpb.Sink
 	IsSinkConfig()
+	NewSink() SinkWriter
 }
 
 var ErrEndOfInput = errors.New("end of input")

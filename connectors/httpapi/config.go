@@ -19,6 +19,10 @@ func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(c)
 }
 
+func (c SourceConfig) NewSourceReader() connectors.SourceReader {
+	return NewSourceReader(c)
+}
+
 func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_HttpApi{
@@ -60,6 +64,10 @@ func (s SinkConfig) ProtoMessage() *jobconfigpb.Sink {
 }
 
 func (s SinkConfig) IsSinkConfig() {}
+
+func (s SinkConfig) NewSink() connectors.SinkWriter {
+	return NewSink(s)
+}
 
 func SinkConfigFromProto(pb *jobconfigpb.HTTPAPISink) SinkConfig {
 	return SinkConfig{

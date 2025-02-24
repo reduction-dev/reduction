@@ -14,9 +14,9 @@ type Framing struct {
 	LengthEncoded bool
 }
 
-func (s *SourceConfig) IsSourceConfig() {}
+func (s SourceConfig) IsSourceConfig() {}
 
-func (s *SourceConfig) ProtoMessage() *jobconfigpb.Source {
+func (s SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_Stdio{
 			Stdio: &jobconfigpb.StdioSource{
@@ -32,12 +32,16 @@ func (s *SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	}
 }
 
-func (s *SourceConfig) Validate() error {
+func (s SourceConfig) Validate() error {
 	return nil
 }
 
-func (s *SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
+func (s SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return &SourceSplitter{}
+}
+
+func (s SourceConfig) NewSourceReader() connectors.SourceReader {
+	return NewSourceReader(s)
 }
 
 func SourceConfigFromProto(pb *jobconfigpb.StdioSource) *SourceConfig {

@@ -70,7 +70,11 @@ func New(params NewParams) *SourceRunner {
 
 	if params.SourceReaderFactory == nil {
 		params.SourceReaderFactory = func(source *jobconfigpb.Source) connectors.SourceReader {
-			return config.NewSourceReaderFromProto(source)
+			sourceConfig, err := config.SourceFromProto(source)
+			if err != nil {
+				panic(fmt.Sprintf("invalid source config: %v", err))
+			}
+			return sourceConfig.NewSourceReader()
 		}
 	}
 

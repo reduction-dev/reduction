@@ -30,7 +30,7 @@ func Unmarshal(data []byte) (*Config, error) {
 
 	// Create sources from the proto messages
 	for _, s := range pb.Sources {
-		sourceConfig, err := sourceFromProto(s)
+		sourceConfig, err := SourceFromProto(s)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +49,7 @@ func Unmarshal(data []byte) (*Config, error) {
 	return config, nil
 }
 
-func sourceFromProto(source *jobconfigpb.Source) (connectors.SourceConfig, error) {
+func SourceFromProto(source *jobconfigpb.Source) (connectors.SourceConfig, error) {
 	switch c := source.Config.(type) {
 	case *jobconfigpb.Source_Kinesis:
 		return kinesis.SourceConfigFromProto(c.Kinesis), nil

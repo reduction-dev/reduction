@@ -27,6 +27,10 @@ func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(c)
 }
 
+func (c SourceConfig) NewSourceReader() connectors.SourceReader {
+	return NewSourceReader(c)
+}
+
 func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_Kinesis{
