@@ -18,15 +18,8 @@ type Config struct {
 	KeyGroupCount            int
 	SavepointStorageLocation string
 	WorkingStorageLocation   string
-	SourceIDs                []string
-	Sources                  []connectors.SourceConfig `json:"-"`
-	SinkIDs                  []string
-	Sinks                    []connectors.SinkConfig `json:"-"`
-
-	// Temporary storage of all concrete source types used to hydrate references
-	allSources map[string]connectors.SourceConfig
-	// Temporary storage of all concrete sink types used to hydrate references
-	allSinks map[string]connectors.SinkConfig
+	Sources                  []connectors.SourceConfig
+	Sinks                    []connectors.SinkConfig
 }
 
 func (c *Config) Validate() (err error) {

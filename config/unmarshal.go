@@ -10,7 +10,6 @@ import (
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/stdio"
-	"reduction.dev/reduction/util/sliceu"
 )
 
 // Unmarshal parses a job configuration from JSON format that was marshaled using
@@ -29,35 +28,23 @@ func Unmarshal(data []byte) (*Config, error) {
 		WorkingStorageLocation:   pb.Job.WorkingStorageLocation,
 	}
 
-	// Parse each source into concrete types
-	config.allSources = make(map[string]connectors.SourceConfig, len(pb.Sources))
+	// Create sources from the proto messages
 	for _, s := range pb.Sources {
-		var err error
-		if config.allSources[s.Id], err = sourceFromProto(s); err != nil {
+		sourceConfig, err := sourceFromProto(s)
+		if err != nil {
 			return nil, err
 		}
-		config.SourceIDs = append(config.SourceIDs, s.Id)
+		config.Sources = append(config.Sources, sourceConfig)
 	}
 
-	// Create the source list in the same order as SourceIDs
-	config.Sources = sliceu.Map(config.SourceIDs, func(id string) connectors.SourceConfig {
-		return config.allSources[id]
-	})
-
-	// Parse each sink into concrete types
-	config.allSinks = make(map[string]connectors.SinkConfig, len(pb.Sinks))
+	// Create sinks from the proto messages
 	for _, s := range pb.Sinks {
-		var err error
-		if config.allSinks[s.Id], err = sinkFromProto(s); err != nil {
+		sinkConfig, err := sinkFromProto(s)
+		if err != nil {
 			return nil, err
 		}
-		config.SinkIDs = append(config.SinkIDs, s.Id)
+		config.Sinks = append(config.Sinks, sinkConfig)
 	}
-
-	// Create the sink list in the same order as SinkIDs
-	config.Sinks = sliceu.Map(config.SinkIDs, func(id string) connectors.SinkConfig {
-		return config.allSinks[id]
-	})
 
 	return config, nil
 }
