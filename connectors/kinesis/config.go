@@ -1,7 +1,6 @@
 package kinesis
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -9,15 +8,6 @@ import (
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/workerpb"
 )
-
-// ParseSourceConfig parses and validates a Kinesis source configuration
-func ParseSourceConfig(data []byte) (SourceConfig, error) {
-	var config SourceConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return SourceConfig{}, err
-	}
-	return config, nil
-}
 
 // SourceConfig contains configuration for the Kinesis source connector
 type SourceConfig struct {
