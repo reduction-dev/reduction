@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/stdio"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 // The object representing Job configuration.
@@ -43,28 +43,28 @@ func (c *Config) Validate() (err error) {
 	return err
 }
 
-func NewSourceReaderFromProto(source *workerpb.Source) connectors.SourceReader {
+func NewSourceReaderFromProto(source *jobconfigpb.Source) connectors.SourceReader {
 	switch t := source.Config.(type) {
-	case *workerpb.Source_HttpApiConfig:
+	case *jobconfigpb.Source_HttpApi:
 		return httpapi.NewSourceReader(httpapi.SourceConfig{
-			Addr:   t.HttpApiConfig.Addr,
-			Topics: t.HttpApiConfig.Topics,
+			Addr:   t.HttpApi.Addr,
+			Topics: t.HttpApi.Topics,
 		})
-	case *workerpb.Source_KinesisConfig:
+	case *jobconfigpb.Source_Kinesis:
 		return kinesis.NewSourceReader(kinesis.SourceConfig{
-			StreamARN: t.KinesisConfig.StreamArn,
-			Endpoint:  t.KinesisConfig.Endpoint,
+			StreamARN: t.Kinesis.StreamArn,
+			Endpoint:  t.Kinesis.Endpoint,
 		})
-	case *workerpb.Source_EmbeddedConfig:
+	case *jobconfigpb.Source_Embedded:
 		return embedded.NewSourceReader(embedded.SourceConfig{
-			SplitCount:  int(t.EmbeddedConfig.SplitCount),
-			BatchSize:   int(t.EmbeddedConfig.BatchSize),
-			GeneratorID: t.EmbeddedConfig.Generator,
+			SplitCount:  int(t.Embedded.SplitCount),
+			BatchSize:   int(t.Embedded.BatchSize),
+			GeneratorID: t.Embedded.Generator.Enum().String(),
 		})
-	case *workerpb.Source_StdioConfig:
+	case *jobconfigpb.Source_Stdio:
 		return stdio.NewSourceReader(stdio.SourceConfig{
 			Framing: stdio.Framing{
-				Delimiter: t.StdioConfig.GetFraming().GetDelimited().Delimiter,
+				Delimiter: t.Stdio.Framing.GetDelimited().Delimiter,
 			},
 		})
 	default:
@@ -72,13 +72,13 @@ func NewSourceReaderFromProto(source *workerpb.Source) connectors.SourceReader {
 	}
 }
 
-func NewSinkFromProto(sink *workerpb.Sink) connectors.SinkWriter {
+func NewSinkFromProto(sink *jobconfigpb.Sink) connectors.SinkWriter {
 	switch t := sink.Config.(type) {
-	case *workerpb.Sink_HttpApiConfig:
+	case *jobconfigpb.Sink_HttpApi:
 		return httpapi.NewSink(httpapi.SinkConfig{
-			Addr: t.HttpApiConfig.Addr,
+			Addr: t.HttpApi.Addr,
 		})
-	case *workerpb.Sink_StdioConfig:
+	case *jobconfigpb.Sink_Stdio:
 		return stdio.NewSink(stdio.SinkConfig{})
 	default:
 		panic("unknown proto sink type")

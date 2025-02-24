@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
@@ -42,12 +43,12 @@ type SourceConfig interface {
 	Validate() error
 	IsSourceConfig()
 	NewSourceSplitter() SourceSplitter
-	ProtoMessage() *workerpb.Source
+	ProtoMessage() *jobconfigpb.Source
 }
 
 type SinkConfig interface {
 	Validate() error
-	ProtoMessage() *workerpb.Sink
+	ProtoMessage() *jobconfigpb.Sink
 	IsSinkConfig()
 }
 

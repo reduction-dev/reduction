@@ -4,6 +4,7 @@ import "google/protobuf/timestamp.proto";
 import "proto/snapshotpb/snapshot.proto";
 import "proto/jobpb/job.proto";
 import "handlerpb/handler.proto";
+import "jobconfigpb/jobconfig.proto";
 option go_package = "reduction.dev/reduction/proto/workerpb";
 
 package worker;
@@ -23,21 +24,8 @@ message StartOperatorRequest {
   repeated string source_runner_ids = 2;
   repeated snapshot.OperatorCheckpoint checkpoints = 3;
   int32 key_group_count = 4;
-  repeated Sink sinks = 5;
+  repeated dev.reduction.jobconfig.Sink sinks = 5;
   string storage_location = 6;
-}
-
-message Sink {
-  message HTTPAPI {
-    string addr = 1;
-  }
-
-  message Stdio {}
-
-  oneof config {
-    HTTPAPI http_api_config = 1;
-    Stdio stdio_config = 2;
-  }
 }
 
 message Empty{}
@@ -76,51 +64,9 @@ message StartSourceRunnerRequest {
   repeated SourceSplit splits = 1;
   repeated job.NodeIdentity operators = 2;
   int32 key_group_count = 3;
-  repeated Source sources = 4;
+  repeated dev.reduction.jobconfig.Source sources = 4;
 }
 
 message StartCheckpointRequest {
   uint64 checkpoint_id = 1;
-}
-
-message Source {
-  message HTTPAPI {
-    string addr = 1;
-    repeated string topics = 2;
-  }
-
-  message Kinesis {
-    string stream_arn = 1;
-    string endpoint = 2;
-  }
-
-  message Embedded {
-    int32 split_count = 1;
-    int32 batch_size = 2;
-    string generator = 3;
-  }
-
-  message Stdio {
-    StdioFraming framing = 1;
-  }
-
-  oneof config {
-    HTTPAPI http_api_config = 1;
-    Kinesis kinesis_config = 2;
-    Embedded embedded_config = 3;
-    Stdio stdio_config = 4;
-  }
-}
-
-message StdioFraming {
-  message LengthEncoded {}
-  
-  message Delimited {
-    bytes delimiter = 1;
-  }
-
-  oneof config {
-    LengthEncoded length_encoded = 1;
-    Delimited delimited = 2;
-  }
 }

@@ -6,7 +6,6 @@ import (
 
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 // SourceConfig contains configuration for the Kinesis source connector
@@ -28,10 +27,10 @@ func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(c)
 }
 
-func (c SourceConfig) ProtoMessage() *workerpb.Source {
-	return &workerpb.Source{
-		Config: &workerpb.Source_KinesisConfig{
-			KinesisConfig: &workerpb.Source_Kinesis{
+func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
+	return &jobconfigpb.Source{
+		Config: &jobconfigpb.Source_Kinesis{
+			Kinesis: &jobconfigpb.KinesisSource{
 				StreamArn: c.StreamARN,
 				Endpoint:  c.Endpoint,
 			},

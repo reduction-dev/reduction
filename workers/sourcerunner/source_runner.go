@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"reduction.dev/reduction-protocol/handlerpb"
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
@@ -38,7 +39,7 @@ type SourceRunner struct {
 	stopLoop            context.CancelFunc      // Signal to stop the event loop if running
 	stop                context.CancelCauseFunc // Signal to stop all source runner processes
 	operatorFactory     proto.OperatorFactory
-	sourceReaderFactory func(*workerpb.Source) connectors.SourceReader
+	sourceReaderFactory func(*jobconfigpb.Source) connectors.SourceReader
 	errChan             chan error
 	batchingParams      batching.EventBatcherParams
 	outputStream        chan *workerpb.Event
@@ -58,7 +59,7 @@ type NewParams struct {
 	Job                 proto.Job
 	Clock               clocks.Clock
 	OperatorFactory     proto.OperatorFactory
-	SourceReaderFactory func(*workerpb.Source) connectors.SourceReader
+	SourceReaderFactory func(*jobconfigpb.Source) connectors.SourceReader
 	EventBatching       batching.EventBatcherParams
 }
 
@@ -68,7 +69,7 @@ func New(params NewParams) *SourceRunner {
 	}
 
 	if params.SourceReaderFactory == nil {
-		params.SourceReaderFactory = func(source *workerpb.Source) connectors.SourceReader {
+		params.SourceReaderFactory = func(source *jobconfigpb.Source) connectors.SourceReader {
 			return config.NewSourceReaderFromProto(source)
 		}
 	}

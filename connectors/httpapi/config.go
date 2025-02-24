@@ -3,7 +3,6 @@ package httpapi
 import (
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 // SourceConfig contains configuration for the HTTP API source connector
@@ -20,10 +19,10 @@ func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(c)
 }
 
-func (c SourceConfig) ProtoMessage() *workerpb.Source {
-	return &workerpb.Source{
-		Config: &workerpb.Source_HttpApiConfig{
-			HttpApiConfig: &workerpb.Source_HTTPAPI{
+func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
+	return &jobconfigpb.Source{
+		Config: &jobconfigpb.Source_HttpApi{
+			HttpApi: &jobconfigpb.HTTPAPISource{
 				Addr:   c.Addr,
 				Topics: c.Topics,
 			},
@@ -50,10 +49,10 @@ func (s SinkConfig) Validate() error {
 	return connectors.ValidateURL(s.Addr)
 }
 
-func (s SinkConfig) ProtoMessage() *workerpb.Sink {
-	return &workerpb.Sink{
-		Config: &workerpb.Sink_HttpApiConfig{
-			HttpApiConfig: &workerpb.Sink_HTTPAPI{
+func (s SinkConfig) ProtoMessage() *jobconfigpb.Sink {
+	return &jobconfigpb.Sink{
+		Config: &jobconfigpb.Sink_HttpApi{
+			HttpApi: &jobconfigpb.HTTPAPISink{
 				Addr: s.Addr,
 			},
 		},

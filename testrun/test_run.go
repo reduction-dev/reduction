@@ -9,6 +9,7 @@ import (
 
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction-protocol/testrunpb"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/workerpb"
@@ -40,7 +41,7 @@ func Run(input io.Reader, output io.Writer) error {
 		OperatorIds:     []string{"testrun"},
 		SourceRunnerIds: []string{"testrun"},
 		KeyGroupCount:   1,
-		Sinks:           []*workerpb.Sink{},
+		Sinks:           []*jobconfigpb.Sink{},
 		StorageLocation: "memory:///storage",
 	}, nil)
 	if err != nil {

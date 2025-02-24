@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"golang.org/x/sync/errgroup"
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/partitioning"
@@ -94,7 +95,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 				Splits:        splitAssignments[sr.ID()],
 				Operators:     opIdentities,
 				KeyGroupCount: int32(cfg.KeyGroupCount),
-				Sources: sliceu.Map(cfg.Sources, func(s connectors.SourceConfig) *workerpb.Source {
+				Sources: sliceu.Map(cfg.Sources, func(s connectors.SourceConfig) *jobconfigpb.Source {
 					return s.ProtoMessage()
 				}),
 			})
@@ -115,7 +116,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 				SourceRunnerIds: srIDs,
 				Checkpoints:     sliceu.Pick(ckpt.GetOperatorCheckpoints(), opCkptAssignments[i]),
 				KeyGroupCount:   int32(cfg.KeyGroupCount),
-				Sinks: sliceu.Map(cfg.Sinks, func(s connectors.SinkConfig) *workerpb.Sink {
+				Sinks: sliceu.Map(cfg.Sinks, func(s connectors.SinkConfig) *jobconfigpb.Sink {
 					return s.ProtoMessage()
 				}),
 				StorageLocation: cfg.WorkingStorageLocation,

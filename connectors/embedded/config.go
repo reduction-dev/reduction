@@ -3,7 +3,6 @@ package embedded
 import (
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 // SourceConfig contains configuration for the embedded source connector
@@ -21,13 +20,14 @@ func (s SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 	return NewSourceSplitter(s)
 }
 
-func (s SourceConfig) ProtoMessage() *workerpb.Source {
-	return &workerpb.Source{
-		Config: &workerpb.Source_EmbeddedConfig{
-			EmbeddedConfig: &workerpb.Source_Embedded{
+func (s SourceConfig) ProtoMessage() *jobconfigpb.Source {
+	generatorEnumValue := jobconfigpb.EmbeddedSource_GeneratorType_value[s.GeneratorID]
+	return &jobconfigpb.Source{
+		Config: &jobconfigpb.Source_Embedded{
+			Embedded: &jobconfigpb.EmbeddedSource{
 				SplitCount: int32(s.SplitCount),
 				BatchSize:  int32(s.BatchSize),
-				Generator:  s.GeneratorID,
+				Generator:  jobconfigpb.EmbeddedSource_GeneratorType(generatorEnumValue),
 			},
 		},
 	}

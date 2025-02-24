@@ -3,7 +3,6 @@ package stdio
 import (
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 type SourceConfig struct {
@@ -17,13 +16,13 @@ type Framing struct {
 
 func (s *SourceConfig) IsSourceConfig() {}
 
-func (s *SourceConfig) ProtoMessage() *workerpb.Source {
-	return &workerpb.Source{
-		Config: &workerpb.Source_StdioConfig{
-			StdioConfig: &workerpb.Source_Stdio{
-				Framing: &workerpb.StdioFraming{
-					Config: &workerpb.StdioFraming_Delimited_{
-						Delimited: &workerpb.StdioFraming_Delimited{
+func (s *SourceConfig) ProtoMessage() *jobconfigpb.Source {
+	return &jobconfigpb.Source{
+		Config: &jobconfigpb.Source_Stdio{
+			Stdio: &jobconfigpb.StdioSource{
+				Framing: &jobconfigpb.Framing{
+					Scheme: &jobconfigpb.Framing_Delimited{
+						Delimited: &jobconfigpb.Framing_DelimitedScheme{
 							Delimiter: s.Framing.Delimiter,
 						},
 					},
@@ -44,7 +43,7 @@ func (s *SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
 func SourceConfigFromProto(pb *jobconfigpb.StdioSource) *SourceConfig {
 	return &SourceConfig{
 		Framing: Framing{
-			Delimiter: pb.Framing.Delimiter,
+			Delimiter: pb.Framing.GetDelimited().Delimiter,
 		},
 	}
 }
