@@ -61,8 +61,6 @@ func (s SinkConfig) ProtoMessage() *jobconfigpb.Sink {
 	}
 }
 
-func (s SinkConfig) IsSinkConfig() {}
-
 func (s SinkConfig) NewSink() connectors.SinkWriter {
 	return NewSink(s)
 }

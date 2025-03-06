@@ -24,7 +24,7 @@ func (r KeyGroupRange) Overlaps(other KeyGroupRange) bool {
 }
 
 func (r KeyGroupRange) String() string {
-	return fmt.Sprintf("[%d, %d)", r.Start, r.End)
+	return fmt.Sprintf("[%d, %d]", r.Start, r.End)
 }
 
 func (r KeyGroupRange) Size() int {

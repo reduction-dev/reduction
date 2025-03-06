@@ -86,7 +86,7 @@ func (w *Worker) Start(ctx context.Context) error {
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
-		return fmt.Errorf("worker start returned: %v", err)
+		return fmt.Errorf("worker stopped with error: %v", err)
 	}
 
 	w.log.Info("stopping", w.diagnostics...)

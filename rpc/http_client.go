@@ -53,7 +53,7 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		if resp.StatusCode == 0 || (resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented) || resp.StatusCode == http.StatusTooManyRequests {
-			return fmt.Errorf("http status: %s, %w", resp.Status, errRetry)
+			return fmt.Errorf("status=%q url=%s: %w", resp.Status, req.URL.String(), errRetry)
 		}
 
 		return nil

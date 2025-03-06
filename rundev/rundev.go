@@ -48,7 +48,7 @@ func Run(params RunParams) error {
 	g.Go(func() error {
 		return handlerCmd(ctx, params.Executable).Run()
 	})
-	if err := waitUntilHealthy(ctx, ":8080", 100*time.Millisecond, 2*time.Second); err != nil {
+	if err := waitUntilHealthy(ctx, "http://localhost:8080", 100*time.Millisecond, 2*time.Second); err != nil {
 		cancel(err)
 		return err
 	}
@@ -58,7 +58,7 @@ func Run(params RunParams) error {
 	worker := workerserver.NewServer(workerserver.NewServerParams{
 		Addr:         addr,
 		JobAddr:      jobServer.RPCListener.Addr().String(), // Use job's random port
-		HandlerAddr:  ":8080",
+		HandlerAddr:  "localhost:8080",                      // The Node connect server needs the hostname
 		DBDir:        "./storage/dkv",
 		SavepointDir: "./storage/savepoints",
 	})

@@ -31,8 +31,10 @@ func main() {
 				return nil
 			},
 		}, {
-			Name:  "job",
-			Usage: "Start a Reduction Job",
+			Name:      "job",
+			Usage:     "Start a Reduction Job",
+			Args:      true,
+			ArgsUsage: "<config>",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  "admin-port",
@@ -54,22 +56,19 @@ func main() {
 			Usage: "Start a Reduction worker",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:     "job-addr",
-					Value:    "127.0.0.1:8081",
-					Usage:    "the address used to call the job server.",
-					Required: true,
+					Name:  "job-addr",
+					Value: "127.0.0.1:8081",
+					Usage: "the address used to call the job server.",
 				},
 				&cli.StringFlag{
-					Name:     "handler-addr",
-					Value:    "127.0.0.1:8080",
-					Usage:    "the address used to call the handler server.",
-					Required: true,
+					Name:  "handler-addr",
+					Value: "127.0.0.1:8080",
+					Usage: "the address used to call the handler server.",
 				},
 				&cli.IntFlag{
-					Name:     "port",
-					Value:    0,
-					Usage:    "specify the worker port to run on",
-					Required: false,
+					Name:  "port",
+					Value: 0,
+					Usage: "specify the worker port to run on",
 				},
 			},
 			Action: func(ctx *cli.Context) error {
@@ -88,11 +87,20 @@ func main() {
 					Usage:    "the address used to call the worker server.",
 					Required: false,
 				},
+				&cli.BoolFlag{
+					Name:    "verbose",
+					Aliases: []string{"v"},
+					Usage:   "enable verbose logging",
+				},
 			},
 			Args:      true,
 			ArgsUsage: "<executable>",
 			Action: func(ctx *cli.Context) error {
-				logging.SetLevel(slog.LevelWarn)
+				level := slog.LevelWarn
+				if ctx.Bool("verbose") {
+					level = slog.LevelInfo
+				}
+				logging.SetLevel(level)
 				slog.SetDefault(slog.New(logging.NewTextHandler()))
 				executable := ctx.Args().First()
 				if executable == "" {

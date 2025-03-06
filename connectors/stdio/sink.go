@@ -13,7 +13,7 @@ func NewSink(config SinkConfig) *Sink {
 }
 
 func (s *Sink) Write(v []byte) error {
-	fmt.Println(string(v))
+	fmt.Print(string(v))
 	return nil
 }
 
