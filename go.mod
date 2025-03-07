@@ -1,6 +1,8 @@
 module reduction.dev/reduction
 
-go 1.23
+go 1.24
+
+toolchain go1.24.0
 
 require (
 	connectrpc.com/connect v1.18.1
@@ -17,8 +19,8 @@ require (
 	golang.org/x/sync v0.11.0
 	golang.org/x/text v0.22.0
 	google.golang.org/protobuf v1.36.3
-	reduction.dev/reduction-go v0.0.0-20250210214717-06a503b6cdff
-	reduction.dev/reduction-protocol v0.0.0-20250210143955-557cf6435194
+	reduction.dev/reduction-go v0.0.3
+	reduction.dev/reduction-protocol v0.0.2
 )
 
 require (
@@ -30,7 +32,6 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	golang.org/x/net v0.35.0 // indirect
 )
 
 require (
@@ -53,7 +54,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.20.5
-	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
