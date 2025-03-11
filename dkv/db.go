@@ -24,6 +24,7 @@ var compactionQueue = bg.NewQueue(5)
 type DB struct {
 	fs          storage.FileSystem
 	wal         *wal.Writer
+	maxWALSize  uint64
 	mtables     *memtable.List
 	sstables    *sst.LevelList
 	tableWriter *sst.TableWriter
@@ -43,6 +44,7 @@ type DBOptions struct {
 	FileSystem                  storage.FileSystem
 	MemTableSize                uint64
 	TargetFileSize              uint64
+	MaxWALSize                  uint64 // Maximum size of the WAL before forcing a memtable flush
 	NumLevels                   int
 	L0TableNumCompactionTrigger int
 	Partition                   Partition
@@ -67,6 +69,10 @@ func New(options DBOptions) *DB {
 	// Default table file size to 256 MB
 	if options.TargetFileSize == 0 {
 		options.TargetFileSize = 256 * size.MB
+	}
+	// Default WAL size to 64 MB
+	if options.MaxWALSize == 0 {
+		options.MaxWALSize = 64 * size.MB
 	}
 	// Default L0 compaction trigger to 2
 	if options.L0TableNumCompactionTrigger == 0 {
@@ -98,6 +104,7 @@ func New(options DBOptions) *DB {
 		}),
 		sstables:    sst.NewEmptyLevelList(6),
 		tableWriter: tw,
+		maxWALSize:  options.MaxWALSize,
 		compactor:   compactor,
 		mu:          &sync.RWMutex{},
 		fs:          options.FileSystem,
@@ -119,7 +126,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 
 	// Starting from scratch
 	if db.checkpoints.IsEmpty() {
-		db.wal = wal.NewWriter(db.fs, 0)
+		db.wal = wal.NewWriter(db.fs, 0, db.maxWALSize)
 		return nil
 	}
 
@@ -132,7 +139,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 	db.seqNum = latestCP.Levels.LatestSeqNum
 
 	// Start a new writer that doesn't write to a file yet.
-	db.wal = wal.NewWriter(db.fs, latestCP.NextWALID())
+	db.wal = wal.NewWriter(db.fs, latestCP.NextWALID(), db.maxWALSize)
 
 	// Replay the WAL
 	db.logger.Info("db.start replaying the WAL")
@@ -154,20 +161,22 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 
 func (db *DB) Put(key []byte, value []byte) {
 	nextSeqNum := db.seqNum + 1
-	db.wal.Put(key, value, nextSeqNum)
+	walFull := db.wal.Put(key, value, nextSeqNum)
+	mtFull := db.mtables.Put(key, value, nextSeqNum)
 	db.seqNum = nextSeqNum
 
-	if full := db.mtables.Put(key, value, nextSeqNum); full {
+	if walFull || mtFull {
 		db.rotateMemtable()
 	}
 }
 
 func (db *DB) Delete(key []byte) {
 	nextSeqNum := db.seqNum + 1
-	db.wal.Delete(key, nextSeqNum)
+	walFull := db.wal.Delete(key, nextSeqNum)
+	mtFull := db.mtables.Delete(key, nextSeqNum)
 	db.seqNum = nextSeqNum
 
-	if full := db.mtables.Delete(key, nextSeqNum); full {
+	if walFull || mtFull {
 		db.rotateMemtable()
 	}
 }

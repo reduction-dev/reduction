@@ -390,7 +390,7 @@ func (o *Operator) processEventBatch(ctx context.Context, batchToken batching.Ba
 	for _, keyResult := range resp.KeyResults {
 		// Register any new timers
 		for _, t := range keyResult.NewTimers {
-			o.Logger.Info("registering timer", "timer", t)
+			o.Logger.Debug("registering timer", "timer", t)
 			o.timerRegistry.SetTimer(keyResult.Key, t.AsTime())
 		}
 		// Apply state mutations

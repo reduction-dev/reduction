@@ -16,13 +16,14 @@ import (
 
 func TestReplay(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
-	w := wal.NewWriter(fs, 0)
+	w := wal.NewWriter(fs, 0, 1024) // Use large enough size to avoid hitting limit
 
 	entries := slices.Collect(dkvtest.SequentialEntriesSeq(10, 0))
 	firstHalf, secondHalf := entries[:5], entries[5:]
 
 	for _, e := range firstHalf {
-		w.Put(e.Key(), e.Value(), e.SeqNum())
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		assert.False(t, full)
 	}
 
 	firstHalfSeqNum := len(firstHalf) - 1
@@ -33,7 +34,8 @@ func TestReplay(t *testing.T) {
 	// And only replay entries after the checkpoint's seqNum.
 
 	for _, e := range secondHalf {
-		w.Put(e.Key(), e.Value(), e.SeqNum())
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		assert.False(t, full)
 	}
 
 	require.NoError(t, w.Save())
@@ -46,7 +48,7 @@ func TestReplay(t *testing.T) {
 
 func TestReplayEmptyFile(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
-	w := wal.NewWriter(fs, 0)
+	w := wal.NewWriter(fs, 0, 1024)
 	require.NoError(t, w.Save())
 
 	r := wal.NewReader(fs, w.Handle(0))
@@ -57,12 +59,13 @@ func TestReplayEmptyFile(t *testing.T) {
 
 func TestTruncate(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
-	w := wal.NewWriter(fs, 0)
+	w := wal.NewWriter(fs, 0, 1024)
 
 	putEntries := slices.Collect(dkvtest.SequentialEntriesSeq(10, 1))
 	for chunk := range slices.Chunk(putEntries, 3) {
 		for _, e := range chunk {
-			w.Put(e.Key(), e.Value(), e.SeqNum())
+			full := w.Put(e.Key(), e.Value(), e.SeqNum())
+			assert.False(t, full)
 		}
 		w.Cut()
 	}
@@ -98,20 +101,22 @@ func TestTruncate(t *testing.T) {
 // data.
 func TestRotateWithNoTruncation(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
-	w := wal.NewWriter(fs, 0)
+	w := wal.NewWriter(fs, 0, 1024)
 
 	entries := slices.Collect(dkvtest.SequentialEntriesSeq(10, 1))
 	firstHalf, secondHalf := entries[:5], entries[5:]
 
 	for _, e := range firstHalf {
 		t.Log("firstHalf: ", e)
-		w.Put(e.Key(), e.Value(), e.SeqNum())
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		assert.False(t, full)
 	}
 
 	wNext := w.Rotate(fs)
 
 	for _, e := range secondHalf {
-		wNext.Put(e.Key(), e.Value(), e.SeqNum())
+		full := wNext.Put(e.Key(), e.Value(), e.SeqNum())
+		assert.False(t, full)
 	}
 
 	require.NoError(t, wNext.Save())
@@ -120,4 +125,76 @@ func TestRotateWithNoTruncation(t *testing.T) {
 	replayedEntries, errs := iteru.Collect2(r.All())
 	require.NoError(t, errors.Join(errs...))
 	dkvtest.EntriesEqual(t, entries, replayedEntries)
+}
+
+func TestSizeLimit(t *testing.T) {
+	fs := storage.NewMemoryFilesystem()
+	// Use a small size limit that will be hit after a few entries
+	w := wal.NewWriter(fs, 0, 10)
+
+	entries := slices.Collect(dkvtest.SequentialEntriesSeq(5, 0))
+	var hitLimit bool
+
+	// Write until we hit the size limit
+	for _, e := range entries {
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		if full {
+			hitLimit = true
+			break
+		}
+	}
+	assert.True(t, hitLimit, "expected to hit size limit in first WAL")
+
+	// Rotate and try again with new entries
+	w = w.Rotate(fs)
+	hitLimit = false
+
+	entries = slices.Collect(dkvtest.SequentialEntriesSeq(5, 5))
+	for _, e := range entries {
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		if full {
+			hitLimit = true
+			break
+		}
+	}
+	assert.True(t, hitLimit, "expected to hit size limit in rotated WAL")
+}
+
+func TestWALFullWorkflow(t *testing.T) {
+	fs := storage.NewMemoryFilesystem()
+	// Use a small size limit that will be hit after a few entries
+	w := wal.NewWriter(fs, 0, 30)
+
+	entries := slices.Collect(dkvtest.SequentialEntriesSeq(10, 0))
+	var hitLimit bool
+	var lastSeqNum uint64
+
+	// Write until we hit size limit
+	for _, e := range entries[:5] {
+		full := w.Put(e.Key(), e.Value(), e.SeqNum())
+		lastSeqNum = e.SeqNum()
+		if full {
+			hitLimit = true
+			break
+		}
+	}
+	assert.True(t, hitLimit, "expected to hit size limit")
+
+	// When WAL is full, we Cut() it to segment the entries
+	// This creates a new empty activeBuffer, so WAL should not be full anymore
+	w.Cut()
+
+	// Write more entries
+	full := w.Put([]byte("test"), []byte("value"), lastSeqNum+1)
+	assert.False(t, full, "WAL should have more space in active buffer after cut")
+
+	// Simulate SST flush by truncating up to latest seq num
+	w.Truncate(lastSeqNum)
+	require.NoError(t, w.Save())
+
+	// Verify we can read back the entries after the truncation point
+	r := wal.NewReader(fs, w.Handle(0))
+	walEntries, err := iteru.Collect2(r.All())
+	require.NoError(t, errors.Join(err...))
+	assert.Len(t, walEntries, 2, "Should only have entries after truncation point")
 }

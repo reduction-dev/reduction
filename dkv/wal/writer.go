@@ -14,37 +14,44 @@ type Writer struct {
 	activeBuffer  *bufferSegment   // The buffer to write to
 	sealedBuffers []*bufferSegment // Buffers pending truncation
 	latestSeqNum  uint64           // Latest written seq number recorded in segments during Cut
+	maxSize       uint64           // Maximum size of the log file
 }
 
-func NewWriter(fs storage.FileSystem, id int) *Writer {
+func NewWriter(fs storage.FileSystem, id int, maxSize uint64) *Writer {
 	return &Writer{
 		file:          fs.New(FileName(id)),
 		id:            id,
 		activeBuffer:  &bufferSegment{},
 		sealedBuffers: []*bufferSegment{},
+		maxSize:       maxSize,
 	}
 }
 
-func (w *Writer) Put(key []byte, value []byte, seqNum uint64) {
+func (w *Writer) Put(key []byte, value []byte, seqNum uint64) (full bool) {
 	buf := w.activeBuffer
-	_ = fields.MustWriteUint64(buf, seqNum)
-	_ = fields.MustWriteVarBytes(buf, key)
-	_ = fields.MustWriteTombstone(buf, false)
-	_ = fields.MustWriteVarBytes(buf, value)
+	fields.MustWriteUint64(buf, seqNum)
+	fields.MustWriteVarBytes(buf, key)
+	fields.MustWriteTombstone(buf, false)
+	fields.MustWriteVarBytes(buf, value)
 	w.latestSeqNum = seqNum
+
+	return uint64(len(buf.buf)) >= w.maxSize
 }
 
-func (w *Writer) Delete(key []byte, seqNum uint64) {
+func (w *Writer) Delete(key []byte, seqNum uint64) (full bool) {
 	buf := w.activeBuffer
-	_ = fields.MustWriteUint64(buf, seqNum)
-	_ = fields.MustWriteVarBytes(buf, key)
-	_ = fields.MustWriteTombstone(buf, true)
+	fields.MustWriteUint64(buf, seqNum)
+	fields.MustWriteVarBytes(buf, key)
+	fields.MustWriteTombstone(buf, true)
 	w.latestSeqNum = seqNum
+
+	return uint64(len(buf.buf)) >= w.maxSize
 }
 
 func (w *Writer) Rotate(fs storage.FileSystem) *Writer {
-	nextLog := NewWriter(fs, w.id+1)
+	nextLog := NewWriter(fs, w.id+1, w.maxSize)
 	nextLog.sealedBuffers = make([]*bufferSegment, len(w.sealedBuffers)+1)
+	nextLog.maxSize = w.maxSize
 
 	// Include all data from previous buffers
 	for i, b := range w.sealedBuffers {
