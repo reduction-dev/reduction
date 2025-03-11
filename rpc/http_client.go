@@ -1,8 +1,10 @@
 package rpc
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -20,11 +22,9 @@ func NewHTTPClient(metricName string, options ...newOption) *HTTPClient {
 	client := &HTTPClient{
 		goHTTPClient: httpu.NewClient(metricName),
 	}
-
 	for _, o := range options {
 		o(client)
 	}
-
 	return client
 }
 
@@ -53,7 +53,22 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		if resp.StatusCode == 0 || (resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented) || resp.StatusCode == http.StatusTooManyRequests {
-			return fmt.Errorf("status=%q url=%s: %w", resp.Status, req.URL.String(), errRetry)
+			// Read body for error message
+			var bodyMsg string
+			if resp.Body != nil {
+				bodyBytes, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+
+				// Add body to error message if we could read it
+				if readErr == nil && len(bodyBytes) > 0 {
+					bodyMsg = string(bodyBytes)
+
+					// Recreate the body for downstream consumers
+					resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				}
+			}
+
+			return fmt.Errorf("status=%q url=%s body=%s: %w", resp.Status, req.URL.String(), bodyMsg, errRetry)
 		}
 
 		return nil

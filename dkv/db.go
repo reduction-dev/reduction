@@ -3,6 +3,7 @@ package dkv
 import (
 	"fmt"
 	"iter"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -31,6 +32,7 @@ type DB struct {
 	checkpoints *recovery.CheckpointList
 	seqNum      uint64 // The latest sequence number written
 	mu          *sync.RWMutex
+	logger      *slog.Logger
 }
 
 type Partition interface {
@@ -44,6 +46,7 @@ type DBOptions struct {
 	NumLevels                   int
 	L0TableNumCompactionTrigger int
 	Partition                   Partition
+	Logger                      *slog.Logger
 }
 
 func Open(options DBOptions, initCheckpoints []recovery.CheckpointHandle) *DB {
@@ -73,6 +76,10 @@ func New(options DBOptions) *DB {
 	if options.NumLevels == 0 {
 		options.NumLevels = 5
 	}
+	// Set a default logger
+	if options.Logger == nil {
+		options.Logger = slog.Default()
+	}
 
 	tw := sst.NewTableWriter(options.FileSystem, 0)
 	compactor := &sst.Compactor{
@@ -96,6 +103,7 @@ func New(options DBOptions) *DB {
 		fs:          options.FileSystem,
 		tasks:       bg.NewAsyncGroup(),
 		checkpoints: recovery.NewCheckpointList(),
+		logger:      options.Logger,
 	}
 
 	return db
@@ -127,6 +135,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 	db.wal = wal.NewWriter(db.fs, latestCP.NextWALID())
 
 	// Replay the WAL
+	db.logger.Info("db.start replaying the WAL")
 	for entry, err := range latestCP.WALSeq(db.fs) {
 		if err != nil {
 			return fmt.Errorf("reading wal: %v", err)
@@ -138,6 +147,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 			db.Put(entry.K, entry.V)
 		}
 	}
+	db.logger.Info("db.start done replaying the WAL")
 
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/segmentio/ksuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"reduction.dev/reduction-protocol/handlerpb"
@@ -38,7 +39,7 @@ type Operator struct {
 	events              chan func()
 	stop                context.CancelFunc
 	isHalting           atomic.Bool
-	isInAssembly        atomic.Bool
+	status              *operatorStatus
 	eventBatcher        *batching.EventBatcher[RxnHandlerEvent]
 	eventBatchingParams batching.EventBatcherParams
 
@@ -95,6 +96,7 @@ func NewOperator(params NewOperatorParams) *Operator {
 		events:              make(chan func()),
 		stop:                func() {}, // initialize with noop
 		eventBatchingParams: params.EventBatching,
+		status:              newOperatorStatus(),
 	}
 }
 
@@ -113,6 +115,7 @@ func (o *Operator) Start(ctx context.Context) error {
 		}); err != nil {
 			o.Logger.Error("failed to register with job, will retry", "err", err)
 		}
+		o.status.DidRegister()
 	}, "register")
 	o.registerPoller.Trigger() // Try to register immediately
 
@@ -156,6 +159,11 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	o.Logger.Info("start command",
+		"operatorIDs", req.OperatorIds,
+		"keyGroupRange", o.keyGroupRange,
+		"checkpoints", req.Checkpoints)
+
 	// Locate own index by in the list of provided operator IDs
 	assemblyIndex := slices.IndexFunc(req.OperatorIds, func(id string) bool {
 		return id == o.id
@@ -168,7 +176,6 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	o.keySpace = partitioning.NewKeySpace(int(req.KeyGroupCount), len(req.OperatorIds))
 	o.keyGroupRange = o.keySpace.KeyGroupRanges()[assemblyIndex]
 
-	// Start the DKV database.
 	ckptHandles := make([]recovery.CheckpointHandle, len(req.Checkpoints))
 	for i, ckpt := range req.Checkpoints {
 		ckptHandles[i] = recovery.CheckpointHandle{
@@ -176,30 +183,40 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 			URI:          ckpt.DkvFileUri,
 		}
 	}
+
+	// Update status to loading before opening database
+	if err := o.status.LoadingStarted(); err != nil {
+		return fmt.Errorf("invalid status transition: %w", err)
+	}
+	dkvOpenStart := time.Now()
+
+	// Start the DKV database.
 	o.db = dkv.Open(dkv.DBOptions{
 		FileSystem: storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
+		Logger:     o.Logger,
 	}, ckptHandles)
 	o.stateStore = NewKeyedStateStore(o.db, o.keySpace)
 	o.timerRegistry = NewTimerRegistry(NewTimerStore(o.db, o.keySpace, o.keyGroupRange, size.GB), req.SourceRunnerIds)
 
-	// Set upstream source runner IDs
 	o.sourceRunners = newUpstreams(req.SourceRunnerIds)
-
 	o.sink = sink
 
-	o.Logger.Info("start command", "operatorIDs", req.OperatorIds, "keyGroupRange", o.keyGroupRange)
-
-	o.isInAssembly.Store(true)
+	if err := o.status.DidLoad(); err != nil {
+		return fmt.Errorf("invalid status transition: %w", err)
+	}
+	o.Logger.Info("operator ready", "dkvLoadTime", time.Since(dkvOpenStart))
 
 	return nil
 }
 
 func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *workerpb.Event) error {
-	if !o.isInAssembly.Load() {
-		return fmt.Errorf("not running")
+	if !o.status.IsReady() {
+		err := fmt.Errorf("operator not ready to handle events (status: %s)", o.status)
+		o.Logger.Debug("HandleEvent", "sender", senderID, "event", req.Event, "status", o.status, "err", err)
+		return connect.NewError(connect.CodeUnavailable, err)
 	}
 
-	o.Logger.Info("handling", "sender", senderID, "event", req.Event)
+	o.Logger.Debug("handling", "sender", senderID, "event", req.Event)
 
 	// Collect the err response from the queued event.
 	respErr := make(chan error)

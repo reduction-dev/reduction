@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"slices"
 
 	"reduction.dev/reduction/dkv/sst"
@@ -148,7 +147,6 @@ func LoadCheckpointList(fs storage.FileSystem, checkpointHandles []CheckpointHan
 			compositeCheckpointDoc.Levels[levelIndex] = append(compositeCheckpointDoc.Levels[levelIndex], level...)
 		}
 	}
-	slog.Info("doc", "doc", compositeCheckpointDoc)
 
 	compositeCheckpoint := newCheckpointFromDocument(fs, compositeCheckpointDoc)
 

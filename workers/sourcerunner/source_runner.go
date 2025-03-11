@@ -123,6 +123,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	// Listen for errors on the errChan
 	go func() {
 		result := <-r.errChan
+		r.Logger.Error("source runner error", "err", result)
 		cancel(result)
 	}()
 

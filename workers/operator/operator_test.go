@@ -191,3 +191,58 @@ func TestOperatorAlignsOnCheckpointBarriers(t *testing.T) {
 	assert.Len(t, sink.Values, 4)
 	assert.Equal(t, 3, workerstest.UnmarshalSumState(sliceu.Last(sink.Values)).Sum)
 }
+
+// Test that the operator transitions through different states correctly
+// and rejects events when not in the Ready state
+func TestOperatorStatusTransitions(t *testing.T) {
+	op := operator.NewOperator(operator.NewOperatorParams{
+		ID:          "op1",
+		UserHandler: &workerstest.SummingHandler{},
+		Job:         &workerstest.DummyJob{},
+	})
+
+	// Start the operator in a goroutine
+	g, ctx := errgroup.WithContext(t.Context())
+	g.Go(func() error {
+		return op.Start(ctx)
+	})
+
+	event := &workerpb.Event{
+		Event: &workerpb.Event_KeyedEvent{
+			KeyedEvent: &handlerpb.KeyedEvent{
+				Key: []byte("key"),
+			},
+		},
+	}
+
+	// The operator should start in Init state and reject events
+	err := op.HandleEvent(context.Background(), "src1", event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Init") // Should contain the status name
+
+	// After registration), job should transition to Registered but still reject
+	// events
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		err := op.HandleEvent(context.Background(), "src1", event)
+		assert.ErrorContains(t, err, "Registered")
+	}, 100*time.Millisecond, 10*time.Millisecond, "Operator should transition to Registered state")
+
+	// After HandleStart it should transition to Loading, then Ready (Loading
+	// state is untested)
+	sink := &embedded.RecordingSink{}
+	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
+		OperatorIds:     []string{"op1"},
+		SourceRunnerIds: []string{"src1"},
+		KeyGroupCount:   256,
+		StorageLocation: t.TempDir(),
+	}, sink)
+	require.NoError(t, err)
+
+	// After HandleStart, it should be in Ready state and accept events
+	err = op.HandleEvent(context.Background(), "src1", event)
+	assert.NoError(t, err)
+
+	// Clean up
+	op.Stop()
+	g.Wait()
+}
