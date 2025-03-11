@@ -35,23 +35,27 @@ func TestOperatorUsesMinimumOfSourceWatermarks(t *testing.T) {
 	ctx := context.Background()
 
 	sink := &embedded.RecordingSink{}
-	op.HandleStart(ctx, &workerpb.StartOperatorRequest{
+	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
 		OperatorIds:     []string{"op1"},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
 		StorageLocation: "memory:///storage",
 	}, sink)
+	require.NoError(t, err)
 
 	// Sum to 2
-	err := op.HandleEvent(ctx, "sr1", &workerpb.Event{
-		Event: &workerpb.Event_KeyedEvent{
-			KeyedEvent: &handlerpb.KeyedEvent{
-				Key:   []byte("static"),
-				Value: workerstest.SumEvent{Timestamp: time.UnixMilli(1)}.Marshal(),
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		err := op.HandleEvent(ctx, "sr1", &workerpb.Event{
+			Event: &workerpb.Event_KeyedEvent{
+				KeyedEvent: &handlerpb.KeyedEvent{
+					Key:   []byte("static"),
+					Value: workerstest.SumEvent{Timestamp: time.UnixMilli(1)}.Marshal(),
+				},
 			},
-		},
-	})
-	require.NoError(t, err)
+		})
+		require.NoError(t, err) // Allow for retries for boot
+	}, 100*time.Millisecond, 10*time.Millisecond, "Event should be processed without error")
+
 	err = op.HandleEvent(context.Background(), "sr1", &workerpb.Event{
 		Event: &workerpb.Event_KeyedEvent{
 			KeyedEvent: &handlerpb.KeyedEvent{

@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 
 	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction-protocol/handlerpb/handlerpbconnect"
@@ -23,7 +24,7 @@ type NewHandlerConnectClientParams struct {
 }
 
 func NewHandlerConnectClient(params NewHandlerConnectClientParams) *HandlerConnectClient {
-	connectClient := handlerpbconnect.NewHandlerClient(NewHTTPClient("handler"), "http://"+params.Host, params.Opts...)
+	connectClient := handlerpbconnect.NewHandlerClient(NewHTTPClient("handler", slog.Default()), "http://"+params.Host, params.Opts...)
 	client := &HandlerConnectClient{
 		connectClient: connectClient,
 	}

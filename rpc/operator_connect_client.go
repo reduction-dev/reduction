@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
@@ -34,7 +35,7 @@ func NewOperatorConnectClient(params NewOperatorConnectClientParams) (client *Op
 		host:     params.OperatorNode.Host,
 		senderID: params.SenderID,
 		connectClient: workerpbconnect.NewOperatorClient(
-			NewHTTPClient("operator"),
+			NewHTTPClient("operator", slog.Default()),
 			"http://"+params.OperatorNode.Host, params.ConnectOptions...),
 	}
 }

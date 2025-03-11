@@ -3,6 +3,7 @@ package rpc_test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,26 +15,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostRetry(t *testing.T) {
+func TestRetryOn503(t *testing.T) {
 	attempts := 0
 	lastPayload := ""
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Succeed after 3 attempts
+		if attempts > 3 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		attempts++
 		bodyBytes, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		lastPayload = string(bodyBytes)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 unknown error"))
+		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer s.Close()
 
-	client := rpc.NewHTTPClient("dummy", rpc.WithInitialRetryDelay(0))
+	client := rpc.NewHTTPClient("dummy", slog.Default(), rpc.WithInitialRetryDelay(0))
 
 	httpReq, err := http.NewRequestWithContext(context.Background(), "POST", s.URL, strings.NewReader("hello"))
 	require.NoError(t, err)
 
-	client.Do(httpReq)
+	_, _ = client.Do(httpReq)
 
-	assert.Equal(t, 10, attempts)
+	assert.Greater(t, attempts, 3) // Should have retried multiple times
 	assert.Equal(t, "hello", lastPayload)
+}
+
+func TestNoRetryOn404(t *testing.T) {
+	attempts := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer s.Close()
+
+	client := rpc.NewHTTPClient("dummy", slog.Default(), rpc.WithInitialRetryDelay(0))
+
+	httpReq, err := http.NewRequestWithContext(context.Background(), "GET", s.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(httpReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, 1, attempts) // Should not have retried
 }

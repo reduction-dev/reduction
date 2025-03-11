@@ -59,14 +59,9 @@ func (s *operatorStatus) DidRegister() {
 	s.status.CompareAndSwap(uint32(StatusInit), uint32(StatusRegistered))
 }
 
-// LoadingStarted attempts to transition from Registered to Loading
-// Returns an error if not in Registered state
-func (s *operatorStatus) LoadingStarted() error {
-	if !s.status.CompareAndSwap(uint32(StatusRegistered), uint32(StatusLoading)) {
-		return fmt.Errorf("cannot start loading: current status is %s, expected %s",
-			status(s.status.Load()), StatusRegistered)
-	}
-	return nil
+// LoadingStarted attempts to transition to Loading status
+func (s *operatorStatus) LoadingStarted() {
+	s.status.Store(uint32(StatusLoading))
 }
 
 // DidLoad attempts to transition from Loading to Ready

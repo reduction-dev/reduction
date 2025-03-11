@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 
 	jobpb "reduction.dev/reduction/proto/jobpb"
 	jobconnect "reduction.dev/reduction/proto/jobpb/jobpbconnect"
@@ -14,7 +15,7 @@ type JobUIConnectClient struct {
 }
 
 func NewJobUIConnectClient(host string, opts ...connect.ClientOption) *JobUIConnectClient {
-	return &JobUIConnectClient{connClient: jobconnect.NewJobUIClient(NewHTTPClient("job_ui"), "http://"+host, opts...)}
+	return &JobUIConnectClient{connClient: jobconnect.NewJobUIClient(NewHTTPClient("job_ui", slog.Default()), "http://"+host, opts...)}
 }
 
 func (c *JobUIConnectClient) CreateSavepoint(ctx context.Context) (uint64, error) {

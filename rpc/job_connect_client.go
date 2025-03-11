@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/jobpb/jobpbconnect"
@@ -11,7 +12,7 @@ import (
 )
 
 func NewJobConnectClient(host string, opts ...connect.ClientOption) *JobConnectClient {
-	client := jobpbconnect.NewJobClient(NewHTTPClient("job_rpc"), "http://"+host, opts...)
+	client := jobpbconnect.NewJobClient(NewHTTPClient("job_rpc", slog.Default()), "http://"+host, opts...)
 	return &JobConnectClient{
 		connClient: client,
 	}

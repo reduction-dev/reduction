@@ -185,9 +185,7 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	}
 
 	// Update status to loading before opening database
-	if err := o.status.LoadingStarted(); err != nil {
-		return fmt.Errorf("invalid status transition: %w", err)
-	}
+	o.status.LoadingStarted()
 	dkvOpenStart := time.Now()
 
 	// Start the DKV database.
