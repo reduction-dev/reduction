@@ -198,15 +198,18 @@ func (j *Job) processStateUpdates() {
 				continue
 			}
 			j.assembly = assembly
-			if err := j.run(); err != nil {
-				j.log.Error("failed to run the assembly", "err", err)
-			}
+			go func() {
+				err := j.start()
+				if err != nil {
+					j.log.Error("failed to start job", "err", err)
+				}
+			}()
 		}
 	}
 }
 
 // Transition the job to the running state.
-func (j *Job) run() error {
+func (j *Job) start() error {
 	j.log.Info("running")
 
 	// Get the job's current checkpoint

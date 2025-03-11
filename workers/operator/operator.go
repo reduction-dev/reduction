@@ -106,9 +106,6 @@ func (o *Operator) Start(ctx context.Context) error {
 	o.stop = cancel
 
 	o.registerPoller = o.clock.Every(3*time.Second, func(ec *clocks.EveryContext) {
-		o.mu.RLock()
-		defer o.mu.RUnlock()
-
 		if err := o.job.RegisterOperator(ctx, &jobpb.NodeIdentity{
 			Id:   o.id,
 			Host: o.host,

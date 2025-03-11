@@ -49,11 +49,6 @@ func newOperatorStatus() *operatorStatus {
 	return s
 }
 
-// Get returns the current status
-func (s *operatorStatus) Get() status {
-	return status(s.status.Load())
-}
-
 // DidRegister attempts to transition from Init to DidRegister
 func (s *operatorStatus) DidRegister() {
 	s.status.CompareAndSwap(uint32(StatusInit), uint32(StatusRegistered))
