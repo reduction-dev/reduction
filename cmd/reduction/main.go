@@ -104,7 +104,7 @@ func main() {
 				slog.SetDefault(slog.New(logging.NewTextHandler()))
 				executable := ctx.Args().First()
 				if executable == "" {
-					return fmt.Errorf("executable path is required")
+					cli.ShowSubcommandHelpAndExit(ctx, 1)
 				}
 				port := ctx.Int("worker-port")
 				err := rundev.Run(rundev.RunParams{
