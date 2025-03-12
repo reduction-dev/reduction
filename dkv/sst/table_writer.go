@@ -75,7 +75,11 @@ func writeEntry(t *Table, entry kv.Entry) {
 	t.size += int64(fields.MustWriteVarBytes(t.file, entry.Key()))
 	t.size += int64(fields.MustWriteUint64(t.file, entry.SeqNum()))
 	t.size += int64(fields.MustWriteTombstone(t.file, entry.IsDelete()))
-	t.size += int64(fields.MustWriteVarBytes(t.file, entry.Value()))
+
+	// Deleted entries don't have values
+	if !entry.IsDelete() {
+		t.size += int64(fields.MustWriteVarBytes(t.file, entry.Value()))
+	}
 }
 
 func (c *TableWriter) WriteRun(entries iter.Seq[kv.Entry], targetSize uint64) ([]*Table, error) {

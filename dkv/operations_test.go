@@ -320,3 +320,21 @@ func TestWritingSameEntryDoesNotConsumeStorage(t *testing.T) {
 	require.NoError(t, err)
 	dkvtest.EntryEqual(t, dkvtest.NewKVEntry("key", "value"), entry)
 }
+
+func TestReachingMaxWALSize(t *testing.T) {
+	fs := storage.NewLocalFilesystem(t.TempDir())
+	db := dkv.Open(dkv.DBOptions{
+		FileSystem: fs,
+		MaxWALSize: 100,
+	}, nil)
+
+	// Write enough to hit the WAL size limit
+	for i := range 5 {
+		db.Put([]byte("key"), fmt.Appendf(nil, "%03d", i))
+	}
+	require.NoError(t, db.WaitOnTasks())
+
+	assert.Equal(t, []string{
+		"000000.sst",
+	}, fs.List(), "flushes one SST file")
+}

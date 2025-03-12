@@ -67,3 +67,22 @@ func TestWriteTables_JustUnderTargetSize(t *testing.T) {
 	assert.Equal(t, int64(chunk2.Size), tables[2].EntriesSize())
 	assert.Less(t, tables[2].Size(), tables[1].Size())
 }
+
+// This was a difficult bug where if the last entry in a table was deleted, the
+// scan would error with EOF.
+func TestWrite_SingleDeletedEntryDoesNotError(t *testing.T) {
+	tw := sst.NewTableWriter(storage.NewMemoryFilesystem(), 0)
+
+	// Create just a deleted entry
+	entries := slices.Values([]kv.Entry{dkvtest.NewDeleteEntry("key")})
+
+	// Write the entry to the table
+	table, err := tw.Write(entries)
+	require.NoError(t, err)
+
+	// Ensure we can read to the end without EOF errors
+	var scanErr error
+	scanIter := table.ScanPrefix([]byte{}, &scanErr)
+	_ = slices.Collect(scanIter)
+	assert.NoError(t, scanErr, "Should not get EOF when scanning deleted entries")
+}
