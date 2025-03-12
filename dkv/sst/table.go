@@ -175,13 +175,16 @@ func (t *Table) ScanPrefix(prefix []byte, errOut *error) iter.Seq[kv.Entry] {
 					*errOut = err
 					return
 				}
-				if err := fields.SkipTombstone(cur); err != nil {
+				wasDeleted, err := fields.ReadTombstone(cur)
+				if err != nil {
 					*errOut = err
 					return
 				}
-				if err := fields.SkipVarBytes(cur); err != nil {
-					*errOut = err
-					return
+				if !wasDeleted {
+					if err := fields.SkipVarBytes(cur); err != nil {
+						*errOut = err
+						return
+					}
 				}
 				continue
 			}

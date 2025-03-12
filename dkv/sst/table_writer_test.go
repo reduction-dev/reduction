@@ -86,3 +86,32 @@ func TestWrite_SingleDeletedEntryDoesNotError(t *testing.T) {
 	_ = slices.Collect(scanIter)
 	assert.NoError(t, scanErr, "Should not get EOF when scanning deleted entries")
 }
+
+// Test scanning a table with a deleted entry that doesn't match the prefix.
+func TestScanPrefix_SkipDeletedNonMatchingEntry(t *testing.T) {
+	tw := sst.NewTableWriter(storage.NewMemoryFilesystem(), 0)
+
+	// Create entries where with one deleted entry that doesn't match the prefix
+	entries := slices.Values([]kv.Entry{
+		dkvtest.NewKVEntry("prefix1", "value1"),
+		dkvtest.NewDeleteEntry("no-match"),
+		dkvtest.NewKVEntry("prefix2", "value2"),
+	})
+
+	// Write the entries to the table
+	table, err := tw.Write(entries)
+	require.NoError(t, err)
+
+	var scanErr error
+	scanIter := table.ScanPrefix([]byte("prefix"), &scanErr)
+	results := slices.Collect(scanIter)
+
+	// Verify no error occurred during scan
+	assert.NoError(t, scanErr, "Should not error when skipping deleted entry")
+
+	// Verify we got the expected matching entries
+	dkvtest.EntriesEqual(t, []kv.Entry{
+		dkvtest.NewKVEntry("prefix1", "value1"),
+		dkvtest.NewKVEntry("prefix2", "value2"),
+	}, results)
+}
