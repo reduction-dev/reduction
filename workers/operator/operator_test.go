@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"reduction.dev/reduction-protocol/handlerpb"
+	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
@@ -245,6 +246,66 @@ func TestOperatorStatusTransitions(t *testing.T) {
 	// After HandleStart, it should be in Ready state and accept events
 	err = op.HandleEvent(context.Background(), "src1", event)
 	assert.NoError(t, err)
+
+	// Clean up
+	op.Stop()
+	g.Wait()
+}
+
+// Test that when processing multiple events with the same key in a batch,
+// the operator only returns one KeyState entry for that key.
+func TestUniqueKeyStatesInProcessEventBatchRequest(t *testing.T) {
+	handler := &workerstest.RecordingHandler{}
+	op := operator.NewOperator(operator.NewOperatorParams{
+		ID:          "op1",
+		UserHandler: handler,
+		Job:         &workerstest.DummyJob{},
+		EventBatching: batching.EventBatcherParams{
+			MaxSize:  2,
+			MaxDelay: 1 * time.Second,
+		},
+	})
+
+	g, ctx := errgroup.WithContext(t.Context())
+	g.Go(func() error {
+		return op.Start(ctx)
+	})
+
+	// Initialize operator
+	sink := &embedded.RecordingSink{}
+	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
+		OperatorIds:     []string{"op1"},
+		SourceRunnerIds: []string{"src1"},
+		KeyGroupCount:   256,
+		StorageLocation: t.TempDir(),
+	}, sink)
+	require.NoError(t, err)
+
+	// Send two events with the same key
+	key := []byte("same-key")
+	err = op.HandleEvent(ctx, "src1", &workerpb.Event{
+		Event: &workerpb.Event_KeyedEvent{
+			KeyedEvent: &handlerpb.KeyedEvent{
+				Key: key,
+			},
+		},
+	})
+	require.NoError(t, err)
+	err = op.HandleEvent(ctx, "src1", &workerpb.Event{
+		Event: &workerpb.Event_KeyedEvent{
+			KeyedEvent: &handlerpb.KeyedEvent{
+				Key: key,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Get the last batch request
+	req := handler.ProcessEventBatchRequests[len(handler.ProcessEventBatchRequests)-1]
+
+	// Count how many times our key appears in KeyStates
+	assert.Len(t, req.KeyStates, 1, "Expected only one KeyState entry for key")
+	assert.Equal(t, 2, len(req.Events), "Expected both events in the batch")
 
 	// Clean up
 	op.Stop()

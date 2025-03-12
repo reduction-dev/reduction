@@ -358,22 +358,33 @@ func (o *Operator) processEventBatch(ctx context.Context, batchToken batching.Ba
 		return nil
 	}
 
-	// First collect all keyStates and events
-	keyStates := make([]*handlerpb.KeyState, len(batchEvents))
+	// Create a map to cache KeyStates by key in this batch
+	keyStateMap := make(map[string]*handlerpb.KeyState)
 	events := make([]*handlerpb.Event, len(batchEvents))
-	for i, rxnEvent := range batchEvents {
-		// State
-		state, err := o.stateStore.GetState(rxnEvent.key)
-		if err != nil {
-			return fmt.Errorf("getting state for processEventBatch: %v", err)
-		}
-		keyStates[i] = &handlerpb.KeyState{
-			Key:                  rxnEvent.key,
-			StateEntryNamespaces: state,
-		}
 
-		// Event
+	// First collect all keyStates and events
+	for i, rxnEvent := range batchEvents {
+		// Collect the Event
 		events[i] = rxnEvent.event
+
+		// Collect the State if we haven't seen this key before
+		keyStr := string(rxnEvent.key)
+		if _, ok := keyStateMap[keyStr]; !ok {
+			state, err := o.stateStore.GetState(rxnEvent.key)
+			if err != nil {
+				return fmt.Errorf("getting state for processEventBatch: %v", err)
+			}
+			keyStateMap[keyStr] = &handlerpb.KeyState{
+				Key:                  rxnEvent.key,
+				StateEntryNamespaces: state,
+			}
+		}
+	}
+
+	// Convert map values to slice
+	keyStates := make([]*handlerpb.KeyState, 0, len(keyStateMap))
+	for _, ks := range keyStateMap {
+		keyStates = append(keyStates, ks)
 	}
 
 	// Make a single batch call to the handler
