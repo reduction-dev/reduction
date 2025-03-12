@@ -149,3 +149,26 @@ func TestPickingL1ToLMaxTablesForPrefix(t *testing.T) {
 	assert.Same(t, prefixTables[2], levels[3][0])
 	assert.Same(t, prefixTables[3], levels[3][1])
 }
+
+func TestScanPrefixFiltersDeletedEntries(t *testing.T) {
+	tw := sst.NewTableWriter(storage.NewMemoryFilesystem(), 0)
+	entries := []kv.Entry{
+		dkvtest.NewKVEntry("b1", "value1"),
+		dkvtest.NewDeleteEntry("b2"),
+		dkvtest.NewKVEntry("b3", "value3"),
+		dkvtest.NewDeleteEntry("b4"),
+		dkvtest.NewKVEntry("c1", "value-outside"),
+	}
+	table, err := tw.Write(slices.Values(entries))
+	require.NoError(t, err)
+	ll := sst.NewLevelListOfTables([][]*sst.Table{{table}})
+
+	var errOut error
+	scannedEntries := slices.Collect(ll.ScanPrefix([]byte("b"), &errOut))
+	require.NoError(t, errOut)
+
+	// Should only return non-deleted entries with prefix "b"
+	assert.Len(t, scannedEntries, 2)
+	assert.Equal(t, []byte("b1"), scannedEntries[0].Key())
+	assert.Equal(t, []byte("b3"), scannedEntries[1].Key())
+}

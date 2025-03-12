@@ -105,7 +105,19 @@ func (ll *LevelList) ScanPrefix(prefix []byte, errOut *error) iter.Seq[kv.Entry]
 	for i, table := range tables {
 		iters[i] = table.ScanPrefix(prefix, errOut)
 	}
-	return kv.MergeEntries(iters)
+
+	// Return the merged entries without deleted records
+	return func(yield func(kv.Entry) bool) {
+		for entry := range kv.MergeEntries(iters) {
+			// Skip deleted entries
+			if entry.IsDelete() {
+				continue
+			}
+			if !yield(entry) {
+				return
+			}
+		}
+	}
 }
 
 // A worst case estimate of the amount of extra space used. Zero means
