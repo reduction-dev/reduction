@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -47,13 +49,22 @@ type Table struct {
 
 // NewTable initializes a new, empty table
 func NewTable(file storage.File) *Table {
-	return &Table{
+	t := &Table{
 		file:        file,
 		searchIndex: &SearchIndex{},
 		filter:      bloom.NewFilter(32*size.KB, 5),
 		refCount:    refs.NewRefCount(),
 		size:        0,
 	}
+
+	deleteFunc := file.CreateDeleteFunc()
+	runtime.AddCleanup(t, func(f func() error) {
+		if err := f(); err != nil {
+			slog.Error("table cleanup", "err", err)
+		}
+	}, deleteFunc)
+
+	return t
 }
 
 type TableDocument struct {
@@ -282,10 +293,10 @@ func (t *Table) HoldRef() {
 }
 
 func (t *Table) DropRef() error {
-	released := t.refCount.Drop()
-	if released {
-		return t.file.Delete()
-	}
+	_ = t.refCount.Drop()
+	// if released {
+	// 	return t.file.Delete()
+	// }
 	return nil
 }
 

@@ -1,8 +1,10 @@
 package sst_test
 
 import (
+	"runtime"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,8 +23,12 @@ func TestHoldingAndDroppingLevelListRef(t *testing.T) {
 	table := sst.NewTable(f)
 	ll.AddTables(0, table)
 	require.NoError(t, ll.DropRef())
+	runtime.GC()
 
-	assert.False(t, fs.Exists(f.Name()))
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.False(t, fs.Exists(f.Name()))
+	}, 100*time.Millisecond, 1*time.Millisecond)
+
 }
 
 func TestHoldingAndDroppingMultipleLevelListRefs(t *testing.T) {
@@ -47,8 +53,12 @@ func TestHoldingAndDroppingMultipleLevelListRefs(t *testing.T) {
 	require.NoError(t, ll1.DropRef())
 	require.NoError(t, ll2.DropRef())
 
-	assert.False(t, fs.Exists(f1.Name()))
-	assert.False(t, fs.Exists(f2.Name()))
+	runtime.GC()
+
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.False(t, fs.Exists(f1.Name()))
+		assert.False(t, fs.Exists(f2.Name()))
+	}, 100*time.Millisecond, 1*time.Millisecond)
 }
 
 func TestPickingL0TablesForKey(t *testing.T) {
@@ -209,16 +219,22 @@ func TestRemoveTablesViaChangeSetDropsReferences(t *testing.T) {
 
 	// Drop reference to the original level list
 	require.NoError(t, ll1.DropRef())
+	runtime.GC()
 
 	// Files should still exist because ll2 still references table3
 	// but table1 and table2 should have been dereferenced and deleted
-	assert.False(t, fs.Exists(f1.Name()), "file-1 should be deleted after ChangeSet removed it")
-	assert.False(t, fs.Exists(f2.Name()), "file-2 should be deleted after ChangeSet removed it")
-	assert.True(t, fs.Exists(f3.Name()), "file-3 should still exist")
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.False(t, fs.Exists(f1.Name()), "file-1 should be deleted after ChangeSet removed it")
+		assert.False(t, fs.Exists(f2.Name()), "file-2 should be deleted after ChangeSet removed it")
+		assert.True(t, fs.Exists(f3.Name()), "file-3 should still exist")
+	}, 100*time.Millisecond, 1*time.Millisecond)
 
 	// Now drop the second level list
 	require.NoError(t, ll2.DropRef())
+	runtime.GC()
 
 	// All files should be gone now
-	assert.False(t, fs.Exists(f3.Name()), "file-3 should be deleted after ll2 is dropped")
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.False(t, fs.Exists(f3.Name()), "file-3 should be deleted after ll2 is dropped")
+	}, 100*time.Millisecond, 1*time.Millisecond)
 }

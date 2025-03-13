@@ -170,4 +170,13 @@ func (m *MemoryFile) URI() string {
 	return memoryProtocol + m.path
 }
 
+func (m *MemoryFile) CreateDeleteFunc() func() error {
+	fs := m.fs
+	path := m.path
+	return func() error {
+		fs.files.Delete(path)
+		return nil
+	}
+}
+
 var _ File = (*MemoryFile)(nil)

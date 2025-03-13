@@ -145,6 +145,18 @@ func (o *S3Object) URI() string {
 	return "s3://" + filepath.Join(o.fs.bucketName, o.key)
 }
 
+func (o *S3Object) CreateDeleteFunc() func() error {
+	fs := o.fs
+	key := o.key
+	return func() error {
+		_, err := fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+			Bucket: &fs.bucketName,
+			Key:    &key,
+		})
+		return err
+	}
+}
+
 func isNoSuchKeyErr(err error) bool {
 	var notFoundErr *types.NoSuchKey
 	return errors.As(err, &notFoundErr)

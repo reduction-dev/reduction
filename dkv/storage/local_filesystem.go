@@ -183,4 +183,11 @@ func (d *DiskFile) URI() string {
 	return absPath
 }
 
+func (d *DiskFile) CreateDeleteFunc() func() error {
+	uri := d.URI()
+	return func() error {
+		return os.Remove(uri)
+	}
+}
+
 var _ File = (*DiskFile)(nil)
