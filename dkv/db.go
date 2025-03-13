@@ -11,7 +11,6 @@ import (
 	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/memtable"
 	"reduction.dev/reduction/dkv/recovery"
-	"reduction.dev/reduction/dkv/refs"
 	"reduction.dev/reduction/dkv/sst"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/dkv/wal"
@@ -131,11 +130,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 	}
 
 	latestCP := db.checkpoints.Latest()
-
-	// Share ownership of the checkpoint Levels
-	latestCP.Levels.HoldRef()
 	db.sstables = latestCP.Levels
-
 	db.seqNum = latestCP.Levels.LatestSeqNum
 
 	// Start a new writer that doesn't write to a file yet.
@@ -182,8 +177,7 @@ func (db *DB) Delete(key []byte) {
 }
 
 func (db *DB) Get(key []byte) (kv.Entry, error) {
-	sstables := db.referenceSSTables()
-	defer db.tasks.Go(refs.DropFunc(sstables))
+	sstables := db.currentSSTables()
 
 	// First try to get from the memtables
 	v, err := db.mtables.Get(key)
@@ -200,9 +194,7 @@ func (db *DB) Get(key []byte) (kv.Entry, error) {
 }
 
 func (db *DB) ScanPrefix(prefix []byte, errOut *error) iter.Seq[kv.Entry] {
-	sstables := db.referenceSSTables()
-	defer db.tasks.Go(refs.DropFunc(sstables))
-
+	sstables := db.currentSSTables()
 	iters := []iter.Seq[kv.Entry]{db.mtables.ScanPrefix(prefix, errOut), sstables.ScanPrefix(prefix, errOut)}
 	return kv.MergeEntries(iters)
 }
@@ -218,7 +210,7 @@ func (db *DB) Checkpoint(ckptID uint64) (wait func() (recovery.CheckpointHandle,
 	// incomplete because they don't include memtables.
 	//
 	// This method passes ownership of the tables ref to the new checkpoint
-	db.checkpoints.Add(ckptID, db.referenceSSTables(), prevWAL)
+	db.checkpoints.Add(ckptID, db.currentSSTables(), prevWAL)
 
 	return bg.Task2(func() (recovery.CheckpointHandle, error) {
 		if err := prevWAL.Save(); err != nil {
@@ -250,8 +242,7 @@ func (db *DB) Diagnostics() string {
 	sb.WriteString(db.mtables.Diagnostics())
 	sb.WriteString("\ndisk tables\n")
 
-	sstables := db.referenceSSTables()
-	defer db.tasks.Go(refs.DropFunc(sstables))
+	sstables := db.currentSSTables()
 	sb.WriteString(sstables.Diagnostics())
 
 	return sb.String()
@@ -292,10 +283,7 @@ func (db *DB) rotateMemtable() {
 		// Run compact steps until there is no changeset
 		db.tasks.Enqueue(compactionQueue, func() error {
 			for {
-				sstables := db.referenceSSTables()
-				defer db.tasks.Go(refs.DropFunc(sstables))
-
-				cs, err := db.compactor.Compact(sstables)
+				cs, err := db.compactor.Compact(db.currentSSTables())
 				if err != nil {
 					return err
 				}
@@ -313,9 +301,8 @@ func (db *DB) rotateMemtable() {
 	})
 }
 
-func (db *DB) referenceSSTables() *sst.LevelList {
+func (db *DB) currentSSTables() *sst.LevelList {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	db.sstables.HoldRef()
 	return db.sstables
 }

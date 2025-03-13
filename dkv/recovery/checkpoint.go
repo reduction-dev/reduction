@@ -33,10 +33,6 @@ func newCheckpointFromDocument(fs storage.FileSystem, doc checkpointDocument) *C
 }
 
 func (cp *Checkpoint) Destroy() error {
-	if err := cp.Levels.DropRef(); err != nil {
-		return err
-	}
-
 	for _, wal := range cp.WALs {
 		if err := wal.Delete(); err != nil {
 			return err

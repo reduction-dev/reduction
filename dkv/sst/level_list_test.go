@@ -22,7 +22,6 @@ func TestHoldingAndDroppingLevelListRef(t *testing.T) {
 	ll := sst.NewEmptyLevelList(1)
 	table := sst.NewTable(f)
 	ll.AddTables(0, table)
-	require.NoError(t, ll.DropRef())
 	runtime.GC()
 
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -48,10 +47,7 @@ func TestHoldingAndDroppingMultipleLevelListRefs(t *testing.T) {
 	table2 := sst.NewTable(f2)
 	cs = &sst.ChangeSet{}
 	cs.AddTables(0, table2)
-	ll2 := ll1.NewWithChangeSet(cs)
-
-	require.NoError(t, ll1.DropRef())
-	require.NoError(t, ll2.DropRef())
+	_ = ll1.NewWithChangeSet(cs)
 
 	runtime.GC()
 
@@ -218,7 +214,6 @@ func TestRemoveTablesViaChangeSetDropsReferences(t *testing.T) {
 	ll2 := ll1.NewWithChangeSet(cs)
 
 	// Drop reference to the original level list
-	require.NoError(t, ll1.DropRef())
 	runtime.GC()
 
 	// Files should still exist because ll2 still references table3
@@ -229,8 +224,10 @@ func TestRemoveTablesViaChangeSetDropsReferences(t *testing.T) {
 		assert.True(t, fs.Exists(f3.Name()), "file-3 should still exist")
 	}, 100*time.Millisecond, 1*time.Millisecond)
 
+	// Ensure ll2 is not GC'd before this point
+	runtime.KeepAlive(ll2)
+
 	// Now drop the second level list
-	require.NoError(t, ll2.DropRef())
 	runtime.GC()
 
 	// All files should be gone now

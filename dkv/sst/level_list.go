@@ -1,7 +1,6 @@
 package sst
 
 import (
-	"errors"
 	"fmt"
 	"iter"
 	"math"
@@ -9,7 +8,6 @@ import (
 	"strings"
 
 	"reduction.dev/reduction/dkv/kv"
-	"reduction.dev/reduction/dkv/refs"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/sliceu"
@@ -17,7 +15,6 @@ import (
 
 type LevelList struct {
 	levels       []Level
-	refCount     *refs.RefCount
 	LatestSeqNum uint64
 }
 
@@ -29,7 +26,6 @@ func NewEmptyLevelList(levelCount int) *LevelList {
 	}
 	ll := &LevelList{
 		levels:       make([]Level, levelCount),
-		refCount:     refs.NewRefCount(),
 		LatestSeqNum: 0,
 	}
 
@@ -66,7 +62,6 @@ func NewLevelListOfTables(tables [][]*Table) *LevelList {
 		}
 	}
 	return &LevelList{
-		refCount:     refs.NewRefCount(),
 		levels:       levels,
 		LatestSeqNum: latestSeqNum,
 	}
@@ -270,15 +265,7 @@ func (ll *LevelList) RemoveTables(tables []*Table) {
 func (ll *LevelList) NewWithChangeSet(cs *ChangeSet) *LevelList {
 	nextLevels := slices.Clone(ll.levels)
 
-	// The new LevelList holds a new reference to tables in the source LevelList
-	for _, l := range nextLevels {
-		for t := range l.AllTables() {
-			t.HoldRef()
-		}
-	}
-
 	nextLL := &LevelList{
-		refCount:     refs.NewRefCount(),
 		levels:       nextLevels,
 		LatestSeqNum: ll.LatestSeqNum,
 	}
@@ -301,27 +288,6 @@ func (ll *LevelList) Diagnostics() string {
 	}
 
 	return sb.String()
-}
-
-// Hold an additional ref beyond the initial ref during instantiation.
-func (ll *LevelList) HoldRef() {
-	ll.refCount.Hold()
-}
-
-func (ll *LevelList) DropRef() error {
-	var allErrs error
-	released := ll.refCount.Drop()
-	if released {
-		for _, level := range ll.levels {
-			for table := range level.tables.All() {
-				err := table.DropRef()
-				if err != nil {
-					allErrs = errors.Join(err, allErrs)
-				}
-			}
-		}
-	}
-	return allErrs
 }
 
 func (ll *LevelList) Document() [][]TableDocument {

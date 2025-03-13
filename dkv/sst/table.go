@@ -16,7 +16,6 @@ import (
 	"reduction.dev/reduction/dkv/bloom"
 	"reduction.dev/reduction/dkv/fields"
 	"reduction.dev/reduction/dkv/kv"
-	"reduction.dev/reduction/dkv/refs"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/util/size"
 )
@@ -39,7 +38,6 @@ type Table struct {
 	entriesSize    int64
 	searchIndex    *SearchIndex
 	filter         *bloom.Filter
-	refCount       *refs.RefCount
 	startKey       []byte
 	endKey         []byte
 	startSeqNum    uint64
@@ -53,7 +51,6 @@ func NewTable(file storage.File) *Table {
 		file:        file,
 		searchIndex: &SearchIndex{},
 		filter:      bloom.NewFilter(32*size.KB, 5),
-		refCount:    refs.NewRefCount(),
 		size:        0,
 	}
 
@@ -80,7 +77,6 @@ type TableDocument struct {
 func NewTableFromDocument(fs storage.FileSystem, doc TableDocument) *Table {
 	return &Table{
 		file:        fs.Open(doc.Name),
-		refCount:    refs.NewRefCount(),
 		size:        int64(doc.Size),
 		entriesSize: int64(doc.EntriesSize),
 		startKey:    []byte(doc.StartKey),
@@ -286,18 +282,6 @@ func (t *Table) Name() string {
 
 func (t *Table) URI() string {
 	return t.file.URI()
-}
-
-func (t *Table) HoldRef() {
-	t.refCount.Hold()
-}
-
-func (t *Table) DropRef() error {
-	_ = t.refCount.Drop()
-	// if released {
-	// 	return t.file.Delete()
-	// }
-	return nil
 }
 
 func (t *Table) Diagnostics() string {
