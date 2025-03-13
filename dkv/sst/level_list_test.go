@@ -15,6 +15,7 @@ import (
 func TestHoldingAndDroppingLevelListRef(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
 	f := fs.New("file-1")
+	f.Save()
 
 	ll := sst.NewEmptyLevelList(1)
 	table := sst.NewTable(f)
@@ -27,7 +28,9 @@ func TestHoldingAndDroppingLevelListRef(t *testing.T) {
 func TestHoldingAndDroppingMultipleLevelListRefs(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
 	f1 := fs.New("file-1")
+	f1.Save()
 	f2 := fs.New("file-2")
+	f2.Save()
 
 	// Build first LevelList with a table1
 	table1 := sst.NewTable(f1)
@@ -171,4 +174,51 @@ func TestScanPrefixFiltersDeletedEntries(t *testing.T) {
 	assert.Len(t, scannedEntries, 2)
 	assert.Equal(t, []byte("b1"), scannedEntries[0].Key())
 	assert.Equal(t, []byte("b3"), scannedEntries[1].Key())
+}
+
+func TestRemoveTablesViaChangeSetDropsReferences(t *testing.T) {
+	fs := storage.NewMemoryFilesystem()
+
+	f1 := fs.New("file-1")
+	f1.Save()
+
+	f2 := fs.New("file-2")
+	f2.Save()
+
+	// Create initial level list with two tables
+	table1 := sst.NewTable(f1)
+	table2 := sst.NewTable(f2)
+	ll1 := sst.NewEmptyLevelList(2)
+	ll1.AddTables(0, table1)
+	ll1.AddTables(1, table2)
+
+	// Create a new table that will replace the existing ones
+	f3 := fs.New("file-3")
+	f3.Save()
+	table3 := sst.NewTable(f3)
+
+	// Create a ChangeSet that adds table3 and removes table1 and table2
+	// This simulates what happens during compaction
+	cs := &sst.ChangeSet{}
+	cs.AddTables(1, table3) // Add new table to L1
+	cs.RemoveTables(table1) // Remove table from L0
+	cs.RemoveTables(table2) // Remove table from L1
+
+	// Apply the change set to create a new level list
+	ll2 := ll1.NewWithChangeSet(cs)
+
+	// Drop reference to the original level list
+	require.NoError(t, ll1.DropRef())
+
+	// Files should still exist because ll2 still references table3
+	// but table1 and table2 should have been dereferenced and deleted
+	assert.False(t, fs.Exists(f1.Name()), "file-1 should be deleted after ChangeSet removed it")
+	assert.False(t, fs.Exists(f2.Name()), "file-2 should be deleted after ChangeSet removed it")
+	assert.True(t, fs.Exists(f3.Name()), "file-3 should still exist")
+
+	// Now drop the second level list
+	require.NoError(t, ll2.DropRef())
+
+	// All files should be gone now
+	assert.False(t, fs.Exists(f3.Name()), "file-3 should be deleted after ll2 is dropped")
 }

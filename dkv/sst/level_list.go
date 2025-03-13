@@ -261,8 +261,23 @@ func (ll *LevelList) AddTables(levelIndex int, tables ...*Table) {
 }
 
 func (ll *LevelList) RemoveTables(tables []*Table) {
+	// Track which tables are removed from the LevelList
+	tablesRemoved := make(map[*Table]bool)
+
 	for i := range ll.levels {
+		for _, t := range tables {
+			if ll.levels[i].tables.Has(t) {
+				tablesRemoved[t] = true
+			}
+		}
+
+		// Create new level with tables removed
 		ll.levels[i] = ll.levels[i].tablesRemoved(tables...)
+	}
+
+	// Now drop references to tables that were present and removed
+	for t := range tablesRemoved {
+		t.DropRef()
 	}
 }
 
