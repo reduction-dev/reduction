@@ -111,10 +111,25 @@ func (d *DiskFile) Save() error {
 	if err != nil {
 		return err
 	}
-	file.Sync()
-	if err := os.Rename(file.Name(), filepath.Join(d.dir, d.name)); err != nil {
+	if err := file.Sync(); err != nil {
 		return err
 	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	// Rename the temp file to its final location
+	finalPath := filepath.Join(d.dir, d.name)
+	if err := os.Rename(file.Name(), finalPath); err != nil {
+		return err
+	}
+
+	// Reopen the file at its new location
+	f, err := os.Open(finalPath)
+	if err != nil {
+		return err
+	}
+	d.osFile = f
 	d.fileMode = FILE_MODE_READ
 	return nil
 }
@@ -163,6 +178,10 @@ func (d *DiskFile) Write(b []byte) (n int, err error) {
 }
 
 func (d *DiskFile) Delete() error {
+	if d.fileMode == FILE_MODE_WRITE {
+		panic("tried to delete a file being written")
+	}
+
 	return os.Remove(d.osFile.Name())
 }
 

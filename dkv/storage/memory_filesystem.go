@@ -141,6 +141,9 @@ func (m *MemoryFile) Write(p []byte) (n int, err error) {
 }
 
 func (m *MemoryFile) Delete() error {
+	if m.fileMode == FILE_MODE_WRITE {
+		panic("tried to delete a file being written")
+	}
 	m.fs.files.Delete(m.path)
 	return nil
 }

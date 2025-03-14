@@ -134,6 +134,9 @@ func (o *S3Object) Write(p []byte) (n int, err error) {
 }
 
 func (o *S3Object) Delete() error {
+	if o.fileMode == FILE_MODE_WRITE {
+		panic("tried to delete a file being written")
+	}
 	_, err := o.fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: &o.fs.bucketName,
 		Key:    &o.key,

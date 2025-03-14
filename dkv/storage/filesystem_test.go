@@ -127,4 +127,22 @@ func FileSystemSemanticsSuite(t *testing.T, fs storage.FileSystem) {
 		assert.Equal(t, n, 0, "reads zero bytes")
 		assert.ErrorIs(t, err, io.EOF, "read returns EOF")
 	})
+
+	t.Run("Creating then deleting a file", func(t *testing.T) {
+		// Create a file with content
+		f := fs.New("file.txt")
+		_, err := f.Write([]byte{1, 2, 3})
+		require.NoError(t, err)
+
+		// Test deleting without saving first (should panic)
+		assert.Panics(t, func() { f.Delete() }, "deleting not allowed before save")
+
+		// Delete after saving
+		require.NoError(t, f.Save())
+		assert.NoError(t, f.Delete(), "deleting a saved file should work")
+
+		// Verify file is gone
+		_, err = fs.Open("file").ReadAt(nil, 0)
+		assert.ErrorIs(t, err, storage.ErrNotFound, "file should be deleted")
+	})
 }
