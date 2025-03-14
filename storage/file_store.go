@@ -5,6 +5,20 @@ import (
 	"iter"
 )
 
+// FileOp represents the type of file operation
+type FileOp string
+
+const (
+	OpCreate FileOp = "create"
+	OpRemove FileOp = "remove"
+)
+
+// FileEvent represents a file operation event with path and operation type
+type FileEvent struct {
+	Path string
+	Op   FileOp
+}
+
 type FileStore interface {
 	// Write data to the given file path. The path is relative to whatever path
 	// prefixes the file store was initialized with. However the returned URI
@@ -14,4 +28,6 @@ type FileStore interface {
 	List() iter.Seq2[string, error]
 	URI(path string) (string, error)
 	Copy(sourceURI string, destination string) error
+	Remove(paths ...string) error
+	Subscribe() <-chan FileEvent
 }

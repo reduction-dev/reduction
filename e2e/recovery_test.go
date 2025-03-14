@@ -19,6 +19,7 @@ import (
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/storage"
 	"reduction.dev/reduction/storage/localfs"
 	"reduction.dev/reduction/util/binu"
 	"reduction.dev/reduction/util/iteru"
@@ -185,7 +186,9 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
-	assert.Contains(t, <-fsEvents, ".snapshot")
+	fileCreated := <-fsEvents
+	assert.Equal(t, storage.OpCreate, fileCreated.Op)
+	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Just stop the worker.
 	worker.Stop()
@@ -270,7 +273,9 @@ func TestScaleOutWorkers(t *testing.T) {
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
-	assert.Contains(t, <-fsEvents, ".snapshot")
+	fileCreate := <-fsEvents
+	assert.Equal(t, storage.OpCreate, fileCreate.Op)
+	assert.Contains(t, fileCreate.Path, ".snapshot")
 
 	// Stop the cluster
 	worker1.Stop()
@@ -383,7 +388,9 @@ func TestScaleInWorkers(t *testing.T) {
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
-	assert.Contains(t, <-fsEvents, ".snapshot")
+	fileCreated := <-fsEvents
+	assert.Equal(t, storage.OpCreate, fileCreated.Op)
+	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Stop the cluster and the second worker
 	job.Stop()
@@ -480,7 +487,9 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
-	assert.Contains(t, <-fsEvents, ".snapshot")
+	fileCreated := <-fsEvents
+	assert.Equal(t, fileCreated.Op, storage.OpCreate)
+	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Add 10 more events to the source
 	for range iteru.Times(10) {
@@ -499,7 +508,9 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 
 	// Checkpoint again
 	clock.TickEvery("checkpointing")
-	assert.Contains(t, <-fsEvents, ".snapshot")
+	fileCreated = <-fsEvents
+	assert.Equal(t, fileCreated.Op, storage.OpCreate)
+	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Stop the cluster and the second worker
 	worker.Stop()

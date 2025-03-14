@@ -17,15 +17,15 @@ import (
 var ErrCheckpointInProgress = errors.New("checkpoint in progress")
 
 type Store struct {
-	fileStore       storage.FileStore
-	savepointsPath  string
-	checkpointsPath string
-	log             *slog.Logger
-	savepointURI    string
-	subscriber      chan CheckpointEvent
-
-	state   storeState
-	stateMu sync.Mutex
+	fileStore              storage.FileStore
+	savepointsPath         string
+	checkpointsPath        string
+	log                    *slog.Logger
+	savepointURI           string
+	subscriber             chan CheckpointEvent
+	checkpointsRemovedChan chan []uint64
+	state                  storeState
+	stateMu                sync.Mutex
 }
 
 type CheckpointEvent struct {
@@ -40,21 +40,23 @@ type storeState struct {
 }
 
 type NewStoreParams struct {
-	SavepointURI     string
-	FileStore        storage.FileStore
-	SavepointsPath   string
-	CheckpointsPath  string
-	CheckpointEvents chan CheckpointEvent
+	SavepointURI       string
+	FileStore          storage.FileStore
+	SavepointsPath     string
+	CheckpointsPath    string
+	CheckpointEvents   chan CheckpointEvent
+	CheckpointReplaced chan []uint64
 }
 
 func NewStore(params *NewStoreParams) *Store {
 	return &Store{
-		fileStore:       params.FileStore,
-		savepointsPath:  params.SavepointsPath,
-		checkpointsPath: params.CheckpointsPath,
-		log:             slog.With("instanceID", "job"),
-		savepointURI:    params.SavepointURI,
-		subscriber:      params.CheckpointEvents,
+		fileStore:              params.FileStore,
+		savepointsPath:         params.SavepointsPath,
+		checkpointsPath:        params.CheckpointsPath,
+		log:                    slog.With("instanceID", "job"),
+		savepointURI:           params.SavepointURI,
+		subscriber:             params.CheckpointEvents,
+		checkpointsRemovedChan: params.CheckpointReplaced,
 	}
 }
 
@@ -179,6 +181,33 @@ func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
 
 	// Accessing state to update completedSnapshots
 	s.stateMu.Lock()
+
+	// When a new checkpoint is finished, all previous checkpoints are obsolete.
+	if len(s.state.completedSnapshots) > 0 {
+		obsoleteIDs := make([]uint64, 0, len(s.state.completedSnapshots))
+		for _, oldSnap := range s.state.completedSnapshots {
+			obsoleteIDs = append(obsoleteIDs, oldSnap.id)
+		}
+
+		// Notify subscribers of removed checkpoints
+		if s.checkpointsRemovedChan != nil {
+			go func() {
+				s.checkpointsRemovedChan <- obsoleteIDs
+			}()
+		}
+
+		// Delete the obsolete checkpoints files
+		go func() {
+			paths := make([]string, 0, len(obsoleteIDs))
+			for _, id := range obsoleteIDs {
+				paths = append(paths, filepath.Join(s.checkpointsPath, "job-"+pathSegment(id)+".snapshot"))
+			}
+			if err := s.fileStore.Remove(paths...); err != nil {
+				s.log.Error("failed to remove obsolete checkpoint files", "paths", paths, "err", err)
+			}
+		}()
+	}
+
 	s.state.completedSnapshots = append(s.state.completedSnapshots, snap)
 	s.stateMu.Unlock()
 

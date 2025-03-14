@@ -15,13 +15,13 @@ import (
 
 type Directory struct {
 	Path          string
-	subscriptions []chan string
+	subscriptions []chan storage.FileEvent
 }
 
 func NewDirectory(path string) *Directory {
 	return &Directory{
 		Path:          path,
-		subscriptions: make([]chan string, 0),
+		subscriptions: make([]chan storage.FileEvent, 0),
 	}
 }
 
@@ -57,7 +57,10 @@ func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
 	}
 
 	for _, s := range d.subscriptions {
-		s <- targetFile.Name()
+		s <- storage.FileEvent{
+			Path: targetFile.Name(),
+			Op:   storage.OpCreate,
+		}
 	}
 	return targetFile.Name(), nil
 }
@@ -75,6 +78,26 @@ func (d *Directory) Read(fullFilePath string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+func (d *Directory) Remove(paths ...string) error {
+	for _, path := range paths {
+		fullPath := filepath.Join(d.Path, path)
+		err := os.Remove(fullPath)
+		if err != nil {
+			return fmt.Errorf("Directory.Remove error removing file %s: %w", fullPath, err)
+		}
+
+		// Notify subscribers about the file deletion
+		for _, s := range d.subscriptions {
+			s <- storage.FileEvent{
+				Path: fullPath,
+				Op:   storage.OpRemove,
+			}
+		}
+	}
+
+	return nil
 }
 
 func (d *Directory) List() iter.Seq2[string, error] {
@@ -136,10 +159,20 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 	return nil
 }
 
-func (d *Directory) Subscribe() <-chan string {
-	ch := make(chan string)
+func (d *Directory) Subscribe() <-chan storage.FileEvent {
+	ch := make(chan storage.FileEvent)
 	d.subscriptions = append(d.subscriptions, ch)
 	return ch
+}
+
+// Helper function to notify subscribers about file removal
+func (d *Directory) notifyFileRemoval(path string) {
+	for _, s := range d.subscriptions {
+		s <- storage.FileEvent{
+			Path: path,
+			Op:   storage.OpRemove,
+		}
+	}
 }
 
 var _ storage.FileStore = (*Directory)(nil)

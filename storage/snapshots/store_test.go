@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction/dkv"
 	"reduction.dev/reduction/dkv/recovery"
-	"reduction.dev/reduction/dkv/storage"
+	dkvstorage "reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/proto/snapshotpb"
+	"reduction.dev/reduction/storage"
 	"reduction.dev/reduction/storage/localfs"
 	"reduction.dev/reduction/storage/snapshots"
 )
@@ -29,10 +30,10 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	})
 
 	db := dkv.Open(dkv.DBOptions{
-		FileSystem:   storage.NewLocalFilesystem(filepath.Join(testDir, "op1")),
+		FileSystem:   dkvstorage.NewLocalFilesystem(filepath.Join(testDir, "op1")),
 		MemTableSize: 5 * 10_000,
 	}, nil)
-	for i := 0; i < 10_000; i++ {
+	for i := range 10_000 {
 		db.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 	}
 	cpHandle, err := db.Checkpoint(1)()
@@ -79,14 +80,86 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	require.NoError(t, err)
 
 	db = dkv.Open(dkv.DBOptions{
-		FileSystem:   storage.NewLocalFilesystem(storage.Join(testDir, "op2")),
+		FileSystem:   dkvstorage.NewLocalFilesystem(dkvstorage.Join(testDir, "op2")),
 		MemTableSize: 5 * 10_000,
 	}, []recovery.CheckpointHandle{cpHandle})
 
 	// Check that all previously written entries are in the DB.
-	for i := 0; i < 10_000; i++ {
+	for i := range 10_000 {
 		entry, err := db.Get([]byte(strconv.Itoa(i)))
 		assert.NoError(t, err)
 		assert.Equal(t, entry.Value(), []byte(strconv.Itoa(i)))
 	}
+}
+
+func TestObsoleteCheckpointEvents(t *testing.T) {
+	fs := localfs.NewDirectory(t.TempDir())
+	fsEvents := fs.Subscribe()
+	checkpointsRemovedEvents := make(chan []uint64)
+
+	// Create a new store
+	store := snapshots.NewStore(&snapshots.NewStoreParams{
+		CheckpointReplaced: checkpointsRemovedEvents,
+		FileStore:          fs,
+		SavepointsPath:     "savepoints",
+		CheckpointsPath:    "checkpoints",
+	})
+
+	// Start the first checkpoint
+	cpID1, err := store.CreateCheckpoint([]string{"op1"}, []string{"sr1"})
+	require.NoError(t, err)
+
+	// Add operator and source snapshots to complete the first checkpoint
+	err = store.AddOperatorSnapshot(&snapshotpb.OperatorCheckpoint{
+		CheckpointId:  cpID1,
+		OperatorId:    "op1",
+		DkvFileUri:    "dkv-checkpoint-file-1",
+		KeyGroupRange: &snapshotpb.KeyGroupRange{Start: 0, End: 0},
+	})
+	require.NoError(t, err)
+	err = store.AddSourceSnapshot(&snapshotpb.SourceCheckpoint{
+		CheckpointId:   cpID1,
+		Data:           []byte{},
+		SourceRunnerId: "sr1",
+	})
+	require.NoError(t, err)
+
+	// Verify that the first checkpoint file was created
+	firstCkptCreated := <-fsEvents
+	assert.Equal(t, storage.OpCreate, firstCkptCreated.Op)
+	assert.Contains(t, firstCkptCreated.Path, ".snapshot")
+
+	// Create and complete a second checkpoint
+	cpID2, err := store.CreateCheckpoint([]string{"op1"}, []string{"sr1"})
+	require.NoError(t, err)
+
+	// Add operator and source snapshots to complete the second checkpoint
+	err = store.AddOperatorSnapshot(&snapshotpb.OperatorCheckpoint{
+		CheckpointId:  cpID2,
+		OperatorId:    "op1",
+		DkvFileUri:    "dkv-checkpoint-file-2",
+		KeyGroupRange: &snapshotpb.KeyGroupRange{Start: 0, End: 0},
+	})
+	require.NoError(t, err)
+	err = store.AddSourceSnapshot(&snapshotpb.SourceCheckpoint{
+		CheckpointId:   cpID2,
+		Data:           []byte{},
+		SourceRunnerId: "sr1",
+	})
+	require.NoError(t, err)
+
+	// Verify that the second checkpoint file was created
+	secondFileEvent := <-fsEvents
+	assert.Equal(t, storage.OpCreate, secondFileEvent.Op)
+	assert.Contains(t, secondFileEvent.Path, ".snapshot")
+
+	// Wait for the checkpoints removed event which should contain the first checkpoint ID
+	removedIDs := <-checkpointsRemovedEvents
+	require.Equal(t, []uint64{cpID1}, removedIDs, "first checkpoint removed notification")
+
+	// Verify that the first checkpoint file has been removed
+	assert.Equal(t, storage.FileEvent{
+		Path: firstCkptCreated.Path,
+		Op:   storage.OpRemove,
+	}, <-fsEvents, "first checkpoint file removed")
 }
