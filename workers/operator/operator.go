@@ -204,6 +204,10 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	return nil
 }
 
+func (o *Operator) HandleRemoveCheckpoints(ctx context.Context, req *workerpb.UpdateRetainedCheckpointsRequest) error {
+	return o.db.UpdateRetainedCheckpoints(req.CheckpointIds)
+}
+
 func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *workerpb.Event) error {
 	if !o.status.IsReady() {
 		err := fmt.Errorf("operator not ready to handle events (status: %s)", o.status)

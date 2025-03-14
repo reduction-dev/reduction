@@ -95,14 +95,14 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 func TestObsoleteCheckpointEvents(t *testing.T) {
 	fs := localfs.NewDirectory(t.TempDir())
 	fsEvents := fs.Subscribe()
-	checkpointsRemovedEvents := make(chan []uint64)
+	retainedCheckpointsUpdated := make(chan []uint64)
 
 	// Create a new store
 	store := snapshots.NewStore(&snapshots.NewStoreParams{
-		CheckpointReplaced: checkpointsRemovedEvents,
-		FileStore:          fs,
-		SavepointsPath:     "savepoints",
-		CheckpointsPath:    "checkpoints",
+		RetainedCheckpointsUpdated: retainedCheckpointsUpdated,
+		FileStore:                  fs,
+		SavepointsPath:             "savepoints",
+		CheckpointsPath:            "checkpoints",
 	})
 
 	// Start the first checkpoint
@@ -153,9 +153,9 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 	assert.Equal(t, storage.OpCreate, secondFileEvent.Op)
 	assert.Contains(t, secondFileEvent.Path, ".snapshot")
 
-	// Wait for the checkpoints removed event which should contain the first checkpoint ID
-	removedIDs := <-checkpointsRemovedEvents
-	require.Equal(t, []uint64{cpID1}, removedIDs, "first checkpoint removed notification")
+	// Wait for the checkpoints retained event which should contain the second checkpoint ID
+	retainedIDs := <-retainedCheckpointsUpdated
+	require.Equal(t, []uint64{cpID2}, retainedIDs, "second checkpoint retained notification")
 
 	// Verify that the first checkpoint file has been removed
 	assert.Equal(t, storage.FileEvent{

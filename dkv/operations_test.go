@@ -274,7 +274,7 @@ func TestRemovingCheckpoints(t *testing.T) {
 	}
 	require.NoError(t, db.WaitOnTasks())
 
-	_, err = db.Checkpoint(2)()
+	newCheckpoint, err := db.Checkpoint(2)()
 	require.NoError(t, err)
 	require.NoError(t, db.WaitOnTasks())
 
@@ -286,7 +286,7 @@ func TestRemovingCheckpoints(t *testing.T) {
 		"checkpoints",
 	}, fs.List(), "fs has one table, the recovered wal, and the checkpoints file")
 
-	db.RemoveCheckpoints([]uint64{cpLocation.CheckpointID})
+	db.UpdateRetainedCheckpoints([]uint64{newCheckpoint.CheckpointID})
 	assert.Equal(t, []string{
 		"000000.sst",
 		"000001.sst",

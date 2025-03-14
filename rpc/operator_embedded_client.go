@@ -56,4 +56,8 @@ func (c *OperatorEmbeddedClient) Start(ctx context.Context, req *workerpb.StartO
 	return c.op.HandleStart(ctx, req, nil)
 }
 
+func (c *OperatorEmbeddedClient) UpdateRetainedCheckpoints(ctx context.Context, ids []uint64) error {
+	panic("unimplemented")
+}
+
 var _ proto.Operator = &OperatorEmbeddedClient{}

@@ -61,4 +61,11 @@ func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOp
 	return err
 }
 
+func (c *OperatorConnectClient) UpdateRetainedCheckpoints(ctx context.Context, ids []uint64) error {
+	_, err := c.connectClient.UpdateRetainedCheckpoints(ctx, connect.NewRequest(&workerpb.UpdateRetainedCheckpointsRequest{
+		CheckpointIds: ids,
+	}))
+	return err
+}
+
 var _ proto.Operator = (*OperatorConnectClient)(nil)

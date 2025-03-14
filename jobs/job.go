@@ -86,12 +86,15 @@ func New(params *NewParams) *Job {
 		params.Logger = slog.With("instanceID", "job")
 	}
 
+	retainedCheckpointsUpdatedChan := make(chan []uint64)
+
 	snapshotStore := snapshots.NewStore(&snapshots.NewStoreParams{
-		SavepointURI:     params.SavepointURI,
-		FileStore:        params.Store,
-		SavepointsPath:   params.SavepointsPath,
-		CheckpointsPath:  params.CheckpointsPath,
-		CheckpointEvents: params.CheckpointEvents,
+		SavepointURI:               params.SavepointURI,
+		FileStore:                  params.Store,
+		SavepointsPath:             params.SavepointsPath,
+		CheckpointsPath:            params.CheckpointsPath,
+		CheckpointEvents:           params.CheckpointEvents,
+		RetainedCheckpointsUpdated: retainedCheckpointsUpdatedChan,
 	})
 	job := &Job{
 		snapshotStore:       snapshotStore,
@@ -107,7 +110,15 @@ func New(params *NewParams) *Job {
 		status:              newJobStatus(),
 	}
 
+	ctx := context.TODO()
+
 	go job.processStateUpdates()
+
+	go func() {
+		for retained := range retainedCheckpointsUpdatedChan {
+			job.assembly.UpdateRetainedCheckpoints(ctx, retained)
+		}
+	}()
 
 	return job
 }

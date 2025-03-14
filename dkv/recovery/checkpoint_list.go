@@ -16,8 +16,8 @@ import (
 const checkpointsFileName = "checkpoints"
 
 type CheckpointList struct {
-	checkpoints        []*Checkpoint
-	removedCheckpoints []*Checkpoint // Track removed checkpoints so they can be destroyed on Save
+	checkpoints               []*Checkpoint
+	checkpointsPendingRemoval []*Checkpoint // Track removed checkpoints so they can be destroyed on Save
 }
 
 func NewCheckpointList() *CheckpointList {
@@ -42,6 +42,7 @@ func (cl *CheckpointList) Add(ckptID uint64, ll *sst.LevelList, w *wal.Writer) {
 }
 
 func (cl *CheckpointList) Save(fs storage.FileSystem) (string, error) {
+	// Collect a list of checkpoint docs for serialization
 	checkpointDocs := make([]checkpointDocument, len(cl.checkpoints))
 	for i, ckpt := range cl.checkpoints {
 		checkpointDocs[i] = ckpt.Document()
@@ -50,25 +51,31 @@ func (cl *CheckpointList) Save(fs storage.FileSystem) (string, error) {
 		Checkpoints: checkpointDocs,
 	}
 
+	// Serialize the checkpoint list document
 	data, err := json.Marshal(doc)
 	if err != nil {
 		return "", err
 	}
 
+	// Save the data to a file
 	file := fs.New(checkpointsFileName)
 	if _, err = file.Write(data); err != nil {
 		return "", err
 	}
-
 	if err := file.Save(); err != nil {
 		return "", err
 	}
 
-	for _, cp := range cl.removedCheckpoints {
+	// Call cp.Destroy() to delete WAL files
+	for _, cp := range cl.checkpointsPendingRemoval {
 		if err := cp.Destroy(); err != nil {
 			return "", err
 		}
 	}
+
+	// Clear the list of pending checkpoints
+	cl.checkpointsPendingRemoval = nil
+
 	return file.URI(), nil
 }
 
@@ -80,18 +87,22 @@ func (cl *CheckpointList) Latest() *Checkpoint {
 	return cl.checkpoints[len(cl.checkpoints)-1]
 }
 
-// Remove checkpoints from the list. These checkpoints aren't really removed
-// until the next successful Save.
-func (cl *CheckpointList) Remove(ids []uint64) {
+// RetainOnly keeps only the checkpoints with the specified IDs in the list. Other checkpoints
+// aren't really removed until the next successful Save.
+func (cl *CheckpointList) RetainOnly(ids []uint64) {
 	idsSet := ds.SetOf(ids...)
-	nextCheckpoints := make([]*Checkpoint, 0, len(cl.checkpoints)-len(ids))
+	nextCheckpoints := make([]*Checkpoint, 0, len(ids))
 	for _, cp := range cl.checkpoints {
-		if !idsSet.Has(cp.ID) {
+		if idsSet.Has(cp.ID) {
 			nextCheckpoints = append(nextCheckpoints, cp)
 		} else {
-			cl.removedCheckpoints = append(cl.removedCheckpoints, cp)
+			cl.checkpointsPendingRemoval = append(cl.checkpointsPendingRemoval, cp)
 		}
 	}
+	if len(nextCheckpoints) == 0 {
+		panic(fmt.Sprintf("db missing the job's retained checkpoints; job_retained=%v, db_current=%v", ids, cl.checkpoints))
+	}
+
 	cl.checkpoints = nextCheckpoints
 }
 

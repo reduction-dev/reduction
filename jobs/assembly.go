@@ -137,6 +137,16 @@ func (a *Assembly) StartCheckpoint(ctx context.Context, id uint64) error {
 	return g.Wait()
 }
 
+func (a *Assembly) UpdateRetainedCheckpoints(ctx context.Context, ids []uint64) error {
+	g, gctx := errgroup.WithContext(ctx)
+	for _, op := range a.operators {
+		g.Go(func() error {
+			return op.UpdateRetainedCheckpoints(gctx, ids)
+		})
+	}
+	return g.Wait()
+}
+
 func (a *Assembly) SourceRunnerIDs() []string {
 	ids := make([]string, len(a.sourceRunners))
 	for i, sr := range a.sourceRunners {

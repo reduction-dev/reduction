@@ -17,15 +17,15 @@ import (
 var ErrCheckpointInProgress = errors.New("checkpoint in progress")
 
 type Store struct {
-	fileStore              storage.FileStore
-	savepointsPath         string
-	checkpointsPath        string
-	log                    *slog.Logger
-	savepointURI           string
-	subscriber             chan CheckpointEvent
-	checkpointsRemovedChan chan []uint64
-	state                  storeState
-	stateMu                sync.Mutex
+	fileStore                  storage.FileStore
+	savepointsPath             string
+	checkpointsPath            string
+	log                        *slog.Logger
+	savepointURI               string
+	subscriber                 chan CheckpointEvent
+	retainedCheckpointsUpdated chan []uint64
+	state                      storeState
+	stateMu                    sync.Mutex
 }
 
 type CheckpointEvent struct {
@@ -40,23 +40,23 @@ type storeState struct {
 }
 
 type NewStoreParams struct {
-	SavepointURI       string
-	FileStore          storage.FileStore
-	SavepointsPath     string
-	CheckpointsPath    string
-	CheckpointEvents   chan CheckpointEvent
-	CheckpointReplaced chan []uint64
+	SavepointURI               string
+	FileStore                  storage.FileStore
+	SavepointsPath             string
+	CheckpointsPath            string
+	CheckpointEvents           chan CheckpointEvent
+	RetainedCheckpointsUpdated chan []uint64
 }
 
 func NewStore(params *NewStoreParams) *Store {
 	return &Store{
-		fileStore:              params.FileStore,
-		savepointsPath:         params.SavepointsPath,
-		checkpointsPath:        params.CheckpointsPath,
-		log:                    slog.With("instanceID", "job"),
-		savepointURI:           params.SavepointURI,
-		subscriber:             params.CheckpointEvents,
-		checkpointsRemovedChan: params.CheckpointReplaced,
+		fileStore:                  params.FileStore,
+		savepointsPath:             params.SavepointsPath,
+		checkpointsPath:            params.CheckpointsPath,
+		log:                        slog.With("instanceID", "job"),
+		savepointURI:               params.SavepointURI,
+		subscriber:                 params.CheckpointEvents,
+		retainedCheckpointsUpdated: params.RetainedCheckpointsUpdated,
 	}
 }
 
@@ -189,13 +189,6 @@ func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
 			obsoleteIDs = append(obsoleteIDs, oldSnap.id)
 		}
 
-		// Notify subscribers of removed checkpoints
-		if s.checkpointsRemovedChan != nil {
-			go func() {
-				s.checkpointsRemovedChan <- obsoleteIDs
-			}()
-		}
-
 		// Delete the obsolete checkpoints files
 		go func() {
 			paths := make([]string, 0, len(obsoleteIDs))
@@ -206,9 +199,17 @@ func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
 				s.log.Error("failed to remove obsolete checkpoint files", "paths", paths, "err", err)
 			}
 		}()
+
+		// Notify subscribers of new list of checkpoints to retain (just the completed one)
+		if s.retainedCheckpointsUpdated != nil {
+			go func() {
+				s.retainedCheckpointsUpdated <- []uint64{snap.id}
+			}()
+		}
 	}
 
-	s.state.completedSnapshots = append(s.state.completedSnapshots, snap)
+	// Reset the completed snapshots to remove obsolete checkpoints
+	s.state.completedSnapshots = []*jobSnapshot{snap}
 	s.stateMu.Unlock()
 
 	s.log.Info("store wrote checkpoint", "uri", uri)

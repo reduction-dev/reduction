@@ -42,4 +42,8 @@ func (l *OperatorConnectHandler) Start(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&workerpb.Empty{}), err
 }
 
+func (l *OperatorConnectHandler) UpdateRetainedCheckpoints(ctx context.Context, req *connect.Request[workerpb.UpdateRetainedCheckpointsRequest]) (*connect.Response[workerpb.Empty], error) {
+	return connect.NewResponse(&workerpb.Empty{}), l.operator.HandleRemoveCheckpoints(ctx, req.Msg)
+}
+
 var _ workerpbconnect.OperatorHandler = (*OperatorConnectHandler)(nil)

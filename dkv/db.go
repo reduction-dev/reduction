@@ -227,8 +227,8 @@ func (db *DB) Checkpoint(ckptID uint64) (wait func() (recovery.CheckpointHandle,
 	})
 }
 
-func (db *DB) RemoveCheckpoints(ids []uint64) error {
-	db.checkpoints.Remove(ids)
+func (db *DB) UpdateRetainedCheckpoints(ids []uint64) error {
+	db.checkpoints.RetainOnly(ids)
 	_, err := db.checkpoints.Save(db.fs)
 	return err
 }

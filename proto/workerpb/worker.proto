@@ -12,6 +12,7 @@ package worker;
 service Operator {
   rpc Start(StartOperatorRequest) returns (Empty);
   rpc HandleEventBatch(HandleEventBatchRequest) returns (Empty);
+  rpc UpdateRetainedCheckpoints(UpdateRetainedCheckpointsRequest) returns (Empty);
 }
 
 service SourceRunner {
@@ -51,7 +52,7 @@ message CheckpointBarrier {
 message SourceCompleteEvent {}
 
 message Watermark {
-  google.protobuf.Timestamp timestamp = 2; 
+  google.protobuf.Timestamp timestamp = 2;
 }
 
 message SourceSplit {
@@ -69,4 +70,8 @@ message StartSourceRunnerRequest {
 
 message StartCheckpointRequest {
   uint64 checkpoint_id = 1;
+}
+
+message UpdateRetainedCheckpointsRequest {
+  repeated uint64 checkpoint_ids = 1;
 }
