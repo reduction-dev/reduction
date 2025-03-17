@@ -69,14 +69,14 @@ type TableDocument struct {
 	EndKey      string
 	Size        uint64
 	EntriesSize uint64
-	Name        string
+	URI         string
 	StartSeqNum uint64
 	EndSeqNum   uint64
 }
 
 func NewTableFromDocument(fs storage.FileSystem, doc TableDocument) *Table {
 	return &Table{
-		file:        fs.Open(doc.Name),
+		file:        fs.Open(doc.URI),
 		size:        int64(doc.Size),
 		entriesSize: int64(doc.EntriesSize),
 		startKey:    []byte(doc.StartKey),
@@ -315,7 +315,7 @@ func (t *Table) Document() TableDocument {
 		EndKey:      string(t.endKey),
 		Size:        uint64(t.size),
 		EntriesSize: uint64(t.entriesSize),
-		Name:        t.Name(),
+		URI:         t.file.URI(),
 		StartSeqNum: t.startSeqNum,
 		EndSeqNum:   t.endSeqNum,
 	}

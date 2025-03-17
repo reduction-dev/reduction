@@ -30,7 +30,7 @@ func ListFiles(reader io.Reader) ([]string, error) {
 	// Add all table names to the output
 	for _, level := range ckpt.Levels {
 		for _, table := range level {
-			fileNames = append(fileNames, table.Name)
+			fileNames = append(fileNames, table.URI)
 		}
 	}
 

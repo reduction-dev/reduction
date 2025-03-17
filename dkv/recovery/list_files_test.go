@@ -36,6 +36,6 @@ func TestListFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"memory:///000000.wal",
-		"000000.sst",
+		"memory:///000000.sst",
 	}, files)
 }
