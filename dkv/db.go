@@ -14,6 +14,7 @@ import (
 	"reduction.dev/reduction/dkv/sst"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/dkv/wal"
+	"reduction.dev/reduction/partitioning"
 	"reduction.dev/reduction/util/size"
 )
 
@@ -34,10 +35,7 @@ type DB struct {
 	mu             *sync.RWMutex
 	logger         *slog.Logger
 	canDeleteTable func(*sst.Table) bool
-}
-
-type Partition interface {
-	OwnsKey(key []byte) bool
+	partition      partitioning.Partition
 }
 
 type DBOptions struct {
@@ -47,7 +45,7 @@ type DBOptions struct {
 	MaxWALSize                  uint64 // Maximum size of the WAL before forcing a memtable flush
 	NumLevels                   int
 	L0TableNumCompactionTrigger int
-	Partition                   Partition
+	Partition                   partitioning.Partition
 	CanDeleteTable              func(*sst.Table) bool
 	Logger                      *slog.Logger
 }
@@ -87,6 +85,10 @@ func New(options DBOptions) *DB {
 	if options.Logger == nil {
 		options.Logger = slog.Default()
 	}
+	// Default to a partition that owns all keys
+	if options.Partition == nil {
+		options.Partition = &partitioning.AllKeysPartition{}
+	}
 
 	tw := sst.NewTableWriter(options.FileSystem, 0)
 	compactor := &sst.Compactor{
@@ -113,6 +115,7 @@ func New(options DBOptions) *DB {
 		checkpoints:    recovery.NewCheckpointList(),
 		logger:         options.Logger,
 		canDeleteTable: options.CanDeleteTable,
+		partition:      options.Partition,
 	}
 
 	return db
@@ -144,6 +147,9 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 	for entry, err := range latestCP.WALSeq(db.fs) {
 		if err != nil {
 			return fmt.Errorf("reading wal: %v", err)
+		}
+		if !db.partition.OwnsKey(entry.K) {
+			continue
 		}
 
 		if entry.Deleted {
