@@ -49,7 +49,7 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 
 	job := jobs.New(&jobs.NewParams{
 		JobConfig: jd,
-		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity) proto.Operator {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:     senderID,
 				OperatorNode: node,

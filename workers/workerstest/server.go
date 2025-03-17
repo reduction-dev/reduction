@@ -56,7 +56,7 @@ func NewServer(t *testing.T, params NewServerParams) *server {
 		Diagnostics: []any{"handler", params.HandlerAddr},
 		Clock:       params.Clock,
 		LogPrefix:   params.LogPrefix,
-		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, errChan chan<- error) proto.Operator {
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity) proto.Operator {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:     senderID,
 				OperatorNode: node,

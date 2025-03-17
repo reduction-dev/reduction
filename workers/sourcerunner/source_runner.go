@@ -191,7 +191,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 
 	ops := make([]proto.Operator, len(msg.Operators))
 	for i, op := range msg.Operators {
-		ops[i] = r.operatorFactory(r.ID, op, make(chan error))
+		ops[i] = r.operatorFactory(r.ID, op)
 	}
 	r.operators = newOperatorCluster(loopCtx, &newClusterParams{
 		keyGroupCount:  int(msg.KeyGroupCount),

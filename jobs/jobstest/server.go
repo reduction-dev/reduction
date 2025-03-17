@@ -31,7 +31,7 @@ func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, opti
 		JobConfig: jobConfig,
 		Clock:     clocks.NewSystemClock(),
 		Logger:    logger,
-		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity, _errChan chan<- error) proto.Operator {
+		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity) proto.Operator {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
 				SenderID:       senderID,
 				OperatorNode:   node,

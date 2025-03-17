@@ -115,7 +115,7 @@ func New(params *NewParams) *Job {
 func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
 		j.log.Info("registering operator", "id", node.Id, "host", node.Host)
-		operator := j.operatorFactory("job", node, nil)
+		operator := j.operatorFactory("job", node)
 		j.registry.RegisterOperator(operator)
 	}
 }
