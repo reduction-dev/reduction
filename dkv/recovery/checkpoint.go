@@ -17,6 +17,8 @@ type Checkpoint struct {
 	WALs []wal.Handle
 	// A snapshot of written SSTables
 	Levels *sst.LevelList
+	// An index of the SSTable files that are used by this checkpoint
+	tableURIset map[string]struct{}
 }
 
 func newCheckpointFromDocument(fs storage.FileSystem, doc checkpointDocument) *Checkpoint {
@@ -25,10 +27,23 @@ func newCheckpointFromDocument(fs storage.FileSystem, doc checkpointDocument) *C
 		walHandles[i] = wal.NewHandle(fs, doc)
 	}
 
+	tableCount := 0
+	for _, level := range doc.Levels {
+		tableCount += len(level)
+	}
+
+	tableURISet := make(map[string]struct{}, tableCount)
+	for _, level := range doc.Levels {
+		for _, tableDoc := range level {
+			tableURISet[tableDoc.URI] = struct{}{}
+		}
+	}
+
 	return &Checkpoint{
-		ID:     uint64(doc.ID),
-		WALs:   walHandles,
-		Levels: sst.NewLevelListFromDocument(fs, doc.Levels),
+		ID:          uint64(doc.ID),
+		WALs:        walHandles,
+		Levels:      sst.NewLevelListFromDocument(fs, doc.Levels),
+		tableURIset: tableURISet,
 	}
 }
 
@@ -74,6 +89,12 @@ func (cp *Checkpoint) WALSeq(fs storage.FileSystem) iter.Seq2[wal.Entry, error] 
 		seqs[i] = wal.NewReader(fs, handle).All()
 	}
 	return iteru.Concat2(seqs...)
+}
+
+// Determine whether the checkpoint references the provided table file.
+func (cp *Checkpoint) IncludesTable(uri string) bool {
+	_, ok := cp.tableURIset[uri]
+	return ok
 }
 
 // Example format:

@@ -46,4 +46,9 @@ func (l *OperatorConnectHandler) UpdateRetainedCheckpoints(ctx context.Context, 
 	return connect.NewResponse(&workerpb.Empty{}), l.operator.HandleRemoveCheckpoints(ctx, req.Msg)
 }
 
+func (l *OperatorConnectHandler) NeedsTable(ctx context.Context, req *connect.Request[workerpb.NeedsTableRequest]) (*connect.Response[workerpb.NeedsTableResponse], error) {
+	tableNeeded := l.operator.HandleNeedsTable(req.Msg.TableUri)
+	return connect.NewResponse(&workerpb.NeedsTableResponse{TableNeeded: tableNeeded}), nil
+}
+
 var _ workerpbconnect.OperatorHandler = (*OperatorConnectHandler)(nil)

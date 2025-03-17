@@ -106,6 +106,15 @@ func (cl *CheckpointList) RetainOnly(ids []uint64) {
 	cl.checkpoints = nextCheckpoints
 }
 
+func (cl *CheckpointList) IncludesTable(uri string) bool {
+	for _, cp := range cl.checkpoints {
+		if cp.IncludesTable(uri) {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadCheckpointList reads checkpoint files given by checkpointHandles into
 // memory to create the CheckpointList. These checkpointHandles should point to
 // files all belonging to the same aggregate checkpoint across DKV instances.

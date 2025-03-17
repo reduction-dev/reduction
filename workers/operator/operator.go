@@ -29,19 +29,20 @@ import (
 
 type Operator struct {
 	// Members initialized with NewOperator
-	id                  string
-	host                string
-	job                 proto.Job
-	userHandler         proto.Handler
-	Logger              *slog.Logger
-	mu                  *sync.RWMutex
-	clock               clocks.Clock
-	events              chan func()
-	stop                context.CancelFunc
-	isHalting           atomic.Bool
-	status              *operatorStatus
-	eventBatcher        *batching.EventBatcher[RxnHandlerEvent]
-	eventBatchingParams batching.EventBatcherParams
+	id                      string
+	host                    string
+	job                     proto.Job
+	userHandler             proto.Handler
+	Logger                  *slog.Logger
+	mu                      *sync.RWMutex
+	clock                   clocks.Clock
+	events                  chan func()
+	stop                    context.CancelFunc
+	isHalting               atomic.Bool
+	status                  *operatorStatus
+	eventBatcher            *batching.EventBatcher[RxnHandlerEvent]
+	eventBatchingParams     batching.EventBatcherParams
+	neighborOperatorFactory func(senderID string, node *jobpb.NodeIdentity) proto.Operator
 
 	// Members set in HandleStart
 	keySpace       *partitioning.KeySpace
@@ -63,12 +64,13 @@ type RxnHandlerEvent struct {
 }
 
 type NewOperatorParams struct {
-	ID            string // Optional ID to override ID generation
-	Host          string
-	Job           proto.Job
-	UserHandler   proto.Handler
-	EventBatching batching.EventBatcherParams
-	Clock         clocks.Clock
+	ID                      string // Optional ID to override ID generation
+	Host                    string
+	Job                     proto.Job
+	UserHandler             proto.Handler
+	EventBatching           batching.EventBatcherParams
+	Clock                   clocks.Clock
+	NeighborOperatorFactory func(senderID string, node *jobpb.NodeIdentity) proto.Operator
 }
 
 func NewOperator(params NewOperatorParams) *Operator {
@@ -86,17 +88,18 @@ func NewOperator(params NewOperatorParams) *Operator {
 	}
 	log := slog.With("instanceID", "operator-"+shortID)
 	return &Operator{
-		id:                  params.ID,
-		host:                params.Host,
-		job:                 params.Job,
-		userHandler:         params.UserHandler,
-		Logger:              log,
-		mu:                  &sync.RWMutex{},
-		clock:               params.Clock,
-		events:              make(chan func()),
-		stop:                func() {}, // initialize with noop
-		eventBatchingParams: params.EventBatching,
-		status:              newOperatorStatus(),
+		id:                      params.ID,
+		host:                    params.Host,
+		job:                     params.Job,
+		userHandler:             params.UserHandler,
+		Logger:                  log,
+		mu:                      &sync.RWMutex{},
+		clock:                   params.Clock,
+		events:                  make(chan func()),
+		stop:                    func() {}, // initialize with noop
+		eventBatchingParams:     params.EventBatching,
+		status:                  newOperatorStatus(),
+		neighborOperatorFactory: params.NeighborOperatorFactory,
 	}
 }
 
@@ -158,7 +161,7 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 
 	o.Logger.Info("start command",
 		"operators", req.Operators,
-		"keyGroupRange", o.keyGroupRange,
+		"keyGroupCount", req.KeyGroupCount,
 		"checkpoints", req.Checkpoints)
 
 	// Locate own index by in the list of provided operator IDs
@@ -171,7 +174,20 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 
 	// Instantiate key space members
 	o.keySpace = partitioning.NewKeySpace(int(req.KeyGroupCount), len(req.Operators))
-	o.keyGroupRange = o.keySpace.KeyGroupRanges()[assemblyIndex]
+	keyGroupRanges := o.keySpace.KeyGroupRanges()
+	o.keyGroupRange = keyGroupRanges[assemblyIndex]
+
+	// Create the neighbor operator partitions
+	// neighborPartitions := make([]neighborParition, len(req.Operators)-1 /* exclude self */)
+	// for i, op := range req.Operators {
+	// 	if op.Id == o.id {
+	// 		continue
+	// 	}
+	// 	neighborPartitions[i] = neighborParition{
+	// 		keyGroupRange: keyGroupRanges[i],
+	// 		operator:      o.neighborOperatorFactory(o.id, op),
+	// 	}
+	// }
 
 	ckptHandles := make([]recovery.CheckpointHandle, len(req.Checkpoints))
 	for i, ckpt := range req.Checkpoints {
@@ -189,6 +205,7 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	o.db = dkv.Open(dkv.DBOptions{
 		FileSystem: storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
 		Logger:     o.Logger,
+		Partition:  newOperatorPartition(o.keyGroupRange, nil /* TODO */),
 	}, ckptHandles)
 	o.stateStore = NewKeyedStateStore(o.db, o.keySpace)
 	o.timerRegistry = NewTimerRegistry(NewTimerStore(o.db, o.keySpace, o.keyGroupRange, size.GB), req.SourceRunnerIds)
@@ -206,6 +223,10 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 
 func (o *Operator) HandleRemoveCheckpoints(ctx context.Context, req *workerpb.UpdateRetainedCheckpointsRequest) error {
 	return o.db.UpdateRetainedCheckpoints(req.CheckpointIds)
+}
+
+func (o *Operator) HandleNeedsTable(fileURI string) bool {
+	return o.db.NeedsTable(fileURI)
 }
 
 func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *workerpb.Event) error {

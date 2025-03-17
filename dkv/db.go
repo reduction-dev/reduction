@@ -242,6 +242,10 @@ func (db *DB) UpdateRetainedCheckpoints(ids []uint64) error {
 	return err
 }
 
+func (db *DB) NeedsTable(filePath string) bool {
+	return db.checkpoints.IncludesTable(filePath)
+}
+
 func (db *DB) Close() error {
 	return nil
 }

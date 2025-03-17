@@ -13,6 +13,7 @@ service Operator {
   rpc Start(StartOperatorRequest) returns (Empty);
   rpc HandleEventBatch(HandleEventBatchRequest) returns (Empty);
   rpc UpdateRetainedCheckpoints(UpdateRetainedCheckpointsRequest) returns (Empty);
+  rpc NeedsTable(NeedsTableRequest) returns (NeedsTableResponse);
 }
 
 service SourceRunner {
@@ -74,4 +75,12 @@ message StartCheckpointRequest {
 
 message UpdateRetainedCheckpointsRequest {
   repeated uint64 checkpoint_ids = 1;
+}
+
+message NeedsTableRequest {
+  string table_uri = 1;
+}
+
+message NeedsTableResponse {
+  bool table_needed = 1;
 }

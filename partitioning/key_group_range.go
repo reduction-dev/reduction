@@ -44,3 +44,10 @@ func (r KeyGroupRange) KeyGroups() []KeyGroup {
 func (r KeyGroupRange) IndexOf(kg KeyGroup) int {
 	return int(kg) - r.Start
 }
+
+// IncludesKeyGroup returns true if the given KeyGroup falls within this range.
+// Start is inclusive, End is exclusive.
+func (r KeyGroupRange) IncludesKeyGroup(kg KeyGroup) bool {
+	kgInt := int(kg)
+	return kgInt >= r.Start && kgInt < r.End
+}

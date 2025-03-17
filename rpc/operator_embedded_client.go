@@ -60,4 +60,9 @@ func (c *OperatorEmbeddedClient) UpdateRetainedCheckpoints(ctx context.Context, 
 	panic("unimplemented")
 }
 
+// NeedsTable implements proto.Operator.
+func (c *OperatorEmbeddedClient) NeedsTable(ctx context.Context, fileURI string) (bool, error) {
+	panic("unimplemented")
+}
+
 var _ proto.Operator = &OperatorEmbeddedClient{}

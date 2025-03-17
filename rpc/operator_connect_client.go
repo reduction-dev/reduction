@@ -68,4 +68,12 @@ func (c *OperatorConnectClient) UpdateRetainedCheckpoints(ctx context.Context, i
 	return err
 }
 
+func (c *OperatorConnectClient) NeedsTable(ctx context.Context, fileURI string) (bool, error) {
+	result, err := c.connectClient.NeedsTable(ctx, connect.NewRequest(&workerpb.NeedsTableRequest{TableUri: fileURI}))
+	if err != nil {
+		return false, err
+	}
+	return result.Msg.TableNeeded, nil
+}
+
 var _ proto.Operator = (*OperatorConnectClient)(nil)

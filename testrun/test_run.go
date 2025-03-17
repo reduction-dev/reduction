@@ -31,6 +31,9 @@ func Run(input io.Reader, output io.Writer) error {
 		Host:        "testrun",
 		Job:         &proto.NoopJob{},
 		UserHandler: rpc.NewHandlerPipeClient(input, output),
+		NeighborOperatorFactory: func(string, *jobpb.NodeIdentity) proto.Operator {
+			panic("test run operator should not need to call neighbors")
+		},
 	})
 
 	opResult := make(chan error, 1)

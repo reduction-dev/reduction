@@ -36,11 +36,12 @@ func New(params NewParams) *Worker {
 	})
 
 	operator := operator.NewOperator(operator.NewOperatorParams{
-		Host:          params.Host,
-		Job:           params.Job,
-		UserHandler:   params.Handler,
-		Clock:         params.Clock,
-		EventBatching: params.EventBatching,
+		Host:                    params.Host,
+		Job:                     params.Job,
+		UserHandler:             params.Handler,
+		Clock:                   params.Clock,
+		EventBatching:           params.EventBatching,
+		NeighborOperatorFactory: params.OperatorFactory,
 	})
 
 	if params.LogPrefix == "" {
