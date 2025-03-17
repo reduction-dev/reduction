@@ -21,18 +21,19 @@ var flushMemTablesQueue = bg.NewQueue(5)
 var compactionQueue = bg.NewQueue(5)
 
 type DB struct {
-	fs          storage.FileSystem
-	wal         *wal.Writer
-	maxWALSize  uint64
-	mtables     *memtable.List
-	sstables    *sst.LevelList
-	tableWriter *sst.TableWriter
-	tasks       *bg.AsyncGroup
-	compactor   *sst.Compactor
-	checkpoints *recovery.CheckpointList
-	seqNum      uint64 // The latest sequence number written
-	mu          *sync.RWMutex
-	logger      *slog.Logger
+	fs             storage.FileSystem
+	wal            *wal.Writer
+	maxWALSize     uint64
+	mtables        *memtable.List
+	sstables       *sst.LevelList
+	tableWriter    *sst.TableWriter
+	tasks          *bg.AsyncGroup
+	compactor      *sst.Compactor
+	checkpoints    *recovery.CheckpointList
+	seqNum         uint64 // The latest sequence number written
+	mu             *sync.RWMutex
+	logger         *slog.Logger
+	canDeleteTable func(*sst.Table) bool
 }
 
 type Partition interface {
@@ -47,6 +48,7 @@ type DBOptions struct {
 	NumLevels                   int
 	L0TableNumCompactionTrigger int
 	Partition                   Partition
+	CanDeleteTable              func(*sst.Table) bool
 	Logger                      *slog.Logger
 }
 
@@ -101,15 +103,16 @@ func New(options DBOptions) *DB {
 			MemSize:   options.MemTableSize,
 			NumLevels: options.NumLevels,
 		}),
-		sstables:    sst.NewEmptyLevelList(6),
-		tableWriter: tw,
-		maxWALSize:  options.MaxWALSize,
-		compactor:   compactor,
-		mu:          &sync.RWMutex{},
-		fs:          options.FileSystem,
-		tasks:       bg.NewAsyncGroup(),
-		checkpoints: recovery.NewCheckpointList(),
-		logger:      options.Logger,
+		sstables:       sst.NewEmptyLevelList(6),
+		tableWriter:    tw,
+		maxWALSize:     options.MaxWALSize,
+		compactor:      compactor,
+		mu:             &sync.RWMutex{},
+		fs:             options.FileSystem,
+		tasks:          bg.NewAsyncGroup(),
+		checkpoints:    recovery.NewCheckpointList(),
+		logger:         options.Logger,
+		canDeleteTable: options.CanDeleteTable,
 	}
 
 	return db

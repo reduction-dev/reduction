@@ -74,6 +74,7 @@ type TableDocument struct {
 	EndSeqNum   uint64
 }
 
+// TODO: New parameter for canDeleteTable
 func NewTableFromDocument(fs storage.FileSystem, doc TableDocument) *Table {
 	return &Table{
 		file:        fs.Open(doc.URI),
