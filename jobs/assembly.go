@@ -82,10 +82,8 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 
 	// Gather attributes for operators
 	opIdentities := make([]*jobpb.NodeIdentity, len(a.operators))
-	opIDs := make([]string, len(a.operators))
 	for i, op := range a.operators {
 		opIdentities[i] = &jobpb.NodeIdentity{Id: op.ID(), Host: op.Host()}
-		opIDs[i] = op.ID()
 	}
 
 	eg, gctx := errgroup.WithContext(context.Background())
@@ -112,7 +110,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 	for i, op := range a.operators {
 		eg.Go(func() error {
 			return op.Start(gctx, &workerpb.StartOperatorRequest{
-				OperatorIds:     opIDs,
+				Operators:       opIdentities,
 				SourceRunnerIds: srIDs,
 				Checkpoints:     sliceu.Pick(ckpt.GetOperatorCheckpoints(), opCkptAssignments[i]),
 				KeyGroupCount:   int32(cfg.KeyGroupCount),

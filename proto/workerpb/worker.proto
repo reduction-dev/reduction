@@ -21,7 +21,7 @@ service SourceRunner {
 }
 
 message StartOperatorRequest {
-  repeated string operator_ids = 1;
+  repeated job.NodeIdentity operators = 1;
   repeated string source_runner_ids = 2;
   repeated snapshot.OperatorCheckpoint checkpoints = 3;
   int32 key_group_count = 4;

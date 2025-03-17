@@ -157,20 +157,20 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	defer o.mu.Unlock()
 
 	o.Logger.Info("start command",
-		"operatorIDs", req.OperatorIds,
+		"operators", req.Operators,
 		"keyGroupRange", o.keyGroupRange,
 		"checkpoints", req.Checkpoints)
 
 	// Locate own index by in the list of provided operator IDs
-	assemblyIndex := slices.IndexFunc(req.OperatorIds, func(id string) bool {
-		return id == o.id
+	assemblyIndex := slices.IndexFunc(req.Operators, func(op *jobpb.NodeIdentity) bool {
+		return op.Id == o.id
 	})
 	if assemblyIndex == -1 {
-		panic(fmt.Sprintf("operator id %s was not included in assembly ids provided by job, %v", o.id, req.OperatorIds))
+		panic(fmt.Sprintf("operator id %s was not included in assembly ids provided by job, %v", o.id, req.Operators))
 	}
 
 	// Instantiate key space members
-	o.keySpace = partitioning.NewKeySpace(int(req.KeyGroupCount), len(req.OperatorIds))
+	o.keySpace = partitioning.NewKeySpace(int(req.KeyGroupCount), len(req.Operators))
 	o.keyGroupRange = o.keySpace.KeyGroupRanges()[assemblyIndex]
 
 	ckptHandles := make([]recovery.CheckpointHandle, len(req.Checkpoints))

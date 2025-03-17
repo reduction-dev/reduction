@@ -12,6 +12,7 @@ import (
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction-protocol/testrunpb"
 	"reduction.dev/reduction/proto"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/workers/operator"
@@ -38,7 +39,7 @@ func Run(input io.Reader, output io.Writer) error {
 	}()
 
 	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"testrun"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "testrun", Host: "testrun"}},
 		SourceRunnerIds: []string{"testrun"},
 		KeyGroupCount:   1,
 		Sinks:           []*jobconfigpb.Sink{},

@@ -10,6 +10,7 @@ import (
 	"reduction.dev/reduction-protocol/handlerpb"
 	"reduction.dev/reduction/batching"
 	"reduction.dev/reduction/connectors/embedded"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/sliceu"
@@ -37,7 +38,7 @@ func TestOperatorUsesMinimumOfSourceWatermarks(t *testing.T) {
 
 	sink := &embedded.RecordingSink{}
 	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"op1"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
 		StorageLocation: "memory:///storage",
@@ -111,7 +112,7 @@ func TestOperatorAlignsOnCheckpointBarriers(t *testing.T) {
 	tmpDir := t.TempDir()
 	sink := &embedded.RecordingSink{}
 	op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"op1"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
 		StorageLocation: tmpDir,
@@ -175,7 +176,7 @@ func TestOperatorAlignsOnCheckpointBarriers(t *testing.T) {
 
 	// Restart the operator from the checkpoint
 	op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"op1"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
 		StorageLocation: tmpDir,
@@ -236,7 +237,7 @@ func TestOperatorStatusTransitions(t *testing.T) {
 	// state is untested)
 	sink := &embedded.RecordingSink{}
 	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"op1"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"src1"},
 		KeyGroupCount:   256,
 		StorageLocation: t.TempDir(),
@@ -274,7 +275,7 @@ func TestUniqueKeyStatesInProcessEventBatchRequest(t *testing.T) {
 	// Initialize operator
 	sink := &embedded.RecordingSink{}
 	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
-		OperatorIds:     []string{"op1"},
+		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"src1"},
 		KeyGroupCount:   256,
 		StorageLocation: t.TempDir(),
