@@ -33,6 +33,7 @@ type Job struct {
 	keySpace            *partitioning.KeySpace
 	operatorFactory     proto.OperatorFactory
 	sourceRunnerFactory proto.SourceRunnerFactory
+	status              *jobStatus
 }
 
 type NewParams struct {
@@ -103,6 +104,7 @@ func New(params *NewParams) *Job {
 		keySpace:            partitioning.NewKeySpace(params.JobConfig.KeyGroupCount, params.JobConfig.WorkerCount),
 		operatorFactory:     params.OperatorFactory,
 		sourceRunnerFactory: params.SourceRunnerFactory,
+		status:              newJobStatus(),
 	}
 
 	go job.processStateUpdates()
@@ -141,6 +143,10 @@ func (j *Job) HandleDeregisterSourceRunner(sr *jobpb.NodeIdentity) {
 }
 
 func (j *Job) HandleCreateSavepoint(ctx context.Context) (uint64, error) {
+	if j.status.Value() != StatusRunning {
+		return 0, fmt.Errorf("cannot create savepoint: job not running (status: %s)", j.status)
+	}
+
 	// Create a pending savepoint in the snapshot store to track savepointing.
 	checkpointID, created, err := j.snapshotStore.CreateSavepoint(j.assembly.OperatorIDs(), j.assembly.SourceRunnerIDs())
 	if err != nil {
@@ -173,35 +179,51 @@ func (j *Job) HandleSourceCheckpointComplete(ctx context.Context, snapshot *snap
 // method and others that modify the cluster state are invoked serially.
 func (j *Job) processStateUpdates() {
 	for update := range j.stateUpdates {
+		// Process the state update
 		update()
 
+		// Evaluate the cluster state
 		if purged := j.registry.Purge(); len(purged) > 0 {
 			j.log.Info("registry purged", "nodes", purged)
 		}
 
 		j.log.Info("check registry", append(
-			[]any{slog.String("assembly", j.assembly.String())},
+			[]any{
+				slog.String("status", j.status.String()),
+				slog.String("assembly", j.assembly.String()),
+			},
 			j.registry.Diagnostics()...)...)
 
-		if j.assembly != nil {
-			if j.assembly.Healthy() {
-				continue // All working nodes are good, continue
+		// Transition the job to new state if needed
+		switch j.status.Value() {
+		case StatusRunning:
+			if !j.assembly.Healthy() {
+				j.status.Set(StatusPaused)
+				if j.checkpointTicker != nil {
+					j.checkpointTicker.Stop()
+				}
 			}
-			j.pause() // Need to pause because something is unhealthy
-		}
 
-		// If we're in some paused state
-		if j.assembly == nil {
+		case StatusInit, StatusPaused:
 			// Try to create a new assembly if there are enough nodes
 			assembly, err := NewAssembly(j.registry, j.config.Sources[0].NewSourceSplitter(), j.log, j.keySpace)
 			if errors.Is(err, ErrNotEnoughResources) {
-				continue
+				break
 			}
+
+			j.status.Set(StatusAssemblyStarting)
+
 			j.assembly = assembly
 			go func() {
 				err := j.start()
 				if err != nil {
-					j.log.Error("failed to start job", "err", err)
+					j.stateUpdates <- func() {
+						j.log.Error("failed to start job", "err", err)
+						j.status.Set(StatusPaused)
+						if j.checkpointTicker != nil {
+							j.checkpointTicker.Stop()
+						}
+					}
 				}
 			}()
 		}
@@ -210,7 +232,7 @@ func (j *Job) processStateUpdates() {
 
 // Transition the job to the running state.
 func (j *Job) start() error {
-	j.log.Info("running")
+	j.log.Info("starting")
 
 	// Get the job's current checkpoint
 	ckpt, err := j.snapshotStore.LoadLatestCheckpoint()
@@ -239,23 +261,21 @@ func (j *Job) start() error {
 		return fmt.Errorf("starting assembly: %v", err)
 	}
 
-	j.checkpointTicker = j.clock.Every(1*time.Minute, func(tc *clocks.EveryContext) {
-		cpID, err := j.snapshotStore.CreateCheckpoint(j.assembly.OperatorIDs(), j.assembly.SourceRunnerIDs())
-		if errors.Is(err, snapshots.ErrCheckpointInProgress) {
-			tc.RetryIn(1 * time.Second)
-			return
-		}
-		if err := j.assembly.StartCheckpoint(context.Background(), cpID); err != nil {
-			j.log.Error("failed to start checkpoint", "err", err)
-		}
-	}, "checkpointing")
+	j.stateUpdates <- func() {
+		j.log.Info("running")
+		j.status.Set(StatusRunning)
+
+		j.checkpointTicker = j.clock.Every(1*time.Minute, func(tc *clocks.EveryContext) {
+			cpID, err := j.snapshotStore.CreateCheckpoint(j.assembly.OperatorIDs(), j.assembly.SourceRunnerIDs())
+			if errors.Is(err, snapshots.ErrCheckpointInProgress) {
+				tc.RetryIn(1 * time.Second)
+				return
+			}
+			if err := j.assembly.StartCheckpoint(context.Background(), cpID); err != nil {
+				j.log.Error("failed to start checkpoint", "err", err)
+			}
+		}, "checkpointing")
+	}
 
 	return nil
-}
-
-// Transition the job back to the init state
-func (j *Job) pause() {
-	j.log.Info("paused")
-	j.checkpointTicker.Stop()
-	j.assembly = nil
 }
