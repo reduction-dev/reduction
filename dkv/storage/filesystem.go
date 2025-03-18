@@ -19,6 +19,7 @@ type File interface {
 	Name() string
 	Delete() error
 	URI() string
+	Size() int64
 	CreateDeleteFunc() func() error
 }
 

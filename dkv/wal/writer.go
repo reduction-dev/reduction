@@ -75,13 +75,22 @@ func (w *Writer) Cut() {
 
 // Truncate up to and including the given sequence number
 func (w *Writer) Truncate(seqNum uint64) {
+	truncateIndex := -1
 	for i, buf := range w.sealedBuffers {
 		if buf.latestSeqNum > seqNum {
-			// Truncate the obsolete cuts
-			w.sealedBuffers = w.sealedBuffers[i:]
-			return
+			truncateIndex = i
+			break
 		}
 	}
+
+	// If every buffer is earlier than the target seqNum, clear all buffers.
+	if truncateIndex == -1 {
+		w.sealedBuffers = nil
+		return
+	}
+
+	// Otherwise, truncate the buffers up to the target seqNum.
+	w.sealedBuffers = w.sealedBuffers[truncateIndex:]
 }
 
 // Save the log to durable storage

@@ -2,6 +2,7 @@ package wal_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -193,8 +194,62 @@ func TestWALFullWorkflow(t *testing.T) {
 	require.NoError(t, w.Save())
 
 	// Verify we can read back the entries after the truncation point
-	r := wal.NewReader(fs, w.Handle(0))
+	r := wal.NewReader(fs, w.Handle(lastSeqNum))
 	walEntries, err := iteru.Collect2(r.All())
 	require.NoError(t, errors.Join(err...))
-	assert.Len(t, walEntries, 2, "Should only have entries after truncation point")
+	assert.Len(t, walEntries, 1, "Should only have entries after truncation point")
+}
+
+func TestWALSizeDecreasesAfterMemtableRotationAndCheckpoint(t *testing.T) {
+	fs := storage.NewMemoryFilesystem()
+	w := wal.NewWriter(fs, 0, 1024)
+
+	// Write data
+	for i := range 100 {
+		seqNum := uint64(i + 1)
+		w.Put(fmt.Appendf(nil, "key%d", i), fmt.Appendf(nil, "value%d", i), seqNum)
+
+		// Simulate the sync phase of rotating memtables
+		if seqNum == 75 {
+			w.Cut()
+		}
+	}
+
+	// In the async phase of rotating memtables we truncate the WAL to the sequence
+	// number of the last entry written to the SSTable.
+	w.Truncate(75)
+
+	// During checkpointing, the sync phase rotates the WAL to start a new file
+	w2 := w.Rotate(fs)
+
+	// And in the async phase we persist the previous WAL.
+	require.NoError(t, w.Save())
+
+	// Get the size of the first WAL file
+	filePaths := fs.List()
+	assert.Equal(t, []string{"000000.wal"}, filePaths, "wrote one WAL file")
+	firstFileContent, err := storage.ReadAll(fs.Open("000000.wal"))
+	require.NoError(t, err)
+	t.Logf("Size of 1st WAL file: %d bytes", len(firstFileContent))
+
+	// Start again. Sync phase of memtable rotation cuts at latest seq num
+	w2.Cut()
+
+	// Async phase of memtable rotation truncates
+	w2.Truncate(100)
+
+	// Sync phase of checkpointing rotates to start a new file
+	_ = w2.Rotate(fs)
+
+	// Async phase of checkpointing saves the previous WAL
+	require.NoError(t, w2.Save())
+
+	// Get the size of the second WAL file
+	filePaths = fs.List()
+	assert.Equal(t, []string{"000000.wal", "000001.wal"}, filePaths, "wrote second WAL file")
+	secondFileContents, err := storage.ReadAll(fs.Open("000001.wal"))
+	require.NoError(t, err)
+	t.Logf("Size of 2nd WAL file: %d bytes", len(secondFileContents))
+
+	assert.Less(t, len(secondFileContents), len(firstFileContent), "WAL file size should decrease after truncation")
 }
