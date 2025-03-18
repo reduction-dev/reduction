@@ -165,29 +165,29 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 		"checkpoints", req.Checkpoints)
 
 	// Locate own index by in the list of provided operator IDs
-	assemblyIndex := slices.IndexFunc(req.Operators, func(op *jobpb.NodeIdentity) bool {
+	ownIndex := slices.IndexFunc(req.Operators, func(op *jobpb.NodeIdentity) bool {
 		return op.Id == o.id
 	})
-	if assemblyIndex == -1 {
+	if ownIndex == -1 {
 		panic(fmt.Sprintf("operator id %s was not included in assembly ids provided by job, %v", o.id, req.Operators))
 	}
 
 	// Instantiate key space members
 	o.keySpace = partitioning.NewKeySpace(int(req.KeyGroupCount), len(req.Operators))
 	keyGroupRanges := o.keySpace.KeyGroupRanges()
-	o.keyGroupRange = keyGroupRanges[assemblyIndex]
+	o.keyGroupRange = keyGroupRanges[ownIndex]
 
 	// Create the neighbor operator partitions
-	// neighborPartitions := make([]neighborParition, len(req.Operators)-1 /* exclude self */)
-	// for i, op := range req.Operators {
-	// 	if op.Id == o.id {
-	// 		continue
-	// 	}
-	// 	neighborPartitions[i] = neighborParition{
-	// 		keyGroupRange: keyGroupRanges[i],
-	// 		operator:      o.neighborOperatorFactory(o.id, op),
-	// 	}
-	// }
+	neighborPartitions := make([]neighborPartition, len(req.Operators)-1 /* exclude self */)
+	for i, op := range req.Operators {
+		if i == ownIndex {
+			continue
+		}
+		neighborPartitions = append(neighborPartitions, neighborPartition{
+			keyGroupRange: keyGroupRanges[i],
+			operator:      o.neighborOperatorFactory(o.id, op),
+		})
+	}
 
 	ckptHandles := make([]recovery.CheckpointHandle, len(req.Checkpoints))
 	for i, ckpt := range req.Checkpoints {
@@ -203,9 +203,9 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 
 	// Start the DKV database.
 	o.db = dkv.Open(dkv.DBOptions{
-		FileSystem: storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
-		Logger:     o.Logger,
-		Partition:  newOperatorPartition(o.keyGroupRange, nil /* TODO */),
+		FileSystem:    storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
+		Logger:        o.Logger,
+		DataOwnership: newOperatorPartition(o.keyGroupRange, neighborPartitions),
 	}, ckptHandles)
 	o.stateStore = NewKeyedStateStore(o.db, o.keySpace)
 	o.timerRegistry = NewTimerRegistry(NewTimerStore(o.db, o.keySpace, o.keyGroupRange, size.GB), req.SourceRunnerIds)

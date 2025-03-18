@@ -68,13 +68,13 @@ func NewLevelListOfTables(tables [][]*Table) *LevelList {
 }
 
 // TODO: New parameter for canDeleteTable
-func NewLevelListFromDocument(fs storage.FileSystem, llDoc [][]TableDocument) *LevelList {
+func NewLevelListFromDocument(fs storage.FileSystem, dataOwnership kv.DataOwnership, llDoc [][]TableDocument) *LevelList {
 	// Fill a matrix of levels using llDoc
 	levels := make([][]*Table, len(llDoc))
 	for i, levelDoc := range llDoc {
 		levels[i] = make([]*Table, len(levelDoc))
 		for j, tableDoc := range levelDoc {
-			levels[i][j] = NewTableFromDocument(fs, tableDoc)
+			levels[i][j] = NewTableFromDocument(fs, dataOwnership, tableDoc)
 		}
 	}
 

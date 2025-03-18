@@ -54,12 +54,11 @@ func NewTable(file storage.File) *Table {
 		size:        0,
 	}
 
-	deleteFunc := file.CreateDeleteFunc()
 	runtime.AddCleanup(t, func(f func() error) {
 		if err := f(); err != nil {
 			slog.Error("table cleanup", "err", err)
 		}
-	}, deleteFunc)
+	}, file.CreateDeleteFunc())
 
 	return t
 }
@@ -74,9 +73,13 @@ type TableDocument struct {
 	EndSeqNum   uint64
 }
 
-// TODO: New parameter for canDeleteTable
-func NewTableFromDocument(fs storage.FileSystem, doc TableDocument) *Table {
-	return &Table{
+// NewTableFromDocument initializes an SST table from a table object in a
+// checkpoint document. When tables are instantiated from checkpoint documents
+// they may be used by multiple DKV instances. Before deleting the underlying
+// file we check with the data ownership policy and only delete the file if this
+// is the only DKV instance that is using the table file.
+func NewTableFromDocument(fs storage.FileSystem, dataOwnership kv.DataOwnership, doc TableDocument) *Table {
+	t := &Table{
 		file:        fs.Open(doc.URI),
 		size:        int64(doc.Size),
 		entriesSize: int64(doc.EntriesSize),
@@ -85,6 +88,37 @@ func NewTableFromDocument(fs storage.FileSystem, doc TableDocument) *Table {
 		startSeqNum: doc.StartSeqNum,
 		endSeqNum:   doc.EndSeqNum,
 	}
+
+	type CleanupParams struct {
+		deleteFunc    func() error
+		dataOwnership kv.DataOwnership
+		startKey      []byte
+		endKey        []byte
+		uri           string
+	}
+	params := CleanupParams{
+		deleteFunc:    t.file.CreateDeleteFunc(),
+		dataOwnership: dataOwnership,
+		startKey:      []byte(doc.StartKey),
+		endKey:        []byte(doc.EndKey),
+		uri:           doc.URI,
+	}
+
+	runtime.AddCleanup(t, func(p CleanupParams) {
+		canDelete, err := p.dataOwnership.ExclusivelyOwnsTable(p.uri, p.startKey, p.endKey)
+		if err != nil {
+			slog.Error("failed determining exclusive ownership, not deleting", "err", err, "uri", p.uri)
+		}
+
+		if canDelete {
+			err := p.deleteFunc()
+			if err != nil {
+				slog.Error("failed deleting table", "uri", p.uri, "err", err)
+			}
+		}
+	}, params)
+
+	return t
 }
 
 func (t *Table) Get(key []byte) (kv.Entry, error) {

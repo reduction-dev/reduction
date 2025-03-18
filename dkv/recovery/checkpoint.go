@@ -3,6 +3,7 @@ package recovery
 import (
 	"iter"
 
+	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/sst"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/dkv/wal"
@@ -21,7 +22,7 @@ type Checkpoint struct {
 	tableURIset map[string]struct{}
 }
 
-func newCheckpointFromDocument(fs storage.FileSystem, doc checkpointDocument) *Checkpoint {
+func newCheckpointFromDocument(fs storage.FileSystem, dataOwnership kv.DataOwnership, doc checkpointDocument) *Checkpoint {
 	walHandles := make([]wal.Handle, len(doc.WALs))
 	for i, doc := range doc.WALs {
 		walHandles[i] = wal.NewHandle(fs, doc)
@@ -42,7 +43,7 @@ func newCheckpointFromDocument(fs storage.FileSystem, doc checkpointDocument) *C
 	return &Checkpoint{
 		ID:          uint64(doc.ID),
 		WALs:        walHandles,
-		Levels:      sst.NewLevelListFromDocument(fs, doc.Levels),
+		Levels:      sst.NewLevelListFromDocument(fs, dataOwnership, doc.Levels),
 		tableURIset: tableURISet,
 	}
 }

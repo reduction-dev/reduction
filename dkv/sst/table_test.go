@@ -38,7 +38,7 @@ func TestTable_Load(t *testing.T) {
 	require.NoError(t, err)
 
 	data := table.Document()
-	table = sst.NewTableFromDocument(fs, data)
+	table = sst.NewTableFromDocument(fs, &kv.AllDataOwnership{}, data)
 
 	// Prove that startKey and endKey were set
 	assert.True(t, table.RangeContainsKey([]byte("099")), "contains key in sequence")

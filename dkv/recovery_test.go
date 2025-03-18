@@ -95,14 +95,14 @@ func TestRecoveringFromTwoCheckpoints(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
 
 	// Process entries with first DB
-	db1Partition := dkvtest.NewPartition(2, 0)
+	db1Keys := dkvtest.NewHashBasedDataOwnership(2, 0)
 	db1 := dkv.Open(dkv.DBOptions{
-		FileSystem:   fs.WithWorkingDir("db1"),
-		MemTableSize: uint64(entryList.Size) / 3,
-		Partition:    db1Partition,
+		FileSystem:    fs.WithWorkingDir("db1"),
+		MemTableSize:  uint64(entryList.Size) / 3,
+		DataOwnership: db1Keys,
 	}, nil)
 	for _, e := range entryList.Entries {
-		if db1Partition.OwnsKey(e.Key()) {
+		if db1Keys.OwnsKey(e.Key()) {
 			db1.Put(e.Key(), e.Value())
 		}
 	}
@@ -113,14 +113,14 @@ func TestRecoveringFromTwoCheckpoints(t *testing.T) {
 	require.NoError(t, db1.WaitOnTasks())
 
 	// Start a second database
-	db2Partition := dkvtest.NewPartition(2, 1)
+	db2Keys := dkvtest.NewHashBasedDataOwnership(2, 1)
 	db2 := dkv.Open(dkv.DBOptions{
-		FileSystem:   fs.WithWorkingDir("db2"),
-		MemTableSize: uint64(entryList.Size) / 3,
-		Partition:    db2Partition,
+		FileSystem:    fs.WithWorkingDir("db2"),
+		MemTableSize:  uint64(entryList.Size) / 3,
+		DataOwnership: db2Keys,
 	}, nil)
 	for _, e := range entryList.Entries {
-		if db2Partition.OwnsKey(e.Key()) {
+		if db2Keys.OwnsKey(e.Key()) {
 			db2.Put(e.Key(), e.Value())
 		}
 	}
@@ -142,9 +142,9 @@ func TestRecoveringFromTwoCheckpoints(t *testing.T) {
 
 	// Start a new DB that reads from the previous 2 checkpoints
 	db3 := dkv.Open(dkv.DBOptions{
-		FileSystem:   fs.WithWorkingDir("db3"),
-		MemTableSize: uint64(entryList.Size) / 3,
-		Partition:    dkvtest.NewPartition(1, 0), // Owns all keys
+		FileSystem:    fs.WithWorkingDir("db3"),
+		MemTableSize:  uint64(entryList.Size) / 3,
+		DataOwnership: dkvtest.NewHashBasedDataOwnership(1, 0), // Owns all keys
 	}, []recovery.CheckpointHandle{db1CP, db2CP})
 
 	// Make sure we can read all the previously written entries

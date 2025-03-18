@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 
+	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/sst"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/dkv/wal"
@@ -118,7 +119,7 @@ func (cl *CheckpointList) IncludesTable(uri string) bool {
 // LoadCheckpointList reads checkpoint files given by checkpointHandles into
 // memory to create the CheckpointList. These checkpointHandles should point to
 // files all belonging to the same aggregate checkpoint across DKV instances.
-func LoadCheckpointList(fs storage.FileSystem, checkpointHandles []CheckpointHandle) (*CheckpointList, error) {
+func LoadCheckpointList(fs storage.FileSystem, dataOwnership kv.DataOwnership, checkpointHandles []CheckpointHandle) (*CheckpointList, error) {
 	if len(checkpointHandles) == 0 {
 		return &CheckpointList{}, nil
 	}
@@ -168,7 +169,7 @@ func LoadCheckpointList(fs storage.FileSystem, checkpointHandles []CheckpointHan
 		}
 	}
 
-	compositeCheckpoint := newCheckpointFromDocument(fs, compositeCheckpointDoc)
+	compositeCheckpoint := newCheckpointFromDocument(fs, dataOwnership, compositeCheckpointDoc)
 
 	return &CheckpointList{checkpoints: []*Checkpoint{compositeCheckpoint}}, nil
 }

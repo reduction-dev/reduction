@@ -19,8 +19,22 @@ func KeyGroupRangeFromProto(msg *snapshotpb.KeyGroupRange) KeyGroupRange {
 	}
 }
 
+// KeyGroupRangeFromBytes creates a KeyGroupRange from byte slices. In this case
+// the `end` slice is _inclusive_ but this function yields a KeyGroupRange with
+// an exclusive end that would contain the given keys.
+func KeyGroupRangeFromBytes(start, end []byte) KeyGroupRange {
+	return KeyGroupRange{
+		Start: int(KeyGroupFromBytes(start)),
+		End:   int(KeyGroupFromBytes(end)) + 1,
+	}
+}
+
 func (r KeyGroupRange) Overlaps(other KeyGroupRange) bool {
 	return other.Start < r.End && other.End > r.Start
+}
+
+func (r KeyGroupRange) Contains(other KeyGroupRange) bool {
+	return other.Start >= r.Start && other.End <= r.End
 }
 
 func (r KeyGroupRange) String() string {

@@ -14,7 +14,6 @@ import (
 	"reduction.dev/reduction/dkv/sst"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/dkv/wal"
-	"reduction.dev/reduction/partitioning"
 	"reduction.dev/reduction/util/size"
 )
 
@@ -22,20 +21,19 @@ var flushMemTablesQueue = bg.NewQueue(5)
 var compactionQueue = bg.NewQueue(5)
 
 type DB struct {
-	fs             storage.FileSystem
-	wal            *wal.Writer
-	maxWALSize     uint64
-	mtables        *memtable.List
-	sstables       *sst.LevelList
-	tableWriter    *sst.TableWriter
-	tasks          *bg.AsyncGroup
-	compactor      *sst.Compactor
-	checkpoints    *recovery.CheckpointList
-	seqNum         uint64 // The latest sequence number written
-	mu             *sync.RWMutex
-	logger         *slog.Logger
-	canDeleteTable func(*sst.Table) bool
-	partition      partitioning.Partition
+	fs            storage.FileSystem
+	wal           *wal.Writer
+	maxWALSize    uint64
+	mtables       *memtable.List
+	sstables      *sst.LevelList
+	tableWriter   *sst.TableWriter
+	tasks         *bg.AsyncGroup
+	compactor     *sst.Compactor
+	checkpoints   *recovery.CheckpointList
+	seqNum        uint64 // The latest sequence number written
+	mu            *sync.RWMutex
+	logger        *slog.Logger
+	dataOwnership kv.DataOwnership
 }
 
 type DBOptions struct {
@@ -45,7 +43,7 @@ type DBOptions struct {
 	MaxWALSize                  uint64 // Maximum size of the WAL before forcing a memtable flush
 	NumLevels                   int
 	L0TableNumCompactionTrigger int
-	Partition                   partitioning.Partition
+	DataOwnership               kv.DataOwnership
 	CanDeleteTable              func(*sst.Table) bool
 	Logger                      *slog.Logger
 }
@@ -86,8 +84,8 @@ func New(options DBOptions) *DB {
 		options.Logger = slog.Default()
 	}
 	// Default to a partition that owns all keys
-	if options.Partition == nil {
-		options.Partition = &partitioning.AllKeysPartition{}
+	if options.DataOwnership == nil {
+		options.DataOwnership = &kv.AllDataOwnership{}
 	}
 
 	tw := sst.NewTableWriter(options.FileSystem, 0)
@@ -105,17 +103,16 @@ func New(options DBOptions) *DB {
 			MemSize:   options.MemTableSize,
 			NumLevels: options.NumLevels,
 		}),
-		sstables:       sst.NewEmptyLevelList(6),
-		tableWriter:    tw,
-		maxWALSize:     options.MaxWALSize,
-		compactor:      compactor,
-		mu:             &sync.RWMutex{},
-		fs:             options.FileSystem,
-		tasks:          bg.NewAsyncGroup(),
-		checkpoints:    recovery.NewCheckpointList(),
-		logger:         options.Logger,
-		canDeleteTable: options.CanDeleteTable,
-		partition:      options.Partition,
+		sstables:      sst.NewEmptyLevelList(6),
+		tableWriter:   tw,
+		maxWALSize:    options.MaxWALSize,
+		compactor:     compactor,
+		mu:            &sync.RWMutex{},
+		fs:            options.FileSystem,
+		tasks:         bg.NewAsyncGroup(),
+		checkpoints:   recovery.NewCheckpointList(),
+		logger:        options.Logger,
+		dataOwnership: options.DataOwnership,
 	}
 
 	return db
@@ -123,7 +120,7 @@ func New(options DBOptions) *DB {
 
 // Prepare the database. This loads the WAL entries into the memtable.
 func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
-	checkpoints, err := recovery.LoadCheckpointList(db.fs, initCheckpoints)
+	checkpoints, err := recovery.LoadCheckpointList(db.fs, db.dataOwnership, initCheckpoints)
 	if err != nil {
 		return fmt.Errorf("read checkpoint: %v", err)
 	}
@@ -148,7 +145,7 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 		if err != nil {
 			return fmt.Errorf("reading wal: %v", err)
 		}
-		if !db.partition.OwnsKey(entry.K) {
+		if !db.dataOwnership.OwnsKey(entry.K) {
 			continue
 		}
 
