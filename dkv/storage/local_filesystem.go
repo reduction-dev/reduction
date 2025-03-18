@@ -182,7 +182,7 @@ func (d *DiskFile) Delete() error {
 		panic("tried to delete a file being written")
 	}
 
-	return os.Remove(d.osFile.Name())
+	return os.Remove(filepath.Join(d.dir, d.name))
 }
 
 func (d *DiskFile) Size() int64 {

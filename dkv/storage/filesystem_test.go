@@ -145,4 +145,23 @@ func FileSystemSemanticsSuite(t *testing.T, fs storage.FileSystem) {
 		_, err = fs.Open("file").ReadAt(nil, 0)
 		assert.ErrorIs(t, err, storage.ErrNotFound, "file should be deleted")
 	})
+
+	t.Run("Deleting an existing file", func(t *testing.T) {
+		// Create a file to delete
+		filename := "file.txt"
+		f := fs.New(filename)
+		_, err := f.Write([]byte{1, 2, 3})
+		require.NoError(t, err)
+		require.NoError(t, f.Save())
+
+		// Create a new file instance by opening the file
+		existingFile := fs.Open(filename)
+
+		// Delete the file without reading or writing to it
+		assert.NoError(t, existingFile.Delete(), "deleting an existing file does not error")
+
+		// Verify the file is gone
+		_, err = fs.Open(filename).ReadAt(nil, 0)
+		assert.ErrorIs(t, err, storage.ErrNotFound, "file should be deleted")
+	})
 }
