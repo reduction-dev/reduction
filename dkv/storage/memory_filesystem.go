@@ -112,21 +112,23 @@ type MemoryFile struct {
 }
 
 func (m *MemoryFile) ReadAt(p []byte, off int64) (n int, err error) {
+	if m.fileMode == FILE_MODE_WRITE {
+		panic("tried to read from a write only file")
+	}
+
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if !m.didLoad {
 		file, ok := m.fs.files.Get(m.path)
 		if !ok {
-			m.mu.Unlock()
 			return 0, fmt.Errorf("no memory file named %s: %w", m.path, ErrNotFound)
 		}
 		m.buf = file.buf
 		m.reader = bytes.NewReader(m.buf)
 		m.didLoad = true
 	}
-	m.mu.Unlock()
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	return m.reader.ReadAt(p, off)
 }
 

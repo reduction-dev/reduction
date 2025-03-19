@@ -156,6 +156,9 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 		}
 	}
 	db.logger.Info("db.start done replaying the WAL")
+	if db.seqNum != latestCP.LastSeqNum {
+		return fmt.Errorf("checkpoint recovery left db in invalid state: checkpoint seq num %d, db seq num %d", latestCP.LastSeqNum, db.seqNum)
+	}
 
 	return nil
 }
@@ -208,15 +211,12 @@ func (db *DB) ScanPrefix(prefix []byte, errOut *error) iter.Seq[kv.Entry] {
 // Checkpoint initiates a DB checkpoint associated with the caller's provided
 // checkpoint ID. This ID must not be repeated between checkpoints.
 func (db *DB) Checkpoint(ckptID uint64) (wait func() (recovery.CheckpointHandle, error)) {
+	// In one atomic operation, create a checkpoint with a sealed WAL and the current set of SST Tables.
+	db.mu.Lock()
 	prevWAL := db.wal
 	db.wal = db.wal.Rotate(db.fs)
-
-	// Create a new checkpoint with the latest set of tables. Tables are
-	// concurrently changing due to async flushing and compaction. They are also
-	// incomplete because they don't include memtables.
-	//
-	// This method passes ownership of the tables ref to the new checkpoint
-	db.checkpoints.Add(ckptID, db.currentSSTables(), prevWAL, db.seqNum)
+	db.checkpoints.Add(ckptID, db.sstables, prevWAL, db.seqNum)
+	db.mu.Unlock()
 
 	return bg.Task2(func() (recovery.CheckpointHandle, error) {
 		if err := prevWAL.Save(); err != nil {

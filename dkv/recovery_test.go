@@ -1,12 +1,16 @@
 package dkv_test
 
 import (
+	"runtime"
+	"slices"
 	"testing"
 
+	"github.com/segmentio/ksuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction/dkv"
 	"reduction.dev/reduction/dkv/dkvtest"
+	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/recovery"
 	"reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/util/size"
@@ -262,4 +266,78 @@ func TestRecoveringFromTwoSubsequentCheckpointsWithNoSSTs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, got.Value(), entry.Value())
 	}
+}
+
+func TestRecoveringFromCheckpoint_Async(t *testing.T) {
+	gen := dkvtest.SequenceGenerator{}
+	wkDir := ksuid.New().String()
+	fs := storage.NewMemoryFilesystem().WithWorkingDir(wkDir)
+
+	dbOptions := dkv.DBOptions{FileSystem: fs, MemTableSize: 500}
+	db1 := dkv.Open(dbOptions, nil)
+
+	// Start writing
+	for _, entry := range gen.All() {
+		db1.Put(entry.Key, entry.Value)
+
+		// Break when we've written flushed some data
+		if len(fs.List()) > 0 {
+			break
+		}
+	}
+
+	// Store an exclusive end value for the checkpoint
+	ckptEnd := gen.NextValue
+	t.Logf("flushed; checkpointEnd=%d, files=%v", ckptEnd, fs.List())
+
+	awaitCheckpoint := db1.Checkpoint(1)
+
+	// Continue writing
+	for _, entry := range gen.All() {
+		db1.Put(entry.Key, entry.Value)
+
+		// break once we have a checkpoint
+		if slices.Contains(fs.List(), "checkpoints") {
+			break
+		}
+	}
+
+	// Store the last value written to the DB
+	writingEnd := gen.NextValue
+	t.Logf("checkpoint written; writingEnd=%d, files=%v", writingEnd, fs.List())
+	ckpt, err := awaitCheckpoint()
+	require.NoError(t, err)
+	require.NoError(t, db1.Close())
+
+	// Log the contents of the checkpoint
+	data, _ := storage.ReadAll(fs.Open(ckpt.URI))
+	t.Logf("checkpoint json: %s", string(data))
+
+	// Start a new database from the checkpoint
+	dbOptions.FileSystem = fs.WithWorkingDir("instance-2")
+	db2 := dkv.Open(dbOptions, []recovery.CheckpointHandle{ckpt})
+	defer db2.Close()
+
+	gen = dkvtest.SequenceGenerator{}
+	// Make sure we can read all the previously written entries
+	for i, entry := range gen.All() {
+		// We should have all the entries up to the checkpoint
+		if i < ckptEnd {
+			got, err := db2.Get(entry.Key)
+			assert.NoError(t, err, "failed finding key: %d", i)
+			if err == nil {
+				assert.Equal(t, got.Value(), entry.Value, "incorrect key value: %d", i)
+			}
+		} else if i < writingEnd {
+			// We shouldn't have any errors after the checkpoint
+			_, err := db2.Get(entry.Key)
+			assert.ErrorIs(t, err, kv.ErrNotFound, "found non-checkpointed key: %d ", i)
+		} else {
+			// Stop the test after we're past the previously written value
+			break
+		}
+	}
+
+	// Prevent garbage collection of the db
+	runtime.KeepAlive(db1)
 }

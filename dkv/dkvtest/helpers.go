@@ -3,6 +3,7 @@ package dkvtest
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"iter"
 	"math/rand/v2"
@@ -31,8 +32,8 @@ func EntryEqual(t testingT, want, got kv.Entry) {
 		want.IsDelete() != got.IsDelete() {
 
 		t.Errorf(
-			`Entries not equivalent. 
-Want {Key: %s, Value: %s, IsDeleted: %t} 
+			`Entries not equivalent.
+Want {Key: %s, Value: %s, IsDeleted: %t}
 Got {Key: %s, Value: %s, IsDeleted: %t}`,
 			want.Key(), want.Value(), want.IsDelete(),
 			got.Key(), got.Value(), got.IsDelete(),
@@ -187,3 +188,27 @@ func SSTFileCount(t testingT, dir string) int {
 	}
 	return sstFileCount
 }
+
+type KV struct {
+	Key   []byte
+	Value []byte
+}
+
+type SequenceGenerator struct {
+	NextValue uint64
+}
+
+func (s *SequenceGenerator) All() iter.Seq2[uint64, KV] {
+	return func(yield func(uint64, KV) bool) {
+		for {
+			value := make([]byte, 8)
+			numValue := s.NextValue
+			s.NextValue++
+			binary.BigEndian.PutUint64(value, numValue)
+			if !yield(numValue, KV{Key: value, Value: value}) {
+				return
+			}
+		}
+	}
+}
+
