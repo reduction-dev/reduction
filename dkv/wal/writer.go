@@ -3,6 +3,8 @@ package wal
 import (
 	"fmt"
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"reduction.dev/reduction/dkv/fields"
 	"reduction.dev/reduction/dkv/storage"
@@ -15,8 +17,21 @@ type Writer struct {
 	sealedBuffers []*bufferSegment // Buffers pending truncation
 	latestSeqNum  uint64           // Latest written seq number recorded in segments during Cut
 	maxSize       uint64           // Maximum size of the log file
+	sealed        atomic.Bool      // Whether the writer is immutable
+	mu            sync.Mutex       // Protects sealedBuffers for concurrent operations on unsealed writers
 }
 
+// NewWriter creates a new WAL writer.
+// Concurrency caller contract:
+// Called synchronously by the same goroutine:
+//  1. Put/Delete - writing entries
+//  2. Cut - sync phase of memtable rotation
+//  3. Rotate - sync checkpoint phase
+//  4. Handle - sync checkpoint phase
+//
+// Called asynchronously:
+// 1. Truncate - async rotating memtables phase
+// 2. Save - async checkpointing phase
 func NewWriter(fs storage.FileSystem, id int, maxSize uint64) *Writer {
 	return &Writer{
 		file:          fs.New(FileName(id)),
@@ -27,7 +42,13 @@ func NewWriter(fs storage.FileSystem, id int, maxSize uint64) *Writer {
 	}
 }
 
+/* Start non-concurrent operations */
+
 func (w *Writer) Put(key []byte, value []byte, seqNum uint64) (full bool) {
+	if w.sealed.Load() {
+		panic("cannot write to a sealed writer")
+	}
+
 	buf := w.activeBuffer
 	fields.MustWriteUint64(buf, seqNum)
 	fields.MustWriteVarBytes(buf, key)
@@ -39,6 +60,10 @@ func (w *Writer) Put(key []byte, value []byte, seqNum uint64) (full bool) {
 }
 
 func (w *Writer) Delete(key []byte, seqNum uint64) (full bool) {
+	if w.sealed.Load() {
+		panic("cannot write to a sealed writer")
+	}
+
 	buf := w.activeBuffer
 	fields.MustWriteUint64(buf, seqNum)
 	fields.MustWriteVarBytes(buf, key)
@@ -48,7 +73,14 @@ func (w *Writer) Delete(key []byte, seqNum uint64) (full bool) {
 	return uint64(len(buf.buf)) >= w.maxSize
 }
 
+// Rotate returns a new writer for the next log file. The current writer is
+// considered sealed and must not be modified after this call.
 func (w *Writer) Rotate(fs storage.FileSystem) *Writer {
+	if w.sealed.Load() {
+		panic("cannot rotate a sealed writer")
+	}
+	w.sealed.Store(true)
+
 	nextLog := NewWriter(fs, w.id+1, w.maxSize)
 	nextLog.sealedBuffers = make([]*bufferSegment, len(w.sealedBuffers)+1)
 	nextLog.maxSize = w.maxSize
@@ -68,13 +100,37 @@ func (w *Writer) Rotate(fs storage.FileSystem) *Writer {
 // number. This offset will be used to truncate the log when memtables are
 // written to sstables and make it to the current set of DB levels.
 func (w *Writer) Cut() {
+	if w.sealed.Load() {
+		panic("cannot cut a sealed writer")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.activeBuffer.latestSeqNum = w.latestSeqNum
 	w.sealedBuffers = append(w.sealedBuffers, w.activeBuffer)
 	w.activeBuffer = &bufferSegment{}
 }
 
+func (w *Writer) Handle(after uint64) Handle {
+	return Handle{
+		ID:    w.id,
+		file:  w.file,
+		After: after,
+	}
+}
+
+/* Start concurrent operations */
+
 // Truncate up to and including the given sequence number
 func (w *Writer) Truncate(seqNum uint64) {
+	if w.sealed.Load() {
+		panic("cannot truncate a sealed writer")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	truncateIndex := -1
 	for i, buf := range w.sealedBuffers {
 		if buf.latestSeqNum > seqNum {
@@ -93,8 +149,12 @@ func (w *Writer) Truncate(seqNum uint64) {
 	w.sealedBuffers = w.sealedBuffers[truncateIndex:]
 }
 
-// Save the log to durable storage
+// Save the log to durable storage. WALs are immutable when they are saved.
 func (w *Writer) Save() error {
+	if !w.sealed.Load() {
+		panic("writer must be sealed with Rotate() before saving")
+	}
+
 	// Write all sealed buffers to the file
 	for _, buf := range w.sealedBuffers {
 		if _, err := io.Copy(w.file, buf); err != nil {
@@ -106,14 +166,6 @@ func (w *Writer) Save() error {
 		return err
 	}
 	return w.file.Save()
-}
-
-func (w *Writer) Handle(after uint64) Handle {
-	return Handle{
-		ID:    w.id,
-		file:  w.file,
-		After: after,
-	}
 }
 
 func FileName(id int) string {

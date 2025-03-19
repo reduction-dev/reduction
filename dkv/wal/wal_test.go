@@ -39,6 +39,7 @@ func TestReplay(t *testing.T) {
 		assert.False(t, full)
 	}
 
+	_ = w.Rotate(fs) // Adhere to contract for sealing the writer
 	require.NoError(t, w.Save())
 
 	r := wal.NewReader(fs, w.Handle(uint64(firstHalfSeqNum)))
@@ -50,6 +51,7 @@ func TestReplay(t *testing.T) {
 func TestReplayEmptyFile(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
 	w := wal.NewWriter(fs, 0, 1024)
+	w.Rotate(fs) // Adhere to contract for sealing the writer
 	require.NoError(t, w.Save())
 
 	r := wal.NewReader(fs, w.Handle(0))
@@ -72,6 +74,7 @@ func TestTruncate(t *testing.T) {
 	}
 
 	w.Truncate(5)
+	w.Rotate(fs) // Adhere to contract for sealing the writer
 	require.NoError(t, w.Save())
 
 	// Panic because requesting to start reading after seqNumber 2 but first seq
@@ -120,6 +123,7 @@ func TestRotateWithNoTruncation(t *testing.T) {
 		assert.False(t, full)
 	}
 
+	wNext.Rotate(fs) // Adhere to contract for sealing the writer
 	require.NoError(t, wNext.Save())
 
 	r := wal.NewReader(fs, wNext.Handle(0)) // 0 in the case no SSTs have been written
@@ -191,6 +195,7 @@ func TestWALFullWorkflow(t *testing.T) {
 
 	// Simulate SST flush by truncating up to latest seq num
 	w.Truncate(lastSeqNum)
+	w.Rotate(fs) // Adhere to contract for sealing the writer
 	require.NoError(t, w.Save())
 
 	// Verify we can read back the entries after the truncation point
