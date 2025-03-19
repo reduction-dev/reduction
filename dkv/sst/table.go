@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/VictoriaMetrics/metrics"
 	"reduction.dev/reduction/dkv/bloom"
@@ -43,6 +44,7 @@ type Table struct {
 	startSeqNum    uint64
 	endSeqNum      uint64
 	metadataLoaded bool
+	metadataMu     sync.Mutex // Protects metadataLoaded field and loadFooter calls
 }
 
 // NewTable initializes a new, empty table
@@ -337,6 +339,9 @@ func (t *Table) Diagnostics() string {
 }
 
 func (t *Table) ensureMetadataLoaded() {
+	t.metadataMu.Lock()
+	defer t.metadataMu.Unlock()
+
 	if t.metadataLoaded {
 		return
 	}

@@ -22,6 +22,7 @@ type Writer struct {
 }
 
 // NewWriter creates a new WAL writer.
+//
 // Concurrency caller contract:
 // Called synchronously by the same goroutine:
 //  1. Put/Delete - writing entries
@@ -79,8 +80,12 @@ func (w *Writer) Rotate(fs storage.FileSystem) *Writer {
 	if w.sealed.Load() {
 		panic("cannot rotate a sealed writer")
 	}
-	w.sealed.Store(true)
 
+	// Add mutex lock to synchronize with Truncate()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.sealed.Store(true)
 	nextLog := NewWriter(fs, w.id+1, w.maxSize)
 	nextLog.sealedBuffers = make([]*bufferSegment, len(w.sealedBuffers)+1)
 	nextLog.maxSize = w.maxSize

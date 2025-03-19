@@ -57,17 +57,17 @@ func (fs *MemoryFilesystem) Copy(source string, destination string) error {
 }
 
 func (fs *MemoryFilesystem) List() []string {
-	paths := make([]string, fs.files.Size())
-	i := 0
+	// Allocate capacity, but don't rely on files size in case
+	// files change while we are iterating.
+	paths := make([]string, 0, fs.files.Size())
 	for path := range fs.files.All() {
 		if strings.HasPrefix(path, fs.workingDir) {
 			relativePath, err := filepath.Rel(fs.workingDir, path)
 			if err != nil {
 				panic(err)
 			}
-			paths[i] = relativePath
+			paths = append(paths, relativePath)
 		}
-		i++
 	}
 	slices.Sort(paths)
 	return paths
@@ -112,16 +112,18 @@ type MemoryFile struct {
 }
 
 func (m *MemoryFile) ReadAt(p []byte, off int64) (n int, err error) {
+	m.mu.Lock()
 	if !m.didLoad {
 		file, ok := m.fs.files.Get(m.path)
 		if !ok {
+			m.mu.Unlock()
 			return 0, fmt.Errorf("no memory file named %s: %w", m.path, ErrNotFound)
 		}
-		m.mu.Lock()
 		m.buf = file.buf
 		m.reader = bytes.NewReader(m.buf)
-		m.mu.Unlock()
+		m.didLoad = true
 	}
+	m.mu.Unlock()
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
