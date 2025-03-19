@@ -20,6 +20,8 @@ type Checkpoint struct {
 	Levels *sst.LevelList
 	// An index of the SSTable files that are used by this checkpoint
 	tableURIset map[string]struct{}
+	// The last sequence number written as of this checkpoint
+	LastSeqNum uint64
 }
 
 func newCheckpointFromDocument(fs storage.FileSystem, dataOwnership kv.DataOwnership, doc checkpointDocument) *Checkpoint {
@@ -45,6 +47,7 @@ func newCheckpointFromDocument(fs storage.FileSystem, dataOwnership kv.DataOwner
 		WALs:        walHandles,
 		Levels:      sst.NewLevelListFromDocument(fs, dataOwnership, doc.Levels),
 		tableURIset: tableURISet,
+		LastSeqNum:  doc.LastSeqNum,
 	}
 }
 
@@ -63,8 +66,9 @@ func (cp *Checkpoint) Document() checkpointDocument {
 		panic("should not serialize a checkpoint with multiple WALs")
 	}
 	doc := checkpointDocument{
-		ID:     cp.ID,
-		Levels: cp.Levels.Document(),
+		ID:         cp.ID,
+		Levels:     cp.Levels.Document(),
+		LastSeqNum: cp.LastSeqNum,
 	}
 	if len(cp.WALs) == 1 {
 		doc.WALs = []wal.HandleDocument{cp.WALs[0].Document()}
@@ -105,8 +109,9 @@ func (cp *Checkpoint) IncludesTable(uri string) bool {
 //	  wal: 0,
 //	}
 type checkpointDocument struct {
-	ID     uint64                `json:"id"`
-	WALs   []wal.HandleDocument  `json:"wals"`   // The list of WAL files needed to recover memtable entries
-	Levels [][]sst.TableDocument `json:"levels"` // The set of active SST files
-	Refs   []string              `json:"refs"`
+	ID         uint64                `json:"id"`
+	WALs       []wal.HandleDocument  `json:"wals"`   // The list of WAL files needed to recover memtable entries
+	Levels     [][]sst.TableDocument `json:"levels"` // The set of active SST files
+	Refs       []string              `json:"refs"`
+	LastSeqNum uint64                `json:"last_seq_num"` // The last sequence number written as of this checkpoint
 }

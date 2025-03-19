@@ -33,11 +33,12 @@ type CheckpointHandle struct {
 
 // Add creates a new checkpoint, taking ownership of the LevelList reference.
 // Checkpoint is responsible for the LevelList and WAL cleanup when destroyed.
-func (cl *CheckpointList) Add(ckptID uint64, ll *sst.LevelList, w *wal.Writer) {
+func (cl *CheckpointList) Add(ckptID uint64, ll *sst.LevelList, w *wal.Writer, lastSeqNum uint64) {
 	cp := &Checkpoint{
-		ID:     ckptID,
-		Levels: ll,
-		WALs:   []wal.Handle{w.Handle(ll.LatestSeqNum)},
+		ID:         ckptID,
+		Levels:     ll,
+		WALs:       []wal.Handle{w.Handle(ll.LatestSeqNum)},
+		LastSeqNum: lastSeqNum,
 	}
 	cl.checkpoints = append(cl.checkpoints, cp)
 }

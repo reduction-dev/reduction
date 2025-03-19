@@ -216,7 +216,7 @@ func (db *DB) Checkpoint(ckptID uint64) (wait func() (recovery.CheckpointHandle,
 	// incomplete because they don't include memtables.
 	//
 	// This method passes ownership of the tables ref to the new checkpoint
-	db.checkpoints.Add(ckptID, db.currentSSTables(), prevWAL)
+	db.checkpoints.Add(ckptID, db.currentSSTables(), prevWAL, db.seqNum)
 
 	return bg.Task2(func() (recovery.CheckpointHandle, error) {
 		if err := prevWAL.Save(); err != nil {
