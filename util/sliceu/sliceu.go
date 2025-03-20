@@ -64,7 +64,7 @@ func Without[T comparable](s []T, item T) []T {
 	return slices.Delete(s, index, index+1)
 }
 
-// Sample items from a slice. The returned slice may contain duplicated.
+// Sample items from a slice. The returned slice may contain duplicates.
 func Sample[T any](slice []T, n int) []T {
 	if len(slice) == 0 || n <= 0 {
 		return nil

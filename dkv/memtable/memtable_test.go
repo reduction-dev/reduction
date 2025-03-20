@@ -1,7 +1,6 @@
 package memtable_test
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,14 +50,16 @@ func BenchmarkMemTable_PutAndScan(b *testing.B) {
 	}
 
 	// Make a list of prefixes from the written entries
-	samples := sliceu.Sample(putEntries.Entries, b.N)
+	samples := sliceu.Sample(putEntries.Entries, 10_000)
 	prefixes := make([][]byte, len(samples))
 	for i, s := range samples {
 		prefixes[i] = s.Key()[:3]
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = slices.Collect(table.ScanPrefix(prefixes[i]))
+	for i := 0; b.Loop(); i++ {
+		it := table.ScanPrefix(prefixes[i%len(prefixes)])
+		for range it {
+			// Consume the iterator
+		}
 	}
 }
