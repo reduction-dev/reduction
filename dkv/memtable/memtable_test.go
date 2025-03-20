@@ -63,3 +63,27 @@ func BenchmarkMemTable_PutAndScan(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkMemTable_Get(b *testing.B) {
+	table := memtable.NewMemTable(32 * size.MB)
+
+	// Create a fixed set of entries to populate the memtable
+	const entriesCount = 800_000
+	putEntries := dkvtest.RandomEntriesList(entriesCount)
+
+	// Insert all entries into the memtable
+	for _, putEntry := range putEntries.Entries {
+		table.Put(putEntry.Key(), putEntry.Value(), putEntry.SeqNum())
+	}
+
+	// Extract keys for lookup benchmark
+	keys := make([][]byte, len(putEntries.Entries))
+	for i, entry := range putEntries.Entries {
+		keys[i] = entry.Key()
+	}
+
+	for i := 0; b.Loop(); i++ {
+		idx := i % len(keys)
+		_, _ = table.Get(keys[idx])
+	}
+}
