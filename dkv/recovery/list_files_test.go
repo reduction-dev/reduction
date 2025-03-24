@@ -25,7 +25,7 @@ func TestListFiles(t *testing.T) {
 	ll.AddTables(0, table)
 
 	// Create a checkpoint
-	cl.Add(1, ll, wal.NewWriter(fs, 0, 1024))
+	cl.Add(1, ll, wal.NewWriter(fs, 0, 1024), 0)
 	uri, err := cl.Save(fs)
 	require.NoError(t, err)
 	assert.Equal(t, "memory:///checkpoints", uri)
