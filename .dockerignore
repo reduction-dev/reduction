@@ -1,0 +1,8 @@
+.git/
+.github/
+.vscode/
+vendor/
+scratch/
+**/*_test.go
+**/*.md
+e2e/
