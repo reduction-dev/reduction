@@ -5,3 +5,7 @@ set -ueo pipefail
 OUTPUT_PATH="${1:-build/reduction}"
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 go build -o "$OUTPUT_PATH" ./cmd/reduction
+
+IMAGE_TAG="${DOCKER_IMAGE_TAG:-latest}"
+echo "Building Docker image reduction:$IMAGE_TAG..."
+docker build -t "reduction:$IMAGE_TAG" -f Dockerfile .
