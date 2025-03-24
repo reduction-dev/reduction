@@ -156,9 +156,6 @@ func (db *DB) Start(initCheckpoints []recovery.CheckpointHandle) error {
 		}
 	}
 	db.logger.Info("db.start done replaying the WAL")
-	if db.seqNum != latestCP.LastSeqNum {
-		return fmt.Errorf("checkpoint recovery left db in invalid state: checkpoint seq num %d, db seq num %d", latestCP.LastSeqNum, db.seqNum)
-	}
 
 	return nil
 }
