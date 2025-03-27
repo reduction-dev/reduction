@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction-protocol/jobconfigpb"
+	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/connectors/httpapi"
@@ -73,4 +75,12 @@ func sinkFromProto(sink *jobconfigpb.Sink) (connectors.SinkConfig, error) {
 	default:
 		return nil, fmt.Errorf("unknown sink type %T", sink.Config)
 	}
+}
+
+func UnmarshalWithParams(data []byte, value proto.Message, params map[string]string) (*Config, error) {
+	resolvedJSON, err := jsontemplate.Resolve(data, value, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve parameters: %w", err)
+	}
+	return Unmarshal(resolvedJSON)
 }

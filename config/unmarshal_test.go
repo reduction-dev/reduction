@@ -9,6 +9,7 @@ import (
 	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction-go/topology"
+	"reduction.dev/reduction-protocol/jobconfigpb"
 	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
@@ -45,4 +46,20 @@ func TestUnmarshal(t *testing.T) {
 	assert.Len(t, def.Sinks, 1)
 	assert.IsType(t, httpapi.SinkConfig{}, def.Sinks[0])
 	assert.Equal(t, def.Sinks[0].(httpapi.SinkConfig).Addr, "http-api-sink-addr")
+}
+
+func TestUnmarshalWithParams(t *testing.T) {
+	configJSON := `{
+		"job": {
+			"workerCount": { "$param": "WORKER_COUNT" }
+		}
+	}`
+
+	def, err := cfg.UnmarshalWithParams(
+		[]byte(configJSON),
+		&jobconfigpb.JobConfig{},
+		map[string]string{"WORKER_COUNT": "2"})
+	require.NoError(t, err)
+
+	assert.Equal(t, def.WorkerCount, 2)
 }
