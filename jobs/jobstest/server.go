@@ -16,6 +16,7 @@ import (
 	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	cfg "reduction.dev/reduction/config"
+	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/jobs"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
@@ -83,7 +84,7 @@ func Run(jd *topology.Job, options ...func(*ServerParams)) (server *Server, stop
 	if err != nil {
 		panic(err)
 	}
-	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal())
+	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal(), jsontemplate.NewParams())
 	if err != nil {
 		panic(err)
 	}
