@@ -12,6 +12,7 @@ import (
 	"reduction.dev/reduction/logging"
 	"reduction.dev/reduction/rundev"
 	"reduction.dev/reduction/testrun"
+	"reduction.dev/reduction/util/fileu"
 	"reduction.dev/reduction/workers/workerserver"
 )
 
@@ -136,10 +137,11 @@ func main() {
 }
 
 func startJobServer(jobPath string, adminPort, clusterPort int) error {
-	data, err := os.ReadFile(jobPath)
+	data, err := fileu.ReadFile(jobPath)
 	if err != nil {
 		return err
 	}
+
 	c, err := cfg.Unmarshal(data)
 	if err != nil {
 		return err
