@@ -17,12 +17,13 @@ import (
 )
 
 func TestResolveIntegerParameter(t *testing.T) {
+	params := jsontemplate.NewParams()
+	params.Set("INTEGER_PARAM", "5")
+
 	result, err := jsontemplate.Resolve(
-		[]byte(`{
-			"integerField": { "$param": "INTEGER_PARAM" }
-		}`),
+		[]byte(`{ "integerField": { "$param": "INTEGER_PARAM" } }`),
 		createTestMessage(),
-		map[string]string{"INTEGER_PARAM": "5"},
+		params,
 	)
 	require.NoError(t, err)
 
@@ -34,56 +35,65 @@ func TestResolveIntegerParameter(t *testing.T) {
 }
 
 func TestResolveBooleanParameter(t *testing.T) {
+	params := jsontemplate.NewParams()
+	params.Set("BOOLEAN_PARAM", "true")
 	result, err := jsontemplate.Resolve(
-		[]byte(`{"boolean": { "$param": "BOOLEAN_PARAM" }}`),
+		[]byte(`{"booleanField": { "$param": "BOOLEAN_PARAM" }}`),
 		createTestMessage(),
-		map[string]string{"BOOLEAN_PARAM": "true"},
+		params,
 	)
 	require.NoError(t, err)
 
 	var parsed map[string]interface{}
 	require.NoError(t, json.Unmarshal(result, &parsed))
-	assert.Equal(t, true, parsed["boolean"], "boolean parameter should be converted to boolean")
+	assert.Equal(t, true, parsed["booleanField"], "boolean parameter should be converted to boolean")
 }
 
 func TestResolveStringParameter(t *testing.T) {
+	params := jsontemplate.NewParams()
+	params.Set("STRING_PARAM", "string-value")
 	result, err := jsontemplate.Resolve(
-		[]byte(`{"string": { "$param": "STRING_PARAM" }}`),
+		[]byte(`{"stringField": { "$param": "STRING_PARAM" }}`),
 		createTestMessage(),
-		map[string]string{"STRING_PARAM": "test-value"},
+		params,
 	)
 	require.NoError(t, err)
 
 	var parsed map[string]interface{}
 	require.NoError(t, json.Unmarshal(result, &parsed))
-	assert.Equal(t, "test-value", parsed["string"], "string parameter should remain a string")
+	assert.Equal(t, "string-value", parsed["stringField"], "string parameter should remain a string")
 }
 
 func TestResolveNestedParameters(t *testing.T) {
+	params := jsontemplate.NewParams()
+	params.Set("NESTED_INTEGER_PARAM", "3")
+	params.Set("NESTED_BOOLEAN_PARAM", "true")
 	result, err := jsontemplate.Resolve(
 		[]byte(`{
-			"object": {
-				"nestedInteger": { "$param": "NESTED_INTEGER_PARAM" },
-				"nestedBoolean": { "$param": "NESTED_BOOLEAN_PARAM" }
+			"objectField": {
+				"nestedIntegerField": { "$param": "NESTED_INTEGER_PARAM" },
+				"nestedBooleanField": { "$param": "NESTED_BOOLEAN_PARAM" }
 			}
 		}`),
 		createTestMessage(),
-		map[string]string{"NESTED_INTEGER_PARAM": "3", "NESTED_BOOLEAN_PARAM": "true"},
+		params,
 	)
 	require.NoError(t, err)
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result, &parsed))
-	nestedObject := parsed["object"].(map[string]interface{})
-	assert.Equal(t, float64(3), nestedObject["nestedInteger"], "nested integer parameter should be converted to number")
-	assert.Equal(t, true, nestedObject["nestedBoolean"], "nested boolean parameter should be converted to boolean")
+	nestedObject := parsed["objectField"].(map[string]any)
+	assert.Equal(t, float64(3), nestedObject["nestedIntegerField"], "nested integer parameter should be converted to number")
+	assert.Equal(t, true, nestedObject["nestedBooleanField"], "nested boolean parameter should be converted to boolean")
 }
 
 func TestResolveArrayParameter(t *testing.T) {
+	params := jsontemplate.NewParams()
+	params.Set("STRING_ARRAY_PARAM", "value1,value2,value3")
 	_, err := jsontemplate.Resolve(
 		[]byte(`{"stringArray": { "$param": "STRING_ARRAY_PARAM" }}`),
 		createTestMessage(),
-		map[string]string{"STRING_ARRAY_PARAM": "value1,value2,value3"},
+		params,
 	)
 	require.ErrorContains(t, err, "cannot use $param for repeated (array) field")
 }
@@ -92,7 +102,7 @@ func TestResolveMissingParameter(t *testing.T) {
 	_, err := jsontemplate.Resolve(
 		[]byte(`{"integerField": { "$param": "MISSING_PARAM" }}`),
 		createTestMessage(),
-		map[string]string{},
+		jsontemplate.NewParams(),
 	)
 	assert.Error(t, err, "should return an error when parameter is missing")
 	assert.Contains(t, err.Error(), "MISSING_PARAM", "error message should mention the missing parameter")
@@ -102,7 +112,7 @@ func TestResolveInvalidJSON(t *testing.T) {
 	_, err := jsontemplate.Resolve(
 		[]byte(`{ invalid json }`),
 		createTestMessage(),
-		map[string]string{},
+		jsontemplate.NewParams(),
 	)
 	assert.Error(t, err, "should return an error for invalid JSON")
 }
@@ -111,7 +121,7 @@ func TestResolveInvalidParamType(t *testing.T) {
 	_, err := jsontemplate.Resolve(
 		[]byte(`{"integerField": { "$param": 123 }}`),
 		createTestMessage(),
-		map[string]string{},
+		jsontemplate.NewParams(),
 	)
 	assert.Error(t, err, "should return an error when param name is not a string")
 }
@@ -135,18 +145,18 @@ func createTestMessage() proto.Message {
 						JsonName: proto.String("integerField"),
 					},
 					{
-						Name:     proto.String("boolean"),
+						Name:     proto.String("boolean_field"),
 						Number:   proto.Int32(2),
 						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 						Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
-						JsonName: proto.String("boolean"),
+						JsonName: proto.String("booleanField"),
 					},
 					{
-						Name:     proto.String("string"),
+						Name:     proto.String("string_field"),
 						Number:   proto.Int32(3),
 						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 						Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-						JsonName: proto.String("string"),
+						JsonName: proto.String("stringField"),
 					},
 					{
 						Name:     proto.String("string_array"),
@@ -156,12 +166,12 @@ func createTestMessage() proto.Message {
 						JsonName: proto.String("stringArray"),
 					},
 					{
-						Name:     proto.String("object"),
+						Name:     proto.String("object_field"),
 						Number:   proto.Int32(5),
 						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 						Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
 						TypeName: proto.String(".test.NestedObject"),
-						JsonName: proto.String("object"),
+						JsonName: proto.String("objectField"),
 					},
 				},
 			},
@@ -169,18 +179,18 @@ func createTestMessage() proto.Message {
 				Name: proto.String("NestedObject"),
 				Field: []*descriptorpb.FieldDescriptorProto{
 					{
-						Name:     proto.String("nested_integer"),
+						Name:     proto.String("nested_integer_field"),
 						Number:   proto.Int32(1),
 						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 						Type:     descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
-						JsonName: proto.String("nestedInteger"),
+						JsonName: proto.String("nestedIntegerField"),
 					},
 					{
-						Name:     proto.String("nested_boolean"),
+						Name:     proto.String("nested_boolean_field"),
 						Number:   proto.Int32(2),
 						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 						Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
-						JsonName: proto.String("nestedBoolean"),
+						JsonName: proto.String("nestedBooleanField"),
 					},
 				},
 			},

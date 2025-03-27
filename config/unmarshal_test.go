@@ -9,8 +9,8 @@ import (
 	clientkinesis "reduction.dev/reduction-go/connectors/kinesis"
 	"reduction.dev/reduction-go/rxn"
 	"reduction.dev/reduction-go/topology"
-	"reduction.dev/reduction-protocol/jobconfigpb"
 	cfg "reduction.dev/reduction/config"
+	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/kinesis"
 )
@@ -36,7 +36,7 @@ func TestUnmarshal(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log(string(synthesis.Config.Marshal()))
-	def, err := cfg.Unmarshal(synthesis.Config.Marshal())
+	def, err := cfg.Unmarshal(synthesis.Config.Marshal(), jsontemplate.NewParams())
 	require.NoError(t, err)
 
 	assert.Equal(t, def.WorkerCount, 2)
@@ -55,10 +55,9 @@ func TestUnmarshalWithParams(t *testing.T) {
 		}
 	}`
 
-	def, err := cfg.UnmarshalWithParams(
-		[]byte(configJSON),
-		&jobconfigpb.JobConfig{},
-		map[string]string{"WORKER_COUNT": "2"})
+	params := jsontemplate.NewParams()
+	params.Set("WORKER_COUNT", "2")
+	def, err := cfg.Unmarshal([]byte(configJSON), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, def.WorkerCount, 2)

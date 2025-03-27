@@ -14,7 +14,7 @@ import (
 // values from the params map and returns new JSON data. Param values are always
 // provided as strings and then converted to specific JSON types according to
 // the protobuf definition.
-func Resolve(data []byte, protoMsg proto.Message, params map[string]string) ([]byte, error) {
+func Resolve(data []byte, protoMsg proto.Message, params *Params) ([]byte, error) {
 	var jsonObj any
 	if err := json.Unmarshal(data, &jsonObj); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
@@ -30,7 +30,7 @@ func Resolve(data []byte, protoMsg proto.Message, params map[string]string) ([]b
 }
 
 // processNode traverses the JSON structure, replacing parameter references
-func processNode(node any, params map[string]string, desc protoreflect.MessageDescriptor, path string) (any, error) {
+func processNode(node any, params *Params, desc protoreflect.MessageDescriptor, path string) (any, error) {
 	switch nodeValue := node.(type) {
 
 	// JSON object
@@ -44,7 +44,7 @@ func processNode(node any, params map[string]string, desc protoreflect.MessageDe
 			}
 
 			// Lookup the param value
-			paramValue, exists := params[paramNameStr]
+			paramValue, exists := params.Get(paramNameStr)
 			if !exists {
 				return nil, fmt.Errorf("missing parameter %q", paramNameStr)
 			}
