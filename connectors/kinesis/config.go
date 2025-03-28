@@ -6,6 +6,7 @@ import (
 
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/confvars"
 )
 
 // SourceConfig contains configuration for the Kinesis source connector
@@ -35,8 +36,8 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_Kinesis{
 			Kinesis: &jobconfigpb.KinesisSource{
-				StreamArn: c.StreamARN,
-				Endpoint:  c.Endpoint,
+				StreamArn: confvars.StringValue(c.StreamARN),
+				Endpoint:  confvars.StringValue(c.Endpoint),
 			},
 		},
 	}
@@ -44,8 +45,8 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 
 func SourceConfigFromProto(pb *jobconfigpb.KinesisSource) SourceConfig {
 	return SourceConfig{
-		StreamARN: pb.StreamArn,
-		Endpoint:  pb.Endpoint,
+		StreamARN: pb.StreamArn.GetValue(),
+		Endpoint:  pb.Endpoint.GetValue(),
 	}
 }
 

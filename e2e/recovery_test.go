@@ -37,17 +37,17 @@ func TestRestartFromSavepoint(t *testing.T) {
 	// Start the job server
 	testDir := t.TempDir()
 	jobDef := &topology.Job{
-		WorkerCount:              1,
-		WorkingStorageLocation:   t.TempDir(),
-		SavepointStorageLocation: filepath.Join(testDir, "savepoints"),
+		WorkerCount:              topology.IntValue(1),
+		WorkingStorageLocation:   topology.StringValue(t.TempDir()),
+		SavepointStorageLocation: topology.StringValue(filepath.Join(testDir, "savepoints")),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {
@@ -99,7 +99,7 @@ func TestRestartFromSavepoint(t *testing.T) {
 	handlerServer.Stop(context.Background())
 
 	// Remove all working files but not the savepoint
-	err = os.RemoveAll(jobDef.WorkingStorageLocation)
+	err = os.RemoveAll(jobDef.WorkingStorageLocation.Proto().GetValue())
 	require.NoError(t, err)
 
 	// Start up the job server again with savepoint URI
@@ -140,16 +140,16 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 
 	// Start the job server
 	jobDef := &topology.Job{
-		WorkerCount:            1,
-		WorkingStorageLocation: t.TempDir(),
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {
@@ -224,16 +224,16 @@ func TestScaleOutWorkers(t *testing.T) {
 
 	// Start the job server
 	jobDef := &topology.Job{
-		WorkerCount:            1,
-		WorkingStorageLocation: t.TempDir(),
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {
@@ -287,7 +287,7 @@ func TestScaleOutWorkers(t *testing.T) {
 	}
 
 	// Start the job server again but with 2 workers
-	jobDef.WorkerCount = 2
+	jobDef.WorkerCount = topology.IntValue(2)
 	job, stop = jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -330,16 +330,16 @@ func TestScaleInWorkers(t *testing.T) {
 	// Start the job server for two workers
 	testDir := t.TempDir()
 	jobDef := &topology.Job{
-		WorkerCount:            2,
-		WorkingStorageLocation: testDir,
+		WorkerCount:            topology.IntValue(2),
+		WorkingStorageLocation: topology.StringValue(testDir),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {
@@ -403,7 +403,7 @@ func TestScaleInWorkers(t *testing.T) {
 	}
 
 	// Start the job server again but with 1 worker
-	jobDef.WorkerCount = 1
+	jobDef.WorkerCount = topology.IntValue(1)
 	job, stop = jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -439,16 +439,16 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	// Start the job server
 	testDir := t.TempDir()
 	jobDef := &topology.Job{
-		WorkerCount:            1,
-		WorkingStorageLocation: testDir,
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(testDir),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"events"},
 		KeyEvent: KeyEventWithUniformKeyAndZeroTimestamp,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {

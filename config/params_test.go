@@ -1,20 +1,20 @@
-package jsontemplate_test
+package config_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"reduction.dev/reduction/config/jsontemplate"
+	"reduction.dev/reduction/config"
 )
 
 func TestNewParams(t *testing.T) {
-	params := jsontemplate.NewParams()
+	params := config.NewParams()
 	assert.NotNil(t, params, "NewParams should return a non-nil pointer")
 }
 
 func TestParamsSetGet(t *testing.T) {
-	params := jsontemplate.NewParams()
+	params := config.NewParams()
 
 	// Test setting and getting a value
 	params.Set("key1", "value1")
@@ -35,7 +35,7 @@ func TestParamsSetGet(t *testing.T) {
 }
 
 func TestParamsEnvironmentFallback(t *testing.T) {
-	params := jsontemplate.NewParams()
+	params := config.NewParams()
 
 	// Set environment variable
 	os.Setenv("REDUCTION_PARAM_testkey", "testvalue")

@@ -15,8 +15,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
+	"reduction.dev/reduction/config"
 	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/jobs"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
@@ -84,7 +84,7 @@ func Run(jd *topology.Job, options ...func(*ServerParams)) (server *Server, stop
 	if err != nil {
 		panic(err)
 	}
-	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal(), jsontemplate.NewParams())
+	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal(), config.NewParams())
 	if err != nil {
 		panic(err)
 	}

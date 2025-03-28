@@ -12,7 +12,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction/config"
-	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/jobs/jobserver"
 	"reduction.dev/reduction/workers/workerserver"
 )
@@ -95,7 +94,7 @@ func jobConfig(ctx context.Context, executable string) (*config.Config, error) {
 		return nil, fmt.Errorf("invalid JSON config output from executable")
 	}
 
-	c, err := config.Unmarshal(output, jsontemplate.NewParams())
+	c, err := config.Unmarshal(output, config.NewParams())
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %v", err)
 	}

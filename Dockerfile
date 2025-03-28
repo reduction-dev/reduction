@@ -2,6 +2,10 @@ ARG TARGET_ARCH=amd64
 
 FROM golang:1.24 AS builder
 WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 RUN GOOS=linux GOARCH=${TARGET_ARCH} go build -o reduction ./cmd/reduction
 

@@ -40,16 +40,16 @@ func TestCountInWindow(t *testing.T) {
 	})
 
 	jobDef := &topology.Job{
-		WorkerCount:            1,
-		WorkingStorageLocation: t.TempDir(),
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"user-events"},
 		KeyEvent: KeyEvent,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {
@@ -110,16 +110,16 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 
 	testDir := t.TempDir()
 	jobDef := &topology.Job{
-		WorkerCount:            1,
-		WorkingStorageLocation: t.TempDir(),
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := httpapi.NewSource(jobDef, "Source", &httpapi.SourceParams{
-		Addr:     httpAPIServer.URL(),
+		Addr:     topology.StringValue(httpAPIServer.URL()),
 		Topics:   []string{"user-events"},
 		KeyEvent: KeyEvent,
 	})
 	sink := httpapi.NewSink(jobDef, "Sink", &httpapi.SinkParams{
-		Addr: httpAPIServer.URL(),
+		Addr: topology.StringValue(httpAPIServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {

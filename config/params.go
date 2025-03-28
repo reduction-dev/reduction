@@ -1,4 +1,4 @@
-package jsontemplate
+package config
 
 import "os"
 
