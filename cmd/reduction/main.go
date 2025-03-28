@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
+	"reduction.dev/reduction/config"
 	cfg "reduction.dev/reduction/config"
-	"reduction.dev/reduction/config/jsontemplate"
 	"reduction.dev/reduction/jobs/jobserver"
 	"reduction.dev/reduction/logging"
 	"reduction.dev/reduction/rundev"
@@ -143,7 +143,7 @@ func startJobServer(jobPath string, adminPort, clusterPort int) error {
 		return err
 	}
 
-	c, err := cfg.Unmarshal(data, jsontemplate.NewParams())
+	c, err := cfg.Unmarshal(data, config.NewParams())
 	if err != nil {
 		return err
 	}

@@ -61,16 +61,16 @@ func TestKinesis(t *testing.T) {
 	defer sinkServer.Close()
 
 	jobDef := &topology.Job{
-		WorkerCount:            2,
-		WorkingStorageLocation: t.TempDir(),
+		WorkerCount:            topology.IntValue(2),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
-		StreamARN: streamARN,
-		Endpoint:  kinesisService.URL,
+		StreamARN: topology.StringValue(streamARN),
+		Endpoint:  topology.StringValue(kinesisService.URL),
 		KeyEvent:  e2e.KeyKinesisEventWithRawKeyAndZeroTimestamp,
 	})
 	sink := clienthttpapi.NewSink(jobDef, "sink", &clienthttpapi.SinkParams{
-		Addr: sinkServer.URL(),
+		Addr: topology.StringValue(sinkServer.URL()),
 	})
 	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
 		Handler: func(op *topology.Operator) rxn.OperatorHandler {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/confvars"
 )
 
 // SourceConfig contains configuration for the HTTP API source connector
@@ -27,7 +28,7 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	return &jobconfigpb.Source{
 		Config: &jobconfigpb.Source_HttpApi{
 			HttpApi: &jobconfigpb.HTTPAPISource{
-				Addr:   c.Addr,
+				Addr:   confvars.StringValue(c.Addr),
 				Topics: c.Topics,
 			},
 		},
@@ -36,7 +37,7 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 
 func SourceConfigFromProto(pb *jobconfigpb.HTTPAPISource) SourceConfig {
 	return SourceConfig{
-		Addr:   pb.Addr,
+		Addr:   pb.Addr.GetValue(),
 		Topics: pb.Topics,
 	}
 }
@@ -55,7 +56,7 @@ func (s SinkConfig) ProtoMessage() *jobconfigpb.Sink {
 	return &jobconfigpb.Sink{
 		Config: &jobconfigpb.Sink_HttpApi{
 			HttpApi: &jobconfigpb.HTTPAPISink{
-				Addr: s.Addr,
+				Addr: confvars.StringValue(s.Addr),
 			},
 		},
 	}
@@ -67,7 +68,7 @@ func (s SinkConfig) NewSink() connectors.SinkWriter {
 
 func SinkConfigFromProto(pb *jobconfigpb.HTTPAPISink) SinkConfig {
 	return SinkConfig{
-		Addr: pb.Addr,
+		Addr: pb.Addr.GetValue(),
 	}
 }
 
