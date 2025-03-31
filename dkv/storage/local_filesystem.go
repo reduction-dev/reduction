@@ -76,8 +76,7 @@ func (fs *LocalFilesystem) Copy(sourceURI string, destination string) error {
 		panic(err)
 	}
 
-	// Then do a clone copy
-	cmd := exec.Command("cp", "-c", sourceURI, destinationPath)
+	cmd := exec.Command("cp", sourceURI, destinationPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("cp command %s: %w", out, err)
 	}

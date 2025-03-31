@@ -151,8 +151,8 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 		panic(err)
 	}
 
-	// Then do a clone copy
-	cmd := exec.Command("cp", "-c", sourceURI, destinationPath)
+	// Then do a copy
+	cmd := exec.Command("cp", sourceURI, destinationPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("cp command %s: %w", out, err)
 	}
