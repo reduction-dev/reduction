@@ -92,79 +92,100 @@ func ResolveVars(v reflect.Value, params *Params) error {
 		return nil
 	}
 
-	// Handle pointer types
-	if v.Kind() == reflect.Ptr {
+	switch v.Kind() {
+	case reflect.Ptr:
 		if v.IsNil() || !v.CanInterface() {
 			return nil
 		}
 
-		// Direct handling for known parameter types
+		// Resolve specific `*Var` param types
 		switch concrete := v.Interface().(type) {
 		case *jobconfigpb.StringVar:
-			if param, ok := concrete.Kind.(*jobconfigpb.StringVar_Param); ok {
-				value, found := params.Get(param.Param)
-				if !found {
-					return fmt.Errorf("parameter %q not found", param.Param)
-				}
-				concrete.Kind = &jobconfigpb.StringVar_Value{Value: value}
-			}
-			return nil
-
+			return resolveStringVar(concrete, params)
 		case *jobconfigpb.Int32Var:
-			if param, ok := concrete.Kind.(*jobconfigpb.Int32Var_Param); ok {
-				value, found := params.Get(param.Param)
-				if !found {
-					return fmt.Errorf("parameter %q not found", param.Param)
-				}
-				intValue, err := strconv.ParseInt(value, 10, 32)
-				if err != nil {
-					return fmt.Errorf("parameter %q is not a valid int32: %v", param.Param, err)
-				}
-				concrete.Kind = &jobconfigpb.Int32Var_Value{Value: int32(intValue)}
-			}
-			return nil
+			return resolveInt32Var(concrete, params)
+		default:
+			// Process the underlying value for other pointer types
+			return ResolveVars(v.Elem(), params)
 		}
 
-		// For other pointer types, process the value they point to
-		return ResolveVars(v.Elem(), params)
-	}
-
-	// Process different kinds of values
-	switch v.Kind() {
 	case reflect.Struct:
-		// Process each field in the struct
-		for i := 0; i < v.NumField(); i++ {
-			if err := ResolveVars(v.Field(i), params); err != nil {
-				return err
-			}
-		}
+		return processStructFields(v, params)
 
 	case reflect.Slice:
-		// Process each element in the slice
-		for i := 0; i < v.Len(); i++ {
-			if err := ResolveVars(v.Index(i), params); err != nil {
-				return err
-			}
-		}
+		return processSliceElements(v, params)
 
 	case reflect.Interface:
-		// For interface types (which could be Protocol Buffer oneof fields),
-		// extract the concrete value and process it
 		if !v.IsNil() {
-			if err := ResolveVars(v.Elem(), params); err != nil {
-				return err
-			}
+			return ResolveVars(v.Elem(), params)
 		}
 
 	case reflect.Map:
-		// Process each key-value pair in the map
-		iter := v.MapRange()
-		for iter.Next() {
-			if err := ResolveVars(iter.Value(), params); err != nil {
-				return err
-			}
-		}
+		return processMapValues(v, params)
 	}
 
+	return nil
+}
+
+func resolveStringVar(sv *jobconfigpb.StringVar, params *Params) error {
+	param, ok := sv.Kind.(*jobconfigpb.StringVar_Param)
+	if !ok {
+		return nil // Not a param reference, nothing to resolve
+	}
+
+	value, found := params.Get(param.Param)
+	if !found {
+		return fmt.Errorf("parameter %q not found", param.Param)
+	}
+
+	sv.Kind = &jobconfigpb.StringVar_Value{Value: value}
+	return nil
+}
+
+func resolveInt32Var(iv *jobconfigpb.Int32Var, params *Params) error {
+	param, ok := iv.Kind.(*jobconfigpb.Int32Var_Param)
+	if !ok {
+		return nil // Not a param reference, nothing to resolve
+	}
+
+	value, found := params.Get(param.Param)
+	if !found {
+		return fmt.Errorf("parameter %q not found", param.Param)
+	}
+
+	intValue, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return fmt.Errorf("parameter %q is not a valid int32: %v", param.Param, err)
+	}
+
+	iv.Kind = &jobconfigpb.Int32Var_Value{Value: int32(intValue)}
+	return nil
+}
+
+func processStructFields(v reflect.Value, params *Params) error {
+	for i := range v.NumField() {
+		if err := ResolveVars(v.Field(i), params); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func processSliceElements(v reflect.Value, params *Params) error {
+	for i := range v.Len() {
+		if err := ResolveVars(v.Index(i), params); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func processMapValues(v reflect.Value, params *Params) error {
+	iter := v.MapRange()
+	for iter.Next() {
+		if err := ResolveVars(iter.Value(), params); err != nil {
+			return err
+		}
+	}
 	return nil
 }

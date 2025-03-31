@@ -14,3 +14,13 @@
   validate specific ordering with goroutines, exercise the code enough times to
   get reasonable confidence that order is correct. Suggest dependency injection to
   control expiring timers.
+
+## Modern Go
+
+- Go has built-in iterators now which allows this pattern:
+
+  ```go
+  for i := range 10 {
+    fmt.Println(i) // Prints 0 - 9
+  }
+  ```
