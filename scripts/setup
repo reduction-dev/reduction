@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ue
 
-TOOLS_DIR="./vendor"
+TOOLS_DIR="./.tools"
 
 ## protoc installation
 

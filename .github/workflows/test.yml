@@ -22,16 +22,17 @@ jobs:
         with:
           go-version: '>=1.24.0'
 
-      - name: Install Dependencies
-        run: |
-          go mod tidy
-          go mod download
+      # Setup tools before generating code
+      - name: Setup Tools
+        run: ./scripts/setup
 
-      - name: Setup tools
-        run: |
-          ./scripts/setup
-          ./scripts/gen
+      # Generate protobuf code - the modified gen script now handles the dependencies
+      - name: Generate Code
+        run: ./scripts/gen
+
+      # Now install all dependencies after generated code exists
+      - name: Install Dependencies
+        run: go mod download
 
       - name: Run Tests
-        run: |
-          go test ./... -v
+        run: go test ./... -v

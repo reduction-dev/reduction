@@ -1,16 +1,38 @@
 #!/usr/bin/env bash
 set -ue
 shopt -s globstar
+TOOLS_BIN="./.tools"
 
-TOOLS_BIN="./vendor"
+# Get the version from go.mod, handle blank version case
+PROTOCOL_VERSION=$(go list -m -f '{{.Version}}' reduction.dev/reduction-protocol)
+VERSION_SUFFIX=""
+if [ -n "$PROTOCOL_VERSION" ]; then
+  VERSION_SUFFIX="@$PROTOCOL_VERSION"
+fi
 
-./vendor/protoc/bin/protoc \
-  -I ../reduction-protocol \
+go get reduction.dev/reduction-protocol$VERSION_SUFFIX
+
+# Find the path to the module
+PROTO_MODULE_PATH=$(go list -m -f '{{.Dir}}' reduction.dev/reduction-protocol)
+if [ -z "$PROTO_MODULE_PATH" ]; then
+  echo "Error: Could not find reduction-protocol module in Go cache."
+  exit 1
+fi
+
+echo "Using reduction-protocol from Go module cache at: $PROTO_MODULE_PATH"
+if [ -n "$PROTOCOL_VERSION" ]; then
+  echo "Version: $PROTOCOL_VERSION"
+else
+  echo "Version: (latest)"
+fi
+
+${TOOLS_BIN}/protoc/bin/protoc \
+  -I "$PROTO_MODULE_PATH" \
   -I . \
-  --plugin=protoc-gen-go=./vendor/protoc-gen-go \
+  --plugin=protoc-gen-go=${TOOLS_BIN}/protoc-gen-go \
   --go_opt=paths=source_relative \
   --go_out=. \
-  --plugin=protoc-gen-connect-go=./vendor/protoc-gen-connect-go \
+  --plugin=protoc-gen-connect-go=${TOOLS_BIN}/protoc-gen-connect-go \
   --connect-go_opt=paths=source_relative \
   --connect-go_out=. \
   proto/**/*.proto connectors/**/*.proto
