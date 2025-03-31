@@ -1,20 +1,10 @@
-ARG TARGET_ARCH=amd64
-
-FROM golang:1.24 AS builder
-WORKDIR /app
-
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY . .
-RUN GOOS=linux GOARCH=${TARGET_ARCH} CGO_ENABLED=0 go build -o reduction ./cmd/reduction
-
 FROM alpine:3.18
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
 
-# Copy binary into container
-COPY --from=builder /app/reduction /app/reduction
+# Copy the pre-built binary for the target architecture
+ARG TARGET_ARCH
+COPY build/linux-${TARGET_ARCH}/reduction /app/reduction
 
 # Set executable permissions
 RUN chmod +x /app/reduction

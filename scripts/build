@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Builds the reduction binary with configurable output path
+# Builds the reduction binary for multiple architectures
 set -ueo pipefail
 
-OUTPUT_PATH="${1:-build/reduction}"
-mkdir -p "$(dirname "$OUTPUT_PATH")"
-go build -o "$OUTPUT_PATH" ./cmd/reduction
+OUTPUT_DIR="build"
+mkdir -p "$OUTPUT_DIR/linux-amd64" "$OUTPUT_DIR/linux-arm64"
 
-IMAGE_TAG="${DOCKER_IMAGE_TAG:-latest}"
-echo "Building Docker image reduction:$IMAGE_TAG..."
-docker build -t "reduction:$IMAGE_TAG" -f Dockerfile .
+# Build for amd64
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/linux-amd64/reduction" ./cmd/reduction
+
+# Build for arm64
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/linux-arm64/reduction" ./cmd/reduction
+
+# build for local
+go build -o "$OUTPUT_DIR/reduction" ./cmd/reduction
