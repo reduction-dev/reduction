@@ -2,22 +2,4 @@
 *
 
 # Allow specific files needed for building
-!go.mod
-!go.sum
-!cmd/
-!batching/
-!clocks/
-!config/
-!connectors/
-!dkv/
-!jobs/
-!logging/
-!partitioning/
-!proto/
-!rpc/
-!storage/
-!telemetry/
-!util/
-!workers/
-!rundev/
-!testrun/
+!build
