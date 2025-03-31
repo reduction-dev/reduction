@@ -2,6 +2,7 @@ package kinesisfake
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 )
@@ -80,9 +81,13 @@ func (f *Fake) DescribeStream(body []byte) (*DescribeStreamResponse, error) {
 }
 
 func arnFromStreamName(streamName string) string {
-	return "ARN:" + streamName
+	return fmt.Sprintf("arn:aws:kinesis:region:123456789012:stream/%s", streamName)
 }
 
 func streamNameFromARN(arn string) string {
-	return strings.Split(arn, ":")[1]
+	parts := strings.Split(arn, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return ""
 }

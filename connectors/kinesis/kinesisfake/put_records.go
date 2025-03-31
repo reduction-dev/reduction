@@ -39,7 +39,13 @@ func (f *Fake) PutRecords(body []byte) (*PutRecordsResponse, error) {
 		return nil, fmt.Errorf("decode PutRecordsRequest: %w", err)
 	}
 
-	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
+	streamName := streamNameFromARN(request.StreamARN)
+	stream := f.db.streams[streamName]
+	if stream == nil {
+		return nil, &ResourceNotFoundException{
+			message: fmt.Sprintf("Stream %s under account %s not found.", streamName, "123456789012"),
+		}
+	}
 
 	for i, r := range request.Records {
 		data, err := base64.StdEncoding.DecodeString(r.Data)

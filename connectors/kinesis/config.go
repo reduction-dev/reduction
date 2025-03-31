@@ -3,6 +3,7 @@ package kinesis
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
@@ -21,6 +22,15 @@ func (c SourceConfig) Validate() error {
 	if err != nil {
 		return fmt.Errorf("invalid kinesis Source endpoint: %s", c.Endpoint)
 	}
+
+	if c.StreamARN == "" {
+		return fmt.Errorf("kinesis Source stream ARN is required")
+	}
+
+	if !strings.HasPrefix(c.StreamARN, "arn:aws:kinesis:") {
+		return fmt.Errorf("invalid StreamARN for kinesis source: %s", c.StreamARN)
+	}
+
 	return nil
 }
 
