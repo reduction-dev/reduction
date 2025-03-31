@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strconv"
 
@@ -22,7 +23,12 @@ func Unmarshal(data []byte, params *Params) (*Config, error) {
 		return nil, fmt.Errorf("invalid config document format: %v", err)
 	}
 
-	ResolveVars(reflect.ValueOf(&pb), params)
+	// Resolve variables in the overall configuration
+	if err := ResolveVars(reflect.ValueOf(&pb), params); err != nil {
+		return nil, fmt.Errorf("failed to resolve variables: %v", err)
+	}
+
+	slog.Info("resolved job config", "config", pb.String())
 
 	// Create the config object from the Job parameters
 	config := &Config{
@@ -92,6 +98,7 @@ func ResolveVars(v reflect.Value, params *Params) error {
 			return nil
 		}
 
+		// Direct handling for known parameter types
 		switch concrete := v.Interface().(type) {
 		case *jobconfigpb.StringVar:
 			if param, ok := concrete.Kind.(*jobconfigpb.StringVar_Param); ok {
@@ -118,21 +125,42 @@ func ResolveVars(v reflect.Value, params *Params) error {
 			return nil
 		}
 
+		// For other pointer types, process the value they point to
 		return ResolveVars(v.Elem(), params)
 	}
 
-	// Recursively process struct fields and slice elements
+	// Process different kinds of values
 	switch v.Kind() {
 	case reflect.Struct:
-		for i := range v.NumField() {
+		// Process each field in the struct
+		for i := 0; i < v.NumField(); i++ {
 			if err := ResolveVars(v.Field(i), params); err != nil {
 				return err
 			}
 		}
 
 	case reflect.Slice:
-		for i := range v.Len() {
+		// Process each element in the slice
+		for i := 0; i < v.Len(); i++ {
 			if err := ResolveVars(v.Index(i), params); err != nil {
+				return err
+			}
+		}
+
+	case reflect.Interface:
+		// For interface types (which could be Protocol Buffer oneof fields),
+		// extract the concrete value and process it
+		if !v.IsNil() {
+			if err := ResolveVars(v.Elem(), params); err != nil {
+				return err
+			}
+		}
+
+	case reflect.Map:
+		// Process each key-value pair in the map
+		iter := v.MapRange()
+		for iter.Next() {
+			if err := ResolveVars(iter.Value(), params); err != nil {
 				return err
 			}
 		}

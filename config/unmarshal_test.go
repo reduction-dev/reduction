@@ -21,7 +21,7 @@ import (
 func TestUnmarshal(t *testing.T) {
 	job := &topology.Job{WorkerCount: topology.IntValue(2)}
 	source := clientkinesis.NewSource(job, "Source", &clientkinesis.SourceParams{
-		StreamARN: topology.StringValue("stream-arn"),
+		StreamARN: topology.StringParam("KINESIS_STREAM_ARN"),
 		Endpoint:  topology.StringValue("http://localhost:12345"),
 	})
 	operator := topology.NewOperator(job, "Operator", &topology.OperatorParams{
@@ -39,16 +39,26 @@ func TestUnmarshal(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log(string(synthesis.Config.Marshal()))
-	def, err := cfg.Unmarshal(synthesis.Config.Marshal(), config.NewParams())
+
+	// Create params with the KINESIS_STREAM_ARN parameter
+	params := config.NewParams()
+	params.Set("KINESIS_STREAM_ARN", "arn:aws:kinesis:us-east-1:123456789012:stream/test-stream")
+
+	def, err := cfg.Unmarshal(synthesis.Config.Marshal(), params)
 	require.NoError(t, err)
 
-	assert.Equal(t, def.WorkerCount, 2)
-	assert.Len(t, def.Sources, 1)
-	assert.IsType(t, kinesis.SourceConfig{}, def.Sources[0])
+	assert.Equal(t, 2, def.WorkerCount, "Worker count should be 2")
+	assert.Len(t, def.Sources, 1, "Should have 1 source")
+	assert.IsType(t, kinesis.SourceConfig{}, def.Sources[0], "Source should be of type kinesis.SourceConfig")
 
-	assert.Len(t, def.Sinks, 1)
-	assert.IsType(t, httpapi.SinkConfig{}, def.Sinks[0])
-	assert.Equal(t, def.Sinks[0].(httpapi.SinkConfig).Addr, "http-api-sink-addr")
+	// Check that the parameter was properly resolved
+	kinesisSource := def.Sources[0].(kinesis.SourceConfig)
+	assert.Equal(t, "arn:aws:kinesis:us-east-1:123456789012:stream/test-stream", kinesisSource.StreamARN, "StreamARN should be resolved from parameter")
+	assert.Equal(t, "http://localhost:12345", kinesisSource.Endpoint, "Endpoint should match the configured value")
+
+	assert.Len(t, def.Sinks, 1, "Should have 1 sink")
+	assert.IsType(t, httpapi.SinkConfig{}, def.Sinks[0], "Sink should be of type httpapi.SinkConfig")
+	assert.Equal(t, "http-api-sink-addr", def.Sinks[0].(httpapi.SinkConfig).Addr, "Sink address should match the configured value")
 }
 
 func TestResolveVars_StringVar(t *testing.T) {
