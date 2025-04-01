@@ -13,8 +13,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 type SourceReader struct {
@@ -32,9 +30,7 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 	if config.Client == nil {
 		var err error
 		config.Client, err = NewClient(&NewClientParams{
-			Endpoint:    config.Endpoint,
-			Region:      "us-east-2", // Match the region used in tests
-			Credentials: aws.AnonymousCredentials{},
+			Endpoint: config.Endpoint,
 		})
 		if err != nil {
 			log.Fatalf("failed to create kinesis client: %s", err)

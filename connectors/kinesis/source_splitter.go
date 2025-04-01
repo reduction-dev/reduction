@@ -11,8 +11,6 @@ import (
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/sliceu"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 type SourceSplitter struct {
@@ -27,9 +25,8 @@ func NewSourceSplitter(params SourceConfig) *SourceSplitter {
 	if client == nil {
 		var err error
 		client, err = NewClient(&NewClientParams{
-			Endpoint:    params.Endpoint,
-			Region:      "us-east-2",
-			Credentials: aws.AnonymousCredentials{}})
+			Endpoint: params.Endpoint,
+		})
 		if err != nil {
 			log.Fatalf("Failed to create Kinesis Client: %s", err)
 		}

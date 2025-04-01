@@ -26,7 +26,8 @@ import (
 )
 
 func TestKinesis(t *testing.T) {
-	t.Parallel()
+	t.Setenv("AWS_ACCESS_KEY_ID", "aws-acccess-key-id")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-access-key")
 
 	kinesisService := kinesisfake.StartFake()
 	defer kinesisService.Close()
