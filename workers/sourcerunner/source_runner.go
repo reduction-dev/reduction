@@ -220,7 +220,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 
 func (r *SourceRunner) processEvents(ctx context.Context) error {
 	sourceReaderEOI := false
-	eventsChan := connectors.NewEventChannel(ctx, r.sourceReader)
+	readFuncChan := connectors.NewEventChannel(ctx, r.sourceReader)
 
 	for {
 		select {
@@ -234,7 +234,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				return fmt.Errorf("creating checkpoint: %w", err)
 			}
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
-		case readResult, ok := <-eventsChan:
+		case readFunc, ok := <-readFuncChan:
 			if !ok {
 				// Channel closed, no more events from source
 				if !sourceReaderEOI {
@@ -253,7 +253,9 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				continue
 			}
 
-			events, err := readResult.Events, readResult.Err
+			// Execute the read function to get events
+			events, err := readFunc()
+
 			if err != nil {
 				if errors.Is(err, connectors.ErrEndOfInput) {
 					// EOI error case may still have returned events
@@ -280,6 +282,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				continue
 			}
 
+			// Process all events from this read
 			for _, e := range events {
 				r.sendKeyEvent(ctx, e)
 			}
