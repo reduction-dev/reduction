@@ -80,16 +80,26 @@ func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response) (
 
 		// Log every 10 retries
 		if retryCount%10 == 0 {
+			status := "unknown"
+			if resp != nil {
+				status = resp.Status
+			}
 			c.logger.Info("Continuing to retry request",
 				"url", req.URL.String(),
-				"status", resp.Status,
+				"status", status,
 				"retryCount", retryCount,
 				"responseBody", bodyMsg)
 		}
 
 		// Calculate delay with exponential backoff capped at maxDelay
 		delay := min(initialDelay*time.Duration(retryCount), maxDelay)
-		time.Sleep(delay)
+
+		select {
+		case <-req.Context().Done():
+			return nil, fmt.Errorf("request context error: %w", req.Context().Err())
+		case <-time.After(delay):
+			// Continue
+		}
 
 		// Reset the request body if needed
 		if err := resetRequestBody(req); err != nil {

@@ -2,7 +2,6 @@ package connectors
 
 import (
 	"context"
-	"errors"
 
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/proto/workerpb"
@@ -51,5 +50,3 @@ type SinkConfig interface {
 	ProtoMessage() *jobconfigpb.Sink
 	NewSink() SinkWriter
 }
-
-var ErrEndOfInput = errors.New("end of input")

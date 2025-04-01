@@ -2,10 +2,12 @@ package kinesis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
 
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
@@ -52,7 +54,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 
 	records, err := s.client.ReadEvents(context.Background(), s.streamARN, shard.id, shard.cursor)
 	if err != nil {
-		return nil, fmt.Errorf("kinesis SourceReader ReadEvents: %w", err)
+		return nil, fmt.Errorf("kinesis SourceReader ReadEvents: %w", sourceErrorFrom(err))
 	}
 	shard.cursor = *records.NextShardIterator
 
@@ -150,4 +152,19 @@ func (l *shardList) list() []*kinesisShard {
 	defer l.mu.Unlock()
 
 	return l.shards
+}
+
+func sourceErrorFrom(err error) *connectors.SourceError {
+	var accessDenied *kinesistypes.AccessDeniedException
+	if errors.As(err, &accessDenied) {
+		return connectors.NewTerminalError(err)
+	}
+
+	var invalidArgument *kinesistypes.InvalidArgumentException
+	if errors.As(err, &invalidArgument) {
+		return connectors.NewTerminalError(err)
+	}
+
+	// Default to retryable for unknown errors
+	return connectors.NewRetryableError(err)
 }

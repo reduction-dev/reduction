@@ -256,6 +256,10 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 					continue
 				}
 
+				if !connectors.IsRetryable(err) {
+					return fmt.Errorf("terminal source reader error: %w", err)
+				}
+
 				r.Logger.Error("failed reading source, will retry", "err", err)
 				continue
 			}
