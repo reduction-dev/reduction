@@ -219,8 +219,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 }
 
 func (r *SourceRunner) processEvents(ctx context.Context) error {
-	sourceReaderEOI := false
-	readFuncChan := connectors.NewEventChannel(ctx, r.sourceReader)
+	readEvents := connectors.NewEventChannel(ctx, r.sourceReader)
 
 	for {
 		select {
@@ -234,22 +233,14 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				return fmt.Errorf("creating checkpoint: %w", err)
 			}
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
-		case readFunc, ok := <-readFuncChan:
+		case readFunc, ok := <-readEvents:
 			if !ok {
-				// Channel closed, no more events from source
-				if !sourceReaderEOI {
-					// Send source complete event if we haven't already
-					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
-						Watermark: &workerpb.Watermark{},
-					}}
-					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
-					sourceReaderEOI = true
-				}
-				continue
-			}
-
-			if sourceReaderEOI {
-				// Never read source events again after reaching end of input
+				// Channel closed, Flush events, Send watermark, send source complete event
+				r.keyEventChannel.Flush(ctx)
+				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
+					Watermark: &workerpb.Watermark{},
+				}}
+				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
 				continue
 			}
 
@@ -258,19 +249,10 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 
 			if err != nil {
 				if errors.Is(err, connectors.ErrEndOfInput) {
-					// EOI error case may still have returned events
+					// Process any events before the EndOfInput
 					for _, e := range events {
 						r.sendKeyEvent(ctx, e)
 					}
-					r.keyEventChannel.Flush(ctx)
-
-					// Send the current watermark followed by source complete event
-					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{
-						Watermark: &workerpb.Watermark{},
-					}}
-					r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
-
-					sourceReaderEOI = true
 					continue
 				}
 
@@ -279,10 +261,9 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				}
 
 				r.Logger.Error("failed reading source, will retry", "err", err)
-				continue
 			}
 
-			// Process all events from this read
+			// Process the events
 			for _, e := range events {
 				r.sendKeyEvent(ctx, e)
 			}
