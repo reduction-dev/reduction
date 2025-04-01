@@ -34,6 +34,11 @@ type SourceReader interface {
 	Checkpoint() []byte
 }
 
+type ReadResult struct {
+	Events [][]byte
+	Err    error
+}
+
 type SinkWriter interface {
 	Write([]byte) error
 }
