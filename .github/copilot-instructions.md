@@ -2,25 +2,53 @@
 
 ## Testing
 
-- Use github.com/stretchr/testify/assert for assertions.
-- Only test public package functions (blackbox testing).
-- Avoid table-driven tests.
-- Don't use terms like "mock" and "test" as prefixes for variables in tests
-  because the context of testing should be assumed. For instance rather than
-  naming something "mockLogger" it might be "recordingLogger". Instead of naming a
-  new user "testUser", just "user" is better.
-- Avoid introducing arbitrary "sleeps" in tests. Polling assertions like
-  Testify's `assert.Eventually` are good for async assertions. When needing to
-  validate specific ordering with goroutines, exercise the code enough times to
-  get reasonable confidence that order is correct. Suggest dependency injection to
-  control expiring timers.
+- Use github.com/stretchr/testify/assert assertions.
+- Only use blackbox testing (test the public API of package) and use
+  `<package>_test` packages.
+- Prefer top-level test functions like `TestMyThing_SpecificCase` over sub tests
+  or table-driven tests.
+- Avoid "mock" or "test" prefixes for variables in tests.
+  - Good: `user`, `url`, `job`
+  - Avoid: `testUser`, `dummyURL`, `mockJob`
+- Use "fakes" that implement an interface for testing, not "mocks" that verify
+  their calls. Good names describe the implementation when possible (`MemoryLogger`, `FailingHttpServer`) or use "fake" as a prefix (`FakeSourceReader`).
+- Async testing:
+  - Use `assert.Eventually` and `assert.EventuallyWithT` instead of `time.Sleep`.
+  - When validating goroutine order, exercise code with many iterations to build
+    confidence.
+  - Inject dependencies to control timing.
+- Organize test files with happy-path test cases first, then degenerate test cases, then
+  supporting functions and types.
 
 ## Modern Go
 
-- Go has built-in iterators now which allows this pattern:
+- Go's range operator allows this pattern:
 
   ```go
   for i := range 10 {
     fmt.Println(i) // Prints 0 - 9
+  }
+  ```
+
+- Go does _not_ support generic methods.
+
+- Go's testing.T has a `t.Context()` method that provides a context
+  that's canceled at the end of a test.
+
+  Do this:
+
+  ```go
+  func TestXxx(t *testing.T) {
+    myFunc(t.Context())
+  }
+  ```
+
+  Instead of this:
+
+  ```go
+  func TestXxx(t *testing.T) {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    myFunc(ctx)
   }
   ```
