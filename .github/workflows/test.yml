@@ -11,6 +11,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GOEXPERIMENT: synctest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3

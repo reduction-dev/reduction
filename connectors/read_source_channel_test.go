@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ func TestNewReadSourceChannel_ReturnsEventsFromSourceReader(t *testing.T) {
 	// Read second set (which will trigger EOI)
 	readFunc = <-channel
 	receivedEvents, err = readFunc()
-	assert.NoError(t, err) // EOI is hidden from caller
+	assert.NoError(t, err, "EOI is hidden from caller")
 	assert.Equal(t, events, receivedEvents)
 	assert.Equal(t, 2, reader.callCount)
 
@@ -67,6 +68,39 @@ func TestNewReadSourceChannel_ClosesOnContextCancellation(t *testing.T) {
 		_, ok := <-channel
 		return !ok
 	}, time.Second, 10*time.Millisecond, "channel should be closed after context cancellation")
+}
+
+func TestNewReadSourceChannel_Backoff(t *testing.T) {
+	retryableErr := connectors.NewRetryableError(errors.New("temporary error"))
+	// terminalErr := connectors.NewTerminalError(errors.New("terminal error"))
+	reader := &fakeSourceReader{
+		err: retryableErr,
+	}
+
+	synctest.Run(func() {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		channel := connectors.NewReadSourceChannel(ctx, reader)
+
+		// Read the first function
+		beforeReadTime := time.Now()
+		readFunc := <-channel
+		_, err := readFunc()
+		assert.ErrorIs(t, err, retryableErr)
+		assert.Equal(t, time.Now(), beforeReadTime, "no backoff applied")
+
+		// Set next source reader error to be terminal
+		terminalErr := connectors.NewTerminalError(errors.New("terminal error"))
+		reader.err = terminalErr
+
+		// Read the second function
+		beforeReadTime = time.Now()
+		readFunc = <-channel
+		_, err = readFunc()
+		assert.ErrorIs(t, err, terminalErr)
+		assert.Equal(t, time.Now(), beforeReadTime.Add(200*time.Millisecond), "200ms backoff applied")
+	})
 }
 
 // fakeSourceReader is an implementation of the SourceReader interface

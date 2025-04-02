@@ -250,12 +250,12 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 			// Execute the read function to get events
 			events, err := readFunc()
 			if err != nil {
-				if !connectors.IsRetryable(err) {
-					return fmt.Errorf("terminal source reader error: %w", err)
+				if connectors.IsRetryable(err) {
+					r.Logger.Error("failed reading source, will retry", "err", err)
+					continue
 				}
 
-				r.Logger.Error("failed reading source, will retry", "err", err)
-				continue
+				return fmt.Errorf("terminal source reader error: %w", err)
 			}
 
 			// Process the events
