@@ -2,9 +2,11 @@ package rpc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -37,56 +39,52 @@ func WithInitialRetryDelay(delay int) newOption {
 	}
 }
 
-// isRetryStatus returns whether a status code should be retried indefinitely
-func isRetryStatus(statusCode int) bool {
-	switch statusCode {
-	case
-		http.StatusRequestTimeout,     // 408
-		http.StatusTooManyRequests,    // 429
-		http.StatusBadGateway,         // 502
-		http.StatusServiceUnavailable, // 503
-		http.StatusGatewayTimeout:     // 504
-		return true
-	}
-	return false
-}
-
+// Do performs an HTTP request with automatic retries for certain errors.
 func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
+	// Try the initial request
 	resp, err := c.goHTTPClient.Do(req)
+
+	// Handle network errors like DNS resolution failures
 	if err != nil {
+		if isRetryableError(err) {
+			return c.retryRequest(req, nil, err)
+		}
+
 		return nil, err
 	}
 
-	// Return immediately if status is not retry-able
-	if !isRetryStatus(resp.StatusCode) {
-		return resp, nil
+	if isRetryableErrorStatus(resp.StatusCode) {
+		return c.retryRequest(req, resp, nil)
 	}
 
-	// Handle retry logic for retryable status codes
-	return c.retryRequest(req, resp)
+	return resp, nil
 }
 
 // retryRequest handles the retry loop for requests that need to be retried
-func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response) (*http.Response, error) {
-	resp := firstResp
-	bodyMsg := readBodyMessage(resp)
+func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response, initialErr error) (*http.Response, error) {
+	currentResp := firstResp
 	retryCount := 0
-
 	initialDelay := time.Duration(c.initialRetryDelay) * time.Millisecond
 	const maxDelay = 10 * time.Second
 
 	for {
 		retryCount++
 
+		// Try to get info from response for logging
+		var bodyMsg string
+		var retryReason string
+		if currentResp == nil {
+			retryReason = "network error"
+		} else {
+			bodyMsg = readBodyMessage(currentResp)
+			retryReason = currentResp.Status
+		}
+
 		// Log every 10 retries
 		if retryCount%10 == 0 {
-			status := "unknown"
-			if resp != nil {
-				status = resp.Status
-			}
 			c.logger.Info("Continuing to retry request",
 				"url", req.URL.String(),
-				"status", status,
+				"retryReason", retryReason,
 				"retryCount", retryCount,
 				"responseBody", bodyMsg)
 		}
@@ -108,18 +106,21 @@ func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response) (
 
 		// Retry the request
 		var err error
-		resp, err = c.goHTTPClient.Do(req)
+		currentResp, err = c.goHTTPClient.Do(req)
+
 		if err != nil {
+			if isRetryableError(err) {
+				continue
+			}
+			return currentResp, err
+		}
+
+		if isRetryableErrorStatus(currentResp.StatusCode) {
 			continue
 		}
 
-		// If status is no longer retryable, we can return
-		if !isRetryStatus(resp.StatusCode) {
-			return resp, nil
-		}
-
-		// Update bodyMsg for next iteration's logging
-		bodyMsg = readBodyMessage(resp)
+		// Return with success or terminal error
+		return currentResp, err
 	}
 }
 
@@ -149,4 +150,41 @@ func readBodyMessage(resp *http.Response) string {
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	return string(bodyBytes)
+}
+
+// isRetryableErrorStatus returns whether a status code should be retried indefinitely
+func isRetryableErrorStatus(statusCode int) bool {
+	switch statusCode {
+	case
+		http.StatusRequestTimeout,     // 408
+		http.StatusTooManyRequests,    // 429
+		http.StatusBadGateway,         // 502
+		http.StatusServiceUnavailable, // 503
+		http.StatusGatewayTimeout:     // 504
+		return true
+	}
+	return false
+}
+
+// isRetryableError determines whether a network error should be retried
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Retry DNS lookup errors
+	var dnsError *net.DNSError
+	if errors.As(err, &dnsError) {
+		// Retry temporary network errors
+		if dnsError.IsNotFound {
+			return true
+		}
+	}
+
+	// Retry closed connections
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+
+	return false
 }

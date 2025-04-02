@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"reduction.dev/reduction/rpc"
 
@@ -134,7 +136,7 @@ func TestNetworkErrorHandlingSuccess(t *testing.T) {
 
 	// Should eventually succeed
 	assert.NoError(t, err)
-	assert.NotNil(t, resp)
+	require.NotNil(t, resp)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
@@ -142,4 +144,24 @@ func TestNetworkErrorHandlingSuccess(t *testing.T) {
 	assert.Equal(t, "success", string(body))
 
 	assert.Equal(t, 5, serverAttempts, "Should have made 5 requests total")
+}
+
+func TestDNSErrorHandling(t *testing.T) {
+	client := rpc.NewHTTPClient("dummy", slog.Default(), rpc.WithInitialRetryDelay(1))
+
+	synctest.Run(func() {
+		// Create context that we'll cancel to stop the test from running forever
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		// Use a non-existent domain that will fail DNS resolution.
+		httpReq, err := http.NewRequestWithContext(ctx, "GET", "http://non-existent-host.invalid", nil)
+		require.NoError(t, err)
+
+		// The request should retry until the context is canceled
+		_, err = client.Do(httpReq)
+
+		// Should have context deadline exceeded error since we retried until timeout
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 }
