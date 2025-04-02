@@ -63,31 +63,33 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 // retryRequest handles the retry loop for requests that need to be retried
 func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response, initialErr error) (*http.Response, error) {
 	currentResp := firstResp
+	currentErr := initialErr
 	retryCount := 0
 	initialDelay := time.Duration(c.initialRetryDelay) * time.Millisecond
 	const maxDelay = 10 * time.Second
 
 	for {
-		retryCount++
-
 		// Try to get info from response for logging
-		var bodyMsg string
+		var errDetails string
 		var retryReason string
 		if currentResp == nil {
 			retryReason = "network error"
+			errDetails = currentErr.Error()
 		} else {
-			bodyMsg = readBodyMessage(currentResp)
+			errDetails = readBodyMessage(currentResp)
 			retryReason = currentResp.Status
 		}
 
-		// Log every 10 retries
+		// Log first retry (retryCount=0) and then every 10 retries
 		if retryCount%10 == 0 {
 			c.logger.Info("Continuing to retry request",
 				"url", req.URL.String(),
 				"retryReason", retryReason,
 				"retryCount", retryCount,
-				"responseBody", bodyMsg)
+				"errDetails", errDetails)
 		}
+
+		retryCount++
 
 		// Calculate delay with exponential backoff capped at maxDelay
 		delay := min(initialDelay*time.Duration(retryCount), maxDelay)
@@ -110,6 +112,7 @@ func (c *HTTPClient) retryRequest(req *http.Request, firstResp *http.Response, i
 
 		if err != nil {
 			if isRetryableError(err) {
+				currentErr = err
 				continue
 			}
 			return currentResp, err
