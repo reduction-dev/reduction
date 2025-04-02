@@ -219,7 +219,7 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 }
 
 func (r *SourceRunner) processEvents(ctx context.Context) error {
-	readEvents := connectors.NewEventChannel(ctx, r.sourceReader)
+	readEvents := connectors.NewReadSourceChannel(ctx, r.sourceReader)
 
 	for {
 		select {
@@ -241,26 +241,21 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 					Watermark: &workerpb.Watermark{},
 				}}
 				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
+
+				// Stop reading from readEvents
+				readEvents = nil
 				continue
 			}
 
 			// Execute the read function to get events
 			events, err := readFunc()
-
 			if err != nil {
-				if errors.Is(err, connectors.ErrEndOfInput) {
-					// Process any events before the EndOfInput
-					for _, e := range events {
-						r.sendKeyEvent(ctx, e)
-					}
-					continue
-				}
-
 				if !connectors.IsRetryable(err) {
 					return fmt.Errorf("terminal source reader error: %w", err)
 				}
 
 				r.Logger.Error("failed reading source, will retry", "err", err)
+				continue
 			}
 
 			// Process the events
