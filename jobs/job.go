@@ -122,7 +122,7 @@ func New(params *NewParams) *Job {
 
 func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("registering operator", "id", node.Id, "host", node.Host)
+		j.log.Debug("registering operator", "id", node.Id, "host", node.Host)
 		operator := j.operatorFactory("job", node)
 		j.registry.RegisterOperator(operator)
 	}
@@ -130,14 +130,14 @@ func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
 
 func (j *Job) HandleDeregisterOperator(op *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("deregistered operator", "id", op.Id, "host", op.Host)
+		j.log.Debug("deregistered operator", "id", op.Id, "host", op.Host)
 		j.registry.DeregisterOperator(op)
 	}
 }
 
 func (j *Job) HandleRegisterSourceRunner(node *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("registered source runner", "id", node.Id, "host", node.Host)
+		j.log.Debug("registered source runner", "id", node.Id, "host", node.Host)
 		sr := j.sourceRunnerFactory(node)
 		j.registry.RegisterSourceRunner(sr)
 	}
@@ -145,7 +145,7 @@ func (j *Job) HandleRegisterSourceRunner(node *jobpb.NodeIdentity) {
 
 func (j *Job) HandleDeregisterSourceRunner(sr *jobpb.NodeIdentity) {
 	j.stateUpdates <- func() {
-		j.log.Info("deregistered source runner", "id", sr.Id, "host", sr.Host)
+		j.log.Debug("deregistered source runner", "id", sr.Id, "host", sr.Host)
 		j.registry.DeregisterSourceRunner(sr)
 	}
 }
