@@ -195,12 +195,15 @@ func (j *Job) processStateUpdates() {
 			j.log.Info("registry purged", "nodes", purged)
 		}
 
-		j.log.Info("check registry", append(
-			[]any{
-				slog.String("status", j.status.String()),
-				slog.String("assembly", j.assembly.String()),
-			},
-			j.registry.Diagnostics()...)...)
+		if j.registry.HasChanges() {
+			j.log.Info("check registry", append(
+				[]any{
+					slog.String("status", j.status.String()),
+					slog.String("assembly", j.assembly.String()),
+				},
+				j.registry.Diagnostics()...)...)
+			j.registry.AcknowledgeChanges()
+		}
 
 		// Transition the job to new state if needed
 		switch j.status.Value() {

@@ -17,6 +17,7 @@ type Registry struct {
 	operators *ds.SortedMap[string, proto.Operator]
 	taskCount int
 	liveness  *LivenessTracker
+	didChange bool
 }
 
 func NewRegistry(taskCount int, liveness *LivenessTracker) *Registry {
@@ -30,20 +31,28 @@ func NewRegistry(taskCount int, liveness *LivenessTracker) *Registry {
 
 func (r *Registry) RegisterSourceRunner(runner proto.SourceRunner) {
 	r.liveness.Heartbeat(runner.ID())
-	r.runners.Set(runner.ID(), runner)
+	if isNew := r.runners.Set(runner.ID(), runner); isNew {
+		r.didChange = true
+	}
 }
 
 func (r *Registry) DeregisterSourceRunner(sr *jobpb.NodeIdentity) {
-	r.runners.Delete(sr.Id)
+	if didRemove := r.runners.Delete(sr.Id); didRemove {
+		r.didChange = true
+	}
 }
 
 func (r *Registry) RegisterOperator(op proto.Operator) {
 	r.liveness.Heartbeat(op.ID())
-	r.operators.Set(op.ID(), op)
+	if isNew := r.operators.Set(op.ID(), op); isNew {
+		r.didChange = true
+	}
 }
 
 func (r *Registry) DeregisterOperator(op *jobpb.NodeIdentity) {
-	r.operators.Delete(op.Id)
+	if didRemove := r.operators.Delete(op.Id); didRemove {
+		r.didChange = true
+	}
 }
 
 // NewAssembly attempts to get the required operators and source runners
@@ -70,6 +79,10 @@ func (r *Registry) Purge() []string {
 		r.operators.Delete(id)
 	}
 
+	if len(purged) > 0 {
+		r.didChange = true
+	}
+
 	return purged
 }
 
@@ -87,4 +100,15 @@ func (r *Registry) HasSourceRunner(sr proto.SourceRunner) bool {
 
 func (r *Registry) HasOperator(op proto.Operator) bool {
 	return r.operators.Has(op.ID())
+}
+
+// HasChanges returns whether the registry has had any changes since the last call to AcknowledgeChanges.
+// This is a pure query method with no side effects.
+func (r *Registry) HasChanges() bool {
+	return r.didChange
+}
+
+// AcknowledgeChanges resets the change tracking flag after changes have been processed.
+func (r *Registry) AcknowledgeChanges() {
+	r.didChange = false
 }

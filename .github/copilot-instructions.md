@@ -10,8 +10,9 @@
 - Avoid "mock" or "test" prefixes for variables in tests.
   - Good: `user`, `url`, `job`
   - Avoid: `testUser`, `dummyURL`, `mockJob`
-- Use "fakes" that implement an interface for testing, not "mocks" that verify
-  their calls. Good names describe the implementation when possible (`MemoryLogger`, `FailingHttpServer`) or use "fake" as a prefix (`FakeSourceReader`).
+- Use "fakes" that implement an interface for test doubles Good names describe
+  the implementation when possible (`MemoryLogger`, `FailingHttpServer`) or use
+  "fake" as a prefix (`FakeSourceReader`).
 - Async testing:
   - Use `assert.Eventually` and `assert.EventuallyWithT` instead of `time.Sleep`.
   - When validating goroutine order, exercise code with many iterations to build
@@ -19,6 +20,10 @@
   - Inject dependencies to control timing.
 - Organize test files with happy-path test cases first, then degenerate test cases, then
   supporting functions and types.
+- Use testify assertion messages in lieu of short comments:
+  ```go
+	assert.True(t, value, "comment can go here")
+  ```
 
 ## Modern Go
 

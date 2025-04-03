@@ -15,3 +15,23 @@ type SourceRunner interface {
 }
 
 type SourceRunnerFactory func(node *jobpb.NodeIdentity) SourceRunner
+
+type UnimplementedSourceRunner struct{}
+
+func (u *UnimplementedSourceRunner) Host() string {
+	panic("unimplemented")
+}
+
+func (u *UnimplementedSourceRunner) ID() string {
+	panic("unimplemented")
+}
+
+func (u *UnimplementedSourceRunner) Start(context.Context, *workerpb.StartSourceRunnerRequest) error {
+	panic("unimplemented")
+}
+
+func (u *UnimplementedSourceRunner) StartCheckpoint(ctx context.Context, id uint64) error {
+	panic("unimplemented")
+}
+
+var _ SourceRunner = (*UnimplementedSourceRunner)(nil)
