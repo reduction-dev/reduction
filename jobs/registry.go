@@ -48,16 +48,17 @@ func (r *Registry) DeregisterOperator(op *jobpb.NodeIdentity) {
 
 // NewAssembly attempts to get the required operators and source runners
 // for an assembly. Returns nil, ErrNotEnoughResources if insufficient resources.
-func (r *Registry) NewAssembly() ([]proto.Operator, []proto.SourceRunner, error) {
+func (r *Registry) NewAssembly() (*Assembly, error) {
 	if r.runners.Size() < r.taskCount {
-		return nil, nil, fmt.Errorf("need %d source runners but had %d registered: %w", r.taskCount, r.runners.Size(), ErrNotEnoughResources)
+		return nil, fmt.Errorf("need %d source runners but had %d registered: %w", r.taskCount, r.runners.Size(), ErrNotEnoughResources)
 	}
 
 	if r.operators.Size() < r.taskCount {
-		return nil, nil, fmt.Errorf("need %d operators but had %d registered: %w", r.taskCount, r.operators.Size(), ErrNotEnoughResources)
+		return nil, fmt.Errorf("need %d operators but had %d registered: %w", r.taskCount, r.operators.Size(), ErrNotEnoughResources)
 	}
 
-	return r.operators.Values()[:r.taskCount], r.runners.Values()[:r.taskCount], nil
+	assembly := NewAssembly(r.operators.Values()[:r.taskCount], r.runners.Values()[:r.taskCount])
+	return assembly, nil
 }
 
 // Purge removes any dead nodes and returns their IDs
