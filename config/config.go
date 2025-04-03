@@ -8,6 +8,7 @@ import (
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/httpapi"
 	"reduction.dev/reduction/connectors/stdio"
+	"reduction.dev/reduction/partitioning"
 )
 
 // The object representing Job configuration.
@@ -32,6 +33,10 @@ func (c *Config) Validate() (err error) {
 	}
 
 	return err
+}
+
+func (c *Config) KeySpace() *partitioning.KeySpace {
+	return partitioning.NewKeySpace(c.KeyGroupCount, c.WorkerCount)
 }
 
 func NewSinkFromProto(sink *jobconfigpb.Sink) connectors.SinkWriter {

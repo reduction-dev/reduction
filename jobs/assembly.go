@@ -21,20 +21,17 @@ type Assembly struct {
 	sourceRunners []proto.SourceRunner
 	operators     []proto.Operator
 	logger        *slog.Logger
-	keySpace      *partitioning.KeySpace
 }
 
 func NewAssembly(
 	operators []proto.Operator,
 	sourceRunners []proto.SourceRunner,
 	log *slog.Logger,
-	keySpace *partitioning.KeySpace,
 ) *Assembly {
 	return &Assembly{
 		sourceRunners: sourceRunners,
 		operators:     operators,
 		logger:        log,
-		keySpace:      keySpace,
 	}
 }
 
@@ -93,7 +90,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 		ckptRanges[i] = partitioning.KeyGroupRangeFromProto(opCkpt.KeyGroupRange)
 	}
 
-	opCkptAssignments := partitioning.AssignRanges(a.keySpace.KeyGroupRanges(), ckptRanges)
+	opCkptAssignments := partitioning.AssignRanges(cfg.KeySpace().KeyGroupRanges(), ckptRanges)
 	for i, op := range a.operators {
 		eg.Go(func() error {
 			return op.Start(gctx, &workerpb.StartOperatorRequest{

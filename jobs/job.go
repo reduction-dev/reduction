@@ -10,7 +10,6 @@ import (
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
-	"reduction.dev/reduction/partitioning"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
@@ -30,7 +29,6 @@ type Job struct {
 	config              *config.Config
 	clock               clocks.Clock
 	checkpointTicker    *clocks.Ticker
-	keySpace            *partitioning.KeySpace
 	operatorFactory     proto.OperatorFactory
 	sourceRunnerFactory proto.SourceRunnerFactory
 	status              *jobStatus
@@ -104,7 +102,6 @@ func New(params *NewParams) *Job {
 		config:              params.JobConfig,
 		clock:               params.Clock,
 		sourceSplitter:      params.JobConfig.Sources[0].NewSourceSplitter(),
-		keySpace:            partitioning.NewKeySpace(params.JobConfig.KeyGroupCount, params.JobConfig.WorkerCount),
 		operatorFactory:     params.OperatorFactory,
 		sourceRunnerFactory: params.SourceRunnerFactory,
 		status:              newJobStatus(),
@@ -230,7 +227,7 @@ func (j *Job) processStateUpdates() {
 			j.status.Set(StatusAssemblyStarting)
 
 			// Create a new assembly with the assembled resources
-			j.assembly = NewAssembly(operators, sourceRunners, j.log, j.keySpace)
+			j.assembly = NewAssembly(operators, sourceRunners, j.log)
 			go func() {
 				err := j.start()
 				if err != nil {
