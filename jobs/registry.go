@@ -46,9 +46,9 @@ func (r *Registry) DeregisterOperator(op *jobpb.NodeIdentity) {
 	r.operators.Delete(op.Id)
 }
 
-// TryAssembleResources attempts to get the required operators and source runners
+// NewAssembly attempts to get the required operators and source runners
 // for an assembly. Returns nil, ErrNotEnoughResources if insufficient resources.
-func (r *Registry) TryAssembleResources() ([]proto.Operator, []proto.SourceRunner, error) {
+func (r *Registry) NewAssembly() ([]proto.Operator, []proto.SourceRunner, error) {
 	if r.runners.Size() < r.taskCount {
 		return nil, nil, fmt.Errorf("need %d source runners but had %d registered: %w", r.taskCount, r.runners.Size(), ErrNotEnoughResources)
 	}

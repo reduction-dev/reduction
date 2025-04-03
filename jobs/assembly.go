@@ -3,7 +3,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"golang.org/x/sync/errgroup"
 	"reduction.dev/reduction-protocol/jobconfigpb"
@@ -20,38 +19,34 @@ import (
 type Assembly struct {
 	sourceRunners []proto.SourceRunner
 	operators     []proto.Operator
-	logger        *slog.Logger
 }
 
 func NewAssembly(
 	operators []proto.Operator,
 	sourceRunners []proto.SourceRunner,
-	log *slog.Logger,
 ) *Assembly {
 	return &Assembly{
 		sourceRunners: sourceRunners,
 		operators:     operators,
-		logger:        log,
 	}
 }
 
 // Healthy checks whether all nodes in the assembly are still active
-func (a *Assembly) Healthy(registry NodeRegistry) bool {
+// Returns true if healthy, or false with a reason if unhealthy
+func (a *Assembly) Healthy(registry NodeRegistry) (bool, string) {
 	for _, sr := range a.sourceRunners {
 		if !registry.HasSourceRunner(sr) {
-			a.logger.Info("assembly not healthy", "missing-source-runner", sr.ID())
-			return false
+			return false, fmt.Sprintf("missing source runner: %s", sr.ID())
 		}
 	}
 
 	for _, op := range a.operators {
 		if !registry.HasOperator(op) {
-			a.logger.Info("assembly not healthy", "missing-operator", op.ID())
-			return false
+			return false, fmt.Sprintf("missing operator: %s", op.ID())
 		}
 	}
 
-	return true
+	return true, ""
 }
 
 // Start tells the assembly of nodes to begin working from a checkpoint
