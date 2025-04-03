@@ -18,7 +18,6 @@ import (
 )
 
 type Assembly struct {
-	registry      *Registry
 	sourceRunners []proto.SourceRunner
 	operators     []proto.Operator
 	logger        *slog.Logger
@@ -26,42 +25,30 @@ type Assembly struct {
 }
 
 func NewAssembly(
-	registry *Registry,
-	sourceSplitter connectors.SourceSplitter,
+	operators []proto.Operator,
+	sourceRunners []proto.SourceRunner,
 	log *slog.Logger,
 	keySpace *partitioning.KeySpace,
-) (*Assembly, error) {
-	operators, err := registry.AssembleOperators()
-	if err != nil {
-		return nil, err
-	}
-
-	sourceRunners, err := registry.AssembleSourceRunners()
-	if err != nil {
-		return nil, err
-	}
-
+) *Assembly {
 	return &Assembly{
-		registry:      registry,
 		sourceRunners: sourceRunners,
 		operators:     operators,
 		logger:        log,
 		keySpace:      keySpace,
-	}, nil
+	}
 }
 
-// Healthy checks whether each node in the assembly is still registered in the
-// registry.
-func (a *Assembly) Healthy() bool {
+// Healthy checks whether all nodes in the assembly are still active
+func (a *Assembly) Healthy(registry NodeRegistry) bool {
 	for _, sr := range a.sourceRunners {
-		if !a.registry.HasSourceRunner(sr) {
+		if !registry.HasSourceRunner(sr) {
 			a.logger.Info("assembly not healthy", "missing-source-runner", sr.ID())
 			return false
 		}
 	}
 
 	for _, op := range a.operators {
-		if !a.registry.HasOperator(op) {
+		if !registry.HasOperator(op) {
 			a.logger.Info("assembly not healthy", "missing-operator", op.ID())
 			return false
 		}
@@ -155,8 +142,8 @@ func (a *Assembly) SourceRunnerIDs() []string {
 
 func (a *Assembly) OperatorIDs() []string {
 	ids := make([]string, len(a.operators))
-	for i, sr := range a.operators {
-		ids[i] = sr.ID()
+	for i, op := range a.operators {
+		ids[i] = op.ID()
 	}
 	return ids
 }
@@ -166,4 +153,10 @@ func (a *Assembly) String() string {
 		return "none"
 	}
 	return fmt.Sprintf("operators: %v, source_runners: %v", a.OperatorIDs(), a.SourceRunnerIDs())
+}
+
+// NodeRegistry defines the minimal interface the Assembly needs from Registry
+type NodeRegistry interface {
+	HasSourceRunner(sr proto.SourceRunner) bool
+	HasOperator(op proto.Operator) bool
 }

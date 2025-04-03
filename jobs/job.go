@@ -208,7 +208,7 @@ func (j *Job) processStateUpdates() {
 		// Transition the job to new state if needed
 		switch j.status.Value() {
 		case StatusRunning:
-			if !j.assembly.Healthy() {
+			if !j.assembly.Healthy(j.registry) {
 				j.status.Set(StatusPaused)
 				if j.checkpointTicker != nil {
 					j.checkpointTicker.Stop()
@@ -217,14 +217,20 @@ func (j *Job) processStateUpdates() {
 
 		case StatusInit, StatusPaused:
 			// Try to create a new assembly if there are enough nodes
-			assembly, err := NewAssembly(j.registry, j.config.Sources[0].NewSourceSplitter(), j.log, j.keySpace)
-			if errors.Is(err, ErrNotEnoughResources) {
+			operators, sourceRunners, err := j.registry.TryAssembleResources()
+			if err != nil {
+				// Not enough resources yet, continue waiting
+				if errors.Is(err, ErrNotEnoughResources) {
+					break
+				}
+				j.log.Error("failed to assemble resources", "err", err)
 				break
 			}
 
 			j.status.Set(StatusAssemblyStarting)
 
-			j.assembly = assembly
+			// Create a new assembly with the assembled resources
+			j.assembly = NewAssembly(operators, sourceRunners, j.log, j.keySpace)
 			go func() {
 				err := j.start()
 				if err != nil {

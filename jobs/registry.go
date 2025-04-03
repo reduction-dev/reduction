@@ -46,23 +46,21 @@ func (r *Registry) DeregisterOperator(op *jobpb.NodeIdentity) {
 	r.operators.Delete(op.Id)
 }
 
-// Return a list of source runners meeting the task count requirement or return an error.
-func (r *Registry) AssembleSourceRunners() ([]proto.SourceRunner, error) {
+// TryAssembleResources attempts to get the required operators and source runners
+// for an assembly. Returns nil, ErrNotEnoughResources if insufficient resources.
+func (r *Registry) TryAssembleResources() ([]proto.Operator, []proto.SourceRunner, error) {
 	if r.runners.Size() < r.taskCount {
-		return nil, fmt.Errorf("need %d source runners but had %d registered: %w", r.taskCount, r.runners.Size(), ErrNotEnoughResources)
+		return nil, nil, fmt.Errorf("need %d source runners but had %d registered: %w", r.taskCount, r.runners.Size(), ErrNotEnoughResources)
 	}
-	return r.runners.Values()[:r.taskCount], nil
-}
 
-// Return a list of operators meeting the task count requirement or return an error.
-func (r *Registry) AssembleOperators() ([]proto.Operator, error) {
 	if r.operators.Size() < r.taskCount {
-		return nil, fmt.Errorf("need %d operators but had %d registered: %w", r.taskCount, r.operators.Size(), ErrNotEnoughResources)
+		return nil, nil, fmt.Errorf("need %d operators but had %d registered: %w", r.taskCount, r.operators.Size(), ErrNotEnoughResources)
 	}
-	return r.operators.Values()[:r.taskCount], nil
+
+	return r.operators.Values()[:r.taskCount], r.runners.Values()[:r.taskCount], nil
 }
 
-// Get rid of any dead nodes
+// Purge removes any dead nodes and returns their IDs
 func (r *Registry) Purge() []string {
 	var purged []string
 	for _, id := range r.liveness.Purge() {
