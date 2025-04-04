@@ -11,11 +11,11 @@ import (
 
 	"reduction.dev/reduction/dkv/recovery"
 	"reduction.dev/reduction/proto/snapshotpb"
-	"reduction.dev/reduction/storage"
+	"reduction.dev/reduction/storage/locations"
 )
 
 // Create a directory with savepoint files based on the provided checkpoint.
-func CreateSavepointArtifact(fs storage.FileStore, savepointsPath string, checkpointURI string, snapshot *jobSnapshot) (string, error) {
+func CreateSavepointArtifact(fs locations.StorageLocation, savepointsPath string, checkpointURI string, snapshot *jobSnapshot) (string, error) {
 	// Read the checkpoint data of every operator checkpoint and copy the
 	// referenced files into a savepoint directory.
 	for _, opCkpt := range snapshot.operatorCheckpoints {
@@ -55,7 +55,7 @@ func CreateSavepointArtifact(fs storage.FileStore, savepointsPath string, checkp
 }
 
 // Copy files from a savepoint into place to be read as checkpoints.
-func RestoreFromSavepointArtifact(fs storage.FileStore, savepointURI string, jobCheckpoint *snapshotpb.JobCheckpoint) error {
+func RestoreFromSavepointArtifact(fs locations.StorageLocation, savepointURI string, jobCheckpoint *snapshotpb.JobCheckpoint) error {
 	spDir := filepath.Dir(savepointURI)
 
 	for _, opCkpt := range jobCheckpoint.GetOperatorCheckpoints() {

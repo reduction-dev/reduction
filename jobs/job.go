@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"reduction.dev/reduction/clocks"
@@ -13,8 +14,7 @@ import (
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
-	"reduction.dev/reduction/storage"
-	"reduction.dev/reduction/storage/localfs"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -39,7 +39,7 @@ type NewParams struct {
 	SavepointURI        string
 	Clock               clocks.Clock
 	HeartbeatDeadline   time.Duration
-	Store               storage.FileStore
+	Store               locations.StorageLocation
 	CheckpointsPath     string
 	SavepointsPath      string
 	Logger              *slog.Logger
@@ -66,7 +66,11 @@ func New(params *NewParams) *Job {
 
 	// Default checkpoint storage to ./
 	if params.Store == nil {
-		params.Store = localfs.NewInWorkingDirectory("")
+		wd, err := os.Getwd()
+		if err != nil {
+			panic(fmt.Errorf("failed to get working directory: %w", err))
+		}
+		params.Store = locations.NewLocal(wd)
 	}
 
 	// Default CheckpointsPath to ./checkpoints

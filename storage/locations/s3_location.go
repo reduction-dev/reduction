@@ -1,4 +1,4 @@
-package s3fs
+package locations
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"reduction.dev/reduction/storage"
 	"reduction.dev/reduction/storage/objstore"
 )
 
@@ -70,7 +69,7 @@ func (l *S3Location) Read(path string) ([]byte, error) {
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return nil, fmt.Errorf("failed reading key %s: %w", key, storage.ErrNotFound)
+			return nil, fmt.Errorf("failed reading key %s: %w", key, ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to read object: %w", err)
 	}
@@ -92,7 +91,7 @@ func (l *S3Location) Copy(sourceURI string, destination string) error {
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return storage.ErrNotFound
+			return ErrNotFound
 		}
 		return fmt.Errorf("failed to copy object: %w", err)
 	}
@@ -102,18 +101,17 @@ func (l *S3Location) Copy(sourceURI string, destination string) error {
 // List returns the result of a ListObjectsV2 call to S3. It doesn't paginate
 // so it returns up to 1,000 objects.
 func (l *S3Location) List() iter.Seq2[string, error] {
-	output, err := l.s3.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
-		Bucket: &l.bucket,
-		Prefix: &l.prefix,
-	})
 	return func(yield func(string, error) bool) {
+		result, err := l.s3.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
+			Bucket: &l.bucket,
+			Prefix: &l.prefix,
+		})
 		if err != nil {
 			yield("", err)
 			return
 		}
 
-		// Convert object keys to URIs
-		for _, obj := range output.Contents {
+		for _, obj := range result.Contents {
 			if !yield(s3URI(l.bucket, *obj.Key), nil) {
 				return
 			}
@@ -150,7 +148,7 @@ func (l *S3Location) URI(path string) (string, error) {
 	if err != nil {
 		var noSuchKey *types.NoSuchKey
 		if errors.As(err, &noSuchKey) {
-			return "", storage.ErrNotFound
+			return "", ErrNotFound
 		}
 		return "", err
 	}
@@ -158,7 +156,7 @@ func (l *S3Location) URI(path string) (string, error) {
 	return s3URI(l.bucket, key), nil
 }
 
-var _ storage.FileStore = (*S3Location)(nil)
+var _ StorageLocation = (*S3Location)(nil)
 
 // resolveKey returns an absolute bucket key. The prefix is added to relative
 // paths while URIs have the protocol and bucket name removed.
@@ -168,19 +166,23 @@ var _ storage.FileStore = (*S3Location)(nil)
 //	resolveKey("prefix/", "s3://bucket/path") => "bucket/path"
 //	resolveKey("prefix/", "path") => "prefix/path"
 func resolveKey(prefix string, path string) string {
-	// Handle URIs
+	// If the path starts with s3:// strip off the protocol and bucket
 	if strings.HasPrefix(path, "s3://") {
-		_, after, found := strings.Cut(strings.TrimPrefix(path, "s3://"), "/")
-		if !found {
-			return path
+		path = strings.TrimPrefix(path, "s3://")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) > 1 {
+			return parts[1]
 		}
-		return after
+		return ""
 	}
 
-	// Handle regular paths by joining with prefix
+	// Always remove any leading slash
+	path = strings.TrimPrefix(path, "/")
+
+	// For relative paths, add the prefix
 	return prefix + path
 }
 
 func s3URI(bucket, key string) string {
-	return fmt.Sprintf("s3://%s/%s", bucket, key)
+	return "s3://" + bucket + "/" + key
 }

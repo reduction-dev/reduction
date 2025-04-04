@@ -21,7 +21,6 @@ import (
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/storage"
 	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 )
@@ -154,7 +153,7 @@ func WithClock(clock clocks.Clock) func(*ServerParams) {
 	}
 }
 
-func WithStore(fs storage.FileStore) func(*ServerParams) {
+func WithStore(fs locations.StorageLocation) func(*ServerParams) {
 	return func(p *ServerParams) {
 		p.jobOptions = append(p.jobOptions, func(np *jobs.NewParams) {
 			np.Store = fs

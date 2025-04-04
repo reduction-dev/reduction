@@ -12,14 +12,13 @@ import (
 	"reduction.dev/reduction/dkv/recovery"
 	dkvstorage "reduction.dev/reduction/dkv/storage"
 	"reduction.dev/reduction/proto/snapshotpb"
-	"reduction.dev/reduction/storage"
-	"reduction.dev/reduction/storage/localfs"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 )
 
 func TestRoundTrippingSavepoint(t *testing.T) {
 	testDir := t.TempDir()
-	fs := localfs.NewDirectory(testDir)
+	fs := locations.NewLocal(testDir)
 
 	checkpointEvents := make(chan snapshots.CheckpointEvent)
 	store := snapshots.NewStore(&snapshots.NewStoreParams{
@@ -93,7 +92,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 }
 
 func TestObsoleteCheckpointEvents(t *testing.T) {
-	fs := localfs.NewDirectory(t.TempDir())
+	fs := locations.NewLocal(t.TempDir())
 	fsEvents := fs.Subscribe()
 	retainedCheckpointsUpdated := make(chan []uint64)
 
@@ -126,7 +125,7 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 
 	// Verify that the first checkpoint file was created
 	firstCkptCreated := <-fsEvents
-	assert.Equal(t, storage.OpCreate, firstCkptCreated.Op)
+	assert.Equal(t, locations.OpCreate, firstCkptCreated.Op)
 	assert.Contains(t, firstCkptCreated.Path, ".snapshot")
 
 	// Create and complete a second checkpoint
@@ -150,7 +149,7 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 
 	// Verify that the second checkpoint file was created
 	secondFileEvent := <-fsEvents
-	assert.Equal(t, storage.OpCreate, secondFileEvent.Op)
+	assert.Equal(t, locations.OpCreate, secondFileEvent.Op)
 	assert.Contains(t, secondFileEvent.Path, ".snapshot")
 
 	// Wait for the checkpoints retained event which should contain the second checkpoint ID
@@ -158,8 +157,8 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 	require.Equal(t, []uint64{cpID2}, retainedIDs, "second checkpoint retained notification")
 
 	// Verify that the first checkpoint file has been removed
-	assert.Equal(t, storage.FileEvent{
+	assert.Equal(t, locations.FileEvent{
 		Path: firstCkptCreated.Path,
-		Op:   storage.OpRemove,
+		Op:   locations.OpRemove,
 	}, <-fsEvents, "first checkpoint file removed")
 }

@@ -19,8 +19,7 @@ import (
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
 	"reduction.dev/reduction/rpc"
-	"reduction.dev/reduction/storage"
-	"reduction.dev/reduction/storage/localfs"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/util/binu"
 	"reduction.dev/reduction/util/iteru"
 	"reduction.dev/reduction/workers/workerstest"
@@ -57,7 +56,9 @@ func TestRestartFromSavepoint(t *testing.T) {
 	source.Connect(operator)
 	operator.Connect(sink)
 
-	jobStore := localfs.NewDirectory(t.TempDir())
+	// Start the job server
+	jobStore, err := locations.New(t.TempDir())
+	require.NoError(t, err)
 	job, stop := jobstest.Run(jobDef, jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -160,7 +161,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := localfs.NewDirectory(filepath.Join(t.TempDir(), "job"))
+	jobStore := locations.NewLocal(filepath.Join(t.TempDir(), "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -187,7 +188,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
 	fileCreated := <-fsEvents
-	assert.Equal(t, storage.OpCreate, fileCreated.Op)
+	assert.Equal(t, locations.OpCreate, fileCreated.Op)
 	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Just stop the worker.
@@ -245,7 +246,7 @@ func TestScaleOutWorkers(t *testing.T) {
 
 	clock := clocks.NewFrozenClock()
 	testDir := t.TempDir()
-	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -274,7 +275,7 @@ func TestScaleOutWorkers(t *testing.T) {
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
 	fileCreate := <-fsEvents
-	assert.Equal(t, storage.OpCreate, fileCreate.Op)
+	assert.Equal(t, locations.OpCreate, fileCreate.Op)
 	assert.Contains(t, fileCreate.Path, ".snapshot")
 
 	// Stop the cluster
@@ -350,7 +351,7 @@ func TestScaleInWorkers(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -389,7 +390,7 @@ func TestScaleInWorkers(t *testing.T) {
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
 	fileCreated := <-fsEvents
-	assert.Equal(t, storage.OpCreate, fileCreated.Op)
+	assert.Equal(t, locations.OpCreate, fileCreated.Op)
 	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Stop the cluster and the second worker
@@ -459,7 +460,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -488,7 +489,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
 	fileCreated := <-fsEvents
-	assert.Equal(t, fileCreated.Op, storage.OpCreate)
+	assert.Equal(t, fileCreated.Op, locations.OpCreate)
 	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Add 10 more events to the source
@@ -509,7 +510,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	// Checkpoint again
 	clock.TickEvery("checkpointing")
 	fileCreated = <-fsEvents
-	assert.Equal(t, fileCreated.Op, storage.OpCreate)
+	assert.Equal(t, fileCreated.Op, locations.OpCreate)
 	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	// Stop the cluster and the second worker

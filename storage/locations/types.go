@@ -1,4 +1,4 @@
-package storage
+package locations
 
 import (
 	"errors"
@@ -20,7 +20,7 @@ type FileEvent struct {
 	Op   FileOp
 }
 
-type FileStore interface {
+type StorageLocation interface {
 	// Write data to the given file path. The path is relative to whatever path
 	// prefixes the file store was initialized with. However the returned URI
 	// represents the full path to this file.

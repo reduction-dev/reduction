@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"reduction.dev/reduction/proto/snapshotpb"
-	"reduction.dev/reduction/storage"
+	"reduction.dev/reduction/storage/locations"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -17,7 +17,7 @@ import (
 var ErrCheckpointInProgress = errors.New("checkpoint in progress")
 
 type Store struct {
-	fileStore                  storage.FileStore
+	fileStore                  locations.StorageLocation
 	savepointsPath             string
 	checkpointsPath            string
 	log                        *slog.Logger
@@ -41,7 +41,7 @@ type storeState struct {
 
 type NewStoreParams struct {
 	SavepointURI               string
-	FileStore                  storage.FileStore
+	FileStore                  locations.StorageLocation
 	SavepointsPath             string
 	CheckpointsPath            string
 	CheckpointEvents           chan CheckpointEvent

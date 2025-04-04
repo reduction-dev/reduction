@@ -14,8 +14,7 @@ import (
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/connectors/httpapi/httpapitest"
 	"reduction.dev/reduction/jobs/jobstest"
-	"reduction.dev/reduction/storage"
-	"reduction.dev/reduction/storage/localfs"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/workers/workerstest"
 )
 
@@ -130,7 +129,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := localfs.NewDirectory(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -152,7 +151,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	fsEvents := jobStore.Subscribe()
 	clock.TickEvery("checkpointing")
 	fileCreated := <-fsEvents
-	assert.Equal(t, storage.OpCreate, fileCreated.Op)
+	assert.Equal(t, locations.OpCreate, fileCreated.Op)
 	assert.Contains(t, fileCreated.Path, ".snapshot")
 
 	worker.Stop()

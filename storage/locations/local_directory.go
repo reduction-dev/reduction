@@ -1,4 +1,4 @@
-package localfs
+package locations
 
 import (
 	"errors"
@@ -9,28 +9,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	"reduction.dev/reduction/storage"
 )
 
 type Directory struct {
 	Path          string
-	subscriptions []chan storage.FileEvent
+	subscriptions []chan FileEvent
 }
 
-func NewDirectory(path string) *Directory {
+func NewLocal(path string) *Directory {
 	return &Directory{
 		Path:          path,
-		subscriptions: make([]chan storage.FileEvent, 0),
+		subscriptions: make([]chan FileEvent, 0),
 	}
-}
-
-func NewInWorkingDirectory(path string) *Directory {
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(fmt.Errorf("failed getting working directory: %w", err))
-	}
-	return NewDirectory(wd + "/" + path)
 }
 
 func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
@@ -57,9 +47,9 @@ func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
 	}
 
 	for _, s := range d.subscriptions {
-		s <- storage.FileEvent{
+		s <- FileEvent{
 			Path: targetFile.Name(),
-			Op:   storage.OpCreate,
+			Op:   OpCreate,
 		}
 	}
 	return targetFile.Name(), nil
@@ -76,7 +66,7 @@ func (d *Directory) Read(filePath string) ([]byte, error) {
 	f, err := os.Open(fullFilePath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, storage.ErrNotFound
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -110,9 +100,9 @@ func (d *Directory) Remove(paths ...string) error {
 
 		// Notify subscribers about the file deletion
 		for _, s := range d.subscriptions {
-			s <- storage.FileEvent{
+			s <- FileEvent{
 				Path: fullPath,
-				Op:   storage.OpRemove,
+				Op:   OpRemove,
 			}
 		}
 	}
@@ -152,7 +142,7 @@ func (d *Directory) URI(fname string) (string, error) {
 	_, err := os.Stat(fullPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", storage.ErrNotFound
+			return "", ErrNotFound
 		}
 		return "", err
 	}
@@ -168,7 +158,7 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 	// Check if the source file exists
 	if _, err := os.Stat(sourceURI); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return storage.ErrNotFound
+			return ErrNotFound
 		}
 		return fmt.Errorf("source file %s: %w", sourceURI, err)
 	}
@@ -187,10 +177,10 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 	return nil
 }
 
-func (d *Directory) Subscribe() <-chan storage.FileEvent {
-	ch := make(chan storage.FileEvent)
+func (d *Directory) Subscribe() <-chan FileEvent {
+	ch := make(chan FileEvent)
 	d.subscriptions = append(d.subscriptions, ch)
 	return ch
 }
 
-var _ storage.FileStore = (*Directory)(nil)
+var _ StorageLocation = (*Directory)(nil)
