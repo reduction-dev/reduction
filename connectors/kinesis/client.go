@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"reduction.dev/reduction/util/ptr"
@@ -51,7 +50,6 @@ func NewClient(params *NewClientParams) (*Client, error) {
 		return nil, fmt.Errorf("kinesis load config: %w", err)
 	}
 
-	slog.Info("Creating kinesis client", "opts", params)
 	svc := kinesis.NewFromConfig(cfg, func(opts *kinesis.Options) {
 		if params.Endpoint != "" {
 			opts.BaseEndpoint = ptr.New(params.Endpoint)
@@ -116,7 +114,6 @@ func (c *Client) CreateStream(ctx context.Context, params *CreateStreamParams) (
 }
 
 func (c *Client) ListShards(ctx context.Context, streamARN string) ([]string, error) {
-	slog.Info("kinesis client list shards", "arn", streamARN)
 	var shardIDs []string
 
 	var lastSeenShardID *string

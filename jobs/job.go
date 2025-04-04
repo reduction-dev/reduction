@@ -196,7 +196,7 @@ func (j *Job) processStateUpdates() {
 		}
 
 		if j.registry.HasChanges() {
-			j.log.Info("check registry", append(
+			j.log.Info("registry updated", append(
 				[]any{
 					slog.String("status", j.status.String()),
 					slog.String("assembly", j.assembly.String()),
