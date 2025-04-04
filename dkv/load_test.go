@@ -11,6 +11,7 @@ import (
 	"reduction.dev/reduction/dkv/dkvtest"
 	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/storage"
+	"reduction.dev/reduction/storage/objstore"
 	"reduction.dev/reduction/util/size"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -81,8 +82,8 @@ func TestLoad_S3_PutAndGet(t *testing.T) {
 		t.Skip("Skipping slow load test")
 	}
 
-	s3Service := dkvtest.NewMemoryS3Service()
-	fs := storage.NewS3FileSystem(&s3Service, "bucket")
+	s3Service := objstore.NewMemoryS3Service()
+	fs := storage.NewS3FileSystem(s3Service, "bucket")
 	db := dkv.Open(dkv.DBOptions{
 		FileSystem:     fs,
 		MemTableSize:   1 * size.MB,

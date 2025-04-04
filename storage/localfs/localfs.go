@@ -75,6 +75,9 @@ func (d *Directory) Read(filePath string) ([]byte, error) {
 
 	f, err := os.Open(fullFilePath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, storage.ErrNotFound
+		}
 		return nil, err
 	}
 	defer f.Close()
@@ -96,7 +99,13 @@ func (d *Directory) Remove(paths ...string) error {
 
 		err := os.Remove(fullPath)
 		if err != nil {
-			return fmt.Errorf("Directory.Remove error removing file %s: %w", fullPath, err)
+			pathErr := &os.PathError{}
+			if errors.As(err, &pathErr) {
+				// Ignore path errors to match how S3 doesn't error if a file
+				// doesn't exist.
+				return nil
+			}
+			return fmt.Errorf("removing file %s: %w", fullPath, err)
 		}
 
 		// Notify subscribers about the file deletion
@@ -141,10 +150,10 @@ func (d *Directory) List() iter.Seq2[string, error] {
 func (d *Directory) URI(fname string) (string, error) {
 	fullPath := d.Path + "/" + fname
 	_, err := os.Stat(fullPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", fs.ErrNotExist
-	}
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", storage.ErrNotFound
+		}
 		return "", err
 	}
 	return fullPath, nil
@@ -154,6 +163,14 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 	destinationPath := destination
 	if !filepath.IsAbs(destination) {
 		destinationPath = filepath.Join(d.Path, destination)
+	}
+
+	// Check if the source file exists
+	if _, err := os.Stat(sourceURI); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return storage.ErrNotFound
+		}
+		return fmt.Errorf("source file %s: %w", sourceURI, err)
 	}
 
 	// First make sure the destination path exists

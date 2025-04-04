@@ -10,16 +10,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"reduction.dev/reduction/storage/objstore"
 	"reduction.dev/reduction/util/ptr"
 )
 
 type S3FileSystem struct {
-	client     S3Service
+	client     objstore.S3Service
 	bucketName string
 	awsUsage   *S3Usage
 }
 
-func NewS3FileSystem(client S3Service, bucketName string) *S3FileSystem {
+func NewS3FileSystem(client objstore.S3Service, bucketName string) *S3FileSystem {
 	return &S3FileSystem{
 		bucketName: bucketName,
 		client:     client,

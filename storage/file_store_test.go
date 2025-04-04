@@ -2,7 +2,6 @@ package storage_test
 
 import (
 	"bytes"
-	"io/fs"
 	"path/filepath"
 	"testing"
 
@@ -10,11 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction/storage"
 	"reduction.dev/reduction/storage/localfs"
+	"reduction.dev/reduction/storage/objstore"
+	"reduction.dev/reduction/storage/s3fs"
 )
 
 func TestLocalDirectory(t *testing.T) {
 	fileStoreSuite(t, func() storage.FileStore {
 		return localfs.NewDirectory(t.TempDir())
+	})
+}
+
+func TestS3Location(t *testing.T) {
+	fileStoreSuite(t, func() storage.FileStore {
+		return s3fs.NewS3Location(objstore.NewMemoryS3Service(), "s3://bucket/prefix")
 	})
 }
 
@@ -59,17 +66,13 @@ func fileStoreSuite(t *testing.T, newDir func() storage.FileStore) {
 		// Verify files no longer exist
 		_, err1 := dir.Read(absPath1)
 		_, err2 := dir.Read(absPath2)
-		pathErr := &fs.PathError{}
-		assert.ErrorAs(t, err1, &pathErr, "first file should no longer exist")
-		assert.ErrorAs(t, err2, &pathErr, "second file should no longer exist")
+		assert.ErrorIs(t, err1, storage.ErrNotFound, "first file should no longer exist")
+		assert.ErrorIs(t, err2, storage.ErrNotFound, "second file should no longer exist")
 	})
 
 	t.Run("RemoveNonExistent", func(t *testing.T) {
-		// Try to remove a non-existent file
 		err := newDir().Remove("nonexistent.txt")
-
-		pathErr := &fs.PathError{}
-		assert.ErrorAs(t, err, &pathErr, "removing a non-existent file should return an error")
+		assert.NoError(t, err, "removing a non-existent file should not error")
 	})
 
 	t.Run("List", func(t *testing.T) {
@@ -105,7 +108,7 @@ func fileStoreSuite(t *testing.T, newDir func() storage.FileStore) {
 
 	t.Run("URINonExistent", func(t *testing.T) {
 		_, err := newDir().URI("nonexistent.txt")
-		assert.ErrorIs(t, err, fs.ErrNotExist, "error should be fs.ErrNotExist")
+		assert.ErrorIs(t, err, storage.ErrNotFound, "error should be fs.ErrNotExist")
 	})
 
 	t.Run("Copy", func(t *testing.T) {
@@ -132,5 +135,10 @@ func fileStoreSuite(t *testing.T, newDir func() storage.FileStore) {
 		uriContent, err := dir.Read(destURI)
 		require.NoError(t, err)
 		assert.Equal(t, testData, uriContent, "content at URI should match source")
+	})
+
+	t.Run("CopyNonExistent", func(t *testing.T) {
+		err := newDir().Copy("nonexistent.txt", "destination.txt")
+		assert.ErrorIs(t, err, storage.ErrNotFound, "copying a non-existent file should return an error")
 	})
 }

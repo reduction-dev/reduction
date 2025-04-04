@@ -9,10 +9,11 @@ import (
 	"reduction.dev/reduction/dkv/dkvtest"
 	"reduction.dev/reduction/dkv/kv"
 	"reduction.dev/reduction/dkv/storage"
+	"reduction.dev/reduction/storage/objstore"
 )
 
 func TestS3_PutAndGet(t *testing.T) {
-	s3Service := dkvtest.NewMemoryS3Service()
+	s3Service := objstore.NewMemoryS3Service()
 	db := dkv.Open(dkv.DBOptions{FileSystem: storage.NewS3FileSystem(&s3Service, "bucket")}, nil)
 
 	// Putting a key and successfully getting it.

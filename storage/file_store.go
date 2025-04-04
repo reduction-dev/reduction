@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"io"
 	"iter"
 )
@@ -30,3 +31,5 @@ type FileStore interface {
 	Copy(sourceURI string, destination string) error
 	Remove(paths ...string) error
 }
+
+var ErrNotFound = errors.New("path not found")

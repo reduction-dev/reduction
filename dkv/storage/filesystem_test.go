@@ -6,27 +6,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"reduction.dev/reduction/dkv/dkvtest"
 	"reduction.dev/reduction/dkv/storage"
+	"reduction.dev/reduction/storage/objstore"
 )
 
 func TestLocalFilesystem(t *testing.T) {
 	fs := storage.NewLocalFilesystem(t.TempDir())
-	FileSystemSemanticsSuite(t, fs)
+	fileSystemSemanticsSuite(t, fs)
 }
 
 func TestMemoryFilesystem(t *testing.T) {
 	fs := storage.NewMemoryFilesystem()
-	FileSystemSemanticsSuite(t, fs)
+	fileSystemSemanticsSuite(t, fs)
 }
 
 func TestS3FileSystem(t *testing.T) {
-	s3Service := dkvtest.NewMemoryS3Service()
-	fs := storage.NewS3FileSystem(&s3Service, "bucket")
-	FileSystemSemanticsSuite(t, fs)
+	s3Service := objstore.NewMemoryS3Service()
+	fs := storage.NewS3FileSystem(s3Service, "bucket")
+	fileSystemSemanticsSuite(t, fs)
 }
 
-func FileSystemSemanticsSuite(t *testing.T, fs storage.FileSystem) {
+func fileSystemSemanticsSuite(t *testing.T, fs storage.FileSystem) {
 	t.Run("Creating new file", func(t *testing.T) {
 		f := fs.New("file.txt")
 		assert.Equal(t, "file.txt", f.Name())

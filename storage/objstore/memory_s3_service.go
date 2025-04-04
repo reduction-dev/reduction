@@ -1,4 +1,4 @@
-package dkvtest
+package objstore
 
 import (
 	"bytes"
@@ -6,10 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"path"
+	"slices"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"reduction.dev/reduction/dkv/storage"
 )
 
 // MemoryS3Service is an in-memory implementation of the S3Service for testing.
@@ -17,8 +18,8 @@ type MemoryS3Service struct {
 	data map[string][]byte
 }
 
-func NewMemoryS3Service() MemoryS3Service {
-	return MemoryS3Service{
+func NewMemoryS3Service() *MemoryS3Service {
+	return &MemoryS3Service{
 		data: make(map[string][]byte),
 	}
 }
@@ -47,6 +48,30 @@ func (m *MemoryS3Service) GetObject(ctx context.Context, input *s3.GetObjectInpu
 	}, nil
 }
 
+func (m *MemoryS3Service) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+	// Get sorted list of keys that match the prefix
+	var keys []string
+	for key := range m.data {
+		bucketAndPrefix := *input.Bucket + "/" + *input.Prefix
+		if strings.HasPrefix(key, bucketAndPrefix) {
+			keys = append(keys, strings.TrimPrefix(key, *input.Bucket+"/"))
+		}
+	}
+	slices.Sort(keys)
+
+	// Get the objects by sorted key
+	var contents []types.Object
+	for _, key := range keys {
+		contents = append(contents, types.Object{
+			Key: &key,
+		})
+	}
+
+	return &s3.ListObjectsV2Output{
+		Contents: contents,
+	}, nil
+}
+
 func (m *MemoryS3Service) PutObject(ctx context.Context, input *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
 	buf, err := io.ReadAll(input.Body)
 	if err != nil {
@@ -62,4 +87,4 @@ func (m *MemoryS3Service) DeleteObject(ctx context.Context, input *s3.DeleteObje
 	return &s3.DeleteObjectOutput{}, nil
 }
 
-var _ storage.S3Service = (*MemoryS3Service)(nil)
+var _ S3Service = (*MemoryS3Service)(nil)
