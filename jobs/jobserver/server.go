@@ -13,6 +13,7 @@ import (
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 	"reduction.dev/reduction/util/httpu"
 
@@ -27,7 +28,7 @@ type serverOptions struct {
 }
 
 // Create a new local job server for testing.
-func NewServer(jd *cfg.Config, options ...Option) *Server {
+func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 	// Put functional options into a struct
 	serverOptions := &serverOptions{}
 	for _, o := range options {
@@ -47,6 +48,12 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 	// A channel for handling checkpoint errors
 	checkpointEvents := make(chan snapshots.CheckpointEvent, 1)
 
+	// Create the working storage location
+	store, err := locations.New(jd.WorkingStorageLocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize storage location %s: %w", jd.WorkingStorageLocation, err)
+	}
+
 	job := jobs.New(&jobs.NewParams{
 		JobConfig: jd,
 		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity) proto.Operator {
@@ -59,6 +66,7 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 			return rpc.NewSourceRunnerConnectClient(node)
 		},
 		CheckpointEvents: checkpointEvents,
+		Store:            store,
 	})
 
 	mux := http.NewServeMux()
@@ -84,12 +92,16 @@ func NewServer(jd *cfg.Config, options ...Option) *Server {
 		rpcServer:        rpcServer,
 		RPCListener:      rpcListener,
 		checkpointEvents: checkpointEvents,
-	}
+	}, nil
 }
 
 // Create and run a local job server. Blocks.
 func Run(jd *cfg.Config, options ...Option) error {
-	server := NewServer(jd, options...)
+	server, err := NewServer(jd, options...)
+	if err != nil {
+		return fmt.Errorf("failed to create job server: %w", err)
+	}
+
 	return server.Start(context.Background())
 }
 

@@ -22,12 +22,18 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/storage"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 )
 
 // Create a new local job server for testing.
-func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) *Server {
+func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) (*Server, error) {
 	logger := slog.With("instanceID", "job")
+	store, err := locations.New(jobConfig.WorkingStorageLocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize storage location %s: %w", jobConfig.WorkingStorageLocation, err)
+	}
+
 	jobParams := &jobs.NewParams{
 		JobConfig: jobConfig,
 		Clock:     clocks.NewSystemClock(),
@@ -43,6 +49,7 @@ func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, opti
 			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
 		},
 		CheckpointEvents: make(chan snapshots.CheckpointEvent, 1),
+		Store:            store,
 	}
 	for _, o := range options {
 		o(jobParams)
@@ -69,7 +76,7 @@ func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, opti
 		log:              logger,
 		checkpointEvents: jobParams.CheckpointEvents,
 	}
-	return svr
+	return svr, nil
 }
 
 type ServerParams struct {
@@ -112,7 +119,10 @@ func Run(jd *topology.Job, options ...func(*ServerParams)) (server *Server, stop
 		os.Exit(1)
 	}
 
-	server = NewServer(jobConfig, rpcListener, uiListener, params.jobOptions...)
+	server, err = NewServer(jobConfig, rpcListener, uiListener, params.jobOptions...)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create job server: %v", err))
+	}
 
 	go func() {
 		err := server.Start()

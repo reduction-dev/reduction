@@ -24,7 +24,7 @@ func NewMemoryS3Service() *MemoryS3Service {
 	}
 }
 
-func (m *MemoryS3Service) CopyObject(ctx context.Context, input *s3.CopyObjectInput) (*s3.CopyObjectOutput, error) {
+func (m *MemoryS3Service) CopyObject(ctx context.Context, input *s3.CopyObjectInput, options ...func(*s3.Options)) (*s3.CopyObjectOutput, error) {
 	sourceData, ok := m.data[*input.CopySource]
 	if !ok {
 		slog.Error("source key not found", "key", *input.CopySource)
@@ -37,7 +37,7 @@ func (m *MemoryS3Service) CopyObject(ctx context.Context, input *s3.CopyObjectIn
 	return &s3.CopyObjectOutput{}, nil
 }
 
-func (m *MemoryS3Service) GetObject(ctx context.Context, input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
+func (m *MemoryS3Service) GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	data, ok := m.data[path.Join(*input.Bucket, *input.Key)]
 	if !ok {
 		return nil, &types.NoSuchKey{}
@@ -48,7 +48,7 @@ func (m *MemoryS3Service) GetObject(ctx context.Context, input *s3.GetObjectInpu
 	}, nil
 }
 
-func (m *MemoryS3Service) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+func (m *MemoryS3Service) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	// Get sorted list of keys that match the prefix
 	var keys []string
 	for key := range m.data {
@@ -72,7 +72,7 @@ func (m *MemoryS3Service) ListObjectsV2(ctx context.Context, input *s3.ListObjec
 	}, nil
 }
 
-func (m *MemoryS3Service) PutObject(ctx context.Context, input *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
+func (m *MemoryS3Service) PutObject(ctx context.Context, input *s3.PutObjectInput, options ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	buf, err := io.ReadAll(input.Body)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (m *MemoryS3Service) PutObject(ctx context.Context, input *s3.PutObjectInpu
 	return &s3.PutObjectOutput{}, nil
 }
 
-func (m *MemoryS3Service) DeleteObject(ctx context.Context, input *s3.DeleteObjectInput) (*s3.DeleteObjectOutput, error) {
+func (m *MemoryS3Service) DeleteObject(ctx context.Context, input *s3.DeleteObjectInput, options ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
 	delete(m.data, path.Join(*input.Bucket, *input.Key))
 	return &s3.DeleteObjectOutput{}, nil
 }

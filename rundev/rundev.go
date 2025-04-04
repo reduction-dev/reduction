@@ -39,7 +39,10 @@ func Run(params RunParams) error {
 	}
 
 	// Start the job server
-	jobServer := jobserver.NewServer(jconf, jobserver.WithRPCAddress(":0"), jobserver.WithUIAddress(":9009"))
+	jobServer, err := jobserver.NewServer(jconf, jobserver.WithRPCAddress(":0"), jobserver.WithUIAddress(":9009"))
+	if err != nil {
+		return fmt.Errorf("failed to create job server: %v", err)
+	}
 	g.Go(func() error {
 		return jobServer.Start(ctx)
 	})
