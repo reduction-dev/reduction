@@ -29,5 +29,4 @@ type FileStore interface {
 	URI(path string) (string, error)
 	Copy(sourceURI string, destination string) error
 	Remove(paths ...string) error
-	Subscribe() <-chan FileEvent
 }

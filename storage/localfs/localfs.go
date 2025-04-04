@@ -65,12 +65,19 @@ func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
 	return targetFile.Name(), nil
 }
 
-// Read expects an absolute path or URI.
-func (d *Directory) Read(fullFilePath string) ([]byte, error) {
+// Read accepts both relative and absolute paths or URIs.
+// If a relative path is provided, it will be resolved relative to the Directory's Path.
+func (d *Directory) Read(filePath string) ([]byte, error) {
+	fullFilePath := filePath
+	if !filepath.IsAbs(filePath) {
+		fullFilePath = filepath.Join(d.Path, filePath)
+	}
+
 	f, err := os.Open(fullFilePath)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
@@ -82,7 +89,11 @@ func (d *Directory) Read(fullFilePath string) ([]byte, error) {
 
 func (d *Directory) Remove(paths ...string) error {
 	for _, path := range paths {
-		fullPath := filepath.Join(d.Path, path)
+		fullPath := path
+		if !filepath.IsAbs(path) {
+			fullPath = filepath.Join(d.Path, path)
+		}
+
 		err := os.Remove(fullPath)
 		if err != nil {
 			return fmt.Errorf("Directory.Remove error removing file %s: %w", fullPath, err)
@@ -163,16 +174,6 @@ func (d *Directory) Subscribe() <-chan storage.FileEvent {
 	ch := make(chan storage.FileEvent)
 	d.subscriptions = append(d.subscriptions, ch)
 	return ch
-}
-
-// Helper function to notify subscribers about file removal
-func (d *Directory) notifyFileRemoval(path string) {
-	for _, s := range d.subscriptions {
-		s <- storage.FileEvent{
-			Path: path,
-			Op:   storage.OpRemove,
-		}
-	}
 }
 
 var _ storage.FileStore = (*Directory)(nil)
