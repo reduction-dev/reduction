@@ -8,12 +8,11 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"reduction.dev/reduction/config"
-	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs/jobserver"
 	"reduction.dev/reduction/logging"
 	"reduction.dev/reduction/rundev"
+	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/testrun"
-	"reduction.dev/reduction/util/fileu"
 	"reduction.dev/reduction/workers/workerserver"
 )
 
@@ -138,12 +137,12 @@ func main() {
 }
 
 func startJobServer(jobPath string, adminPort, clusterPort int) error {
-	data, err := fileu.ReadFile(jobPath)
+	data, err := locations.ReadFile(jobPath)
 	if err != nil {
 		return err
 	}
 
-	c, err := cfg.Unmarshal(data, config.NewParams())
+	c, err := config.Unmarshal(data, config.NewParams())
 	if err != nil {
 		return err
 	}

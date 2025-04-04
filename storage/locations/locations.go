@@ -21,9 +21,13 @@ func New(path string) (StorageLocation, error) {
 		}
 
 		client := s3.NewFromConfig(cfg)
-		return NewS3Location(client, path), nil
+		loc, err := NewS3Location(client, path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create S3 location: %w", err)
+		}
+		return loc, nil
 	}
 
 	// Otherwise, return a local file system location
-	return NewLocal(path), nil
+	return NewLocalDirectory(path), nil
 }

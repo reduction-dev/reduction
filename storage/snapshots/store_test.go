@@ -18,7 +18,7 @@ import (
 
 func TestRoundTrippingSavepoint(t *testing.T) {
 	testDir := t.TempDir()
-	fs := locations.NewLocal(testDir)
+	fs := locations.NewLocalDirectory(testDir)
 
 	checkpointEvents := make(chan snapshots.CheckpointEvent)
 	store := snapshots.NewStore(&snapshots.NewStoreParams{
@@ -92,7 +92,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 }
 
 func TestObsoleteCheckpointEvents(t *testing.T) {
-	fs := locations.NewLocal(t.TempDir())
+	fs := locations.NewLocalDirectory(t.TempDir())
 	fsEvents := fs.Subscribe()
 	retainedCheckpointsUpdated := make(chan []uint64)
 

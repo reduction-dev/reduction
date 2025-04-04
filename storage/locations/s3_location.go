@@ -20,13 +20,17 @@ type S3Location struct {
 	prefix string
 }
 
-func NewS3Location(s3 objstore.S3Service, path string) *S3Location {
+func NewS3Location(s3 objstore.S3Service, path string) (*S3Location, error) {
 	// Remove s3:// prefix if present
 	path = strings.TrimPrefix(path, "s3://")
 
 	// Split into bucket and prefix
 	parts := strings.SplitN(path, "/", 2)
 	bucket := parts[0]
+	if bucket == "" {
+		return nil, fmt.Errorf("S3 path must include bucket: %s", path)
+	}
+
 	prefix := ""
 	if len(parts) > 1 {
 		prefix = parts[1]
@@ -42,7 +46,7 @@ func NewS3Location(s3 objstore.S3Service, path string) *S3Location {
 		s3:     s3,
 		bucket: bucket,
 		prefix: prefix,
-	}
+	}, nil
 }
 
 func (l *S3Location) Write(path string, data io.Reader) (uri string, err error) {

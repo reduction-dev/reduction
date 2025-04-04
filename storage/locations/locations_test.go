@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/objstore"
 )
@@ -25,19 +26,21 @@ func TestNewLocation_LocalPath(t *testing.T) {
 	assert.NoError(t, err, "creating store with local path should not error")
 
 	// Verify we got a local directory back
-	_, ok := store.(*locations.Directory)
+	_, ok := store.(*locations.LocalDirectory)
 	assert.True(t, ok, "store should be a Directory for local paths")
 }
 
 func TestLocalDirectory(t *testing.T) {
 	locationStoreSuite(t, func() locations.StorageLocation {
-		return locations.NewLocal(t.TempDir())
+		return locations.NewLocalDirectory(t.TempDir())
 	})
 }
 
 func TestS3Location(t *testing.T) {
 	locationStoreSuite(t, func() locations.StorageLocation {
-		return locations.NewS3Location(objstore.NewMemoryS3Service(), "s3://bucket/prefix")
+		loc, err := locations.NewS3Location(objstore.NewMemoryS3Service(), "s3://bucket/prefix")
+		require.NoError(t, err, "creating S3 location should not return an error")
+		return loc
 	})
 }
 

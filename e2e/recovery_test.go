@@ -161,7 +161,7 @@ func TestRestartWorkerFromInMemoryJobCheckpoint(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := locations.NewLocal(filepath.Join(t.TempDir(), "job"))
+	jobStore := locations.NewLocalDirectory(filepath.Join(t.TempDir(), "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -246,7 +246,7 @@ func TestScaleOutWorkers(t *testing.T) {
 
 	clock := clocks.NewFrozenClock()
 	testDir := t.TempDir()
-	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocalDirectory(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -351,7 +351,7 @@ func TestScaleInWorkers(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocalDirectory(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
@@ -460,7 +460,7 @@ func TestRestartFromLatestOfTwoCheckpoints(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocalDirectory(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 

@@ -70,7 +70,7 @@ func New(params *NewParams) *Job {
 		if err != nil {
 			panic(fmt.Errorf("failed to get working directory: %w", err))
 		}
-		params.Store = locations.NewLocal(wd)
+		params.Store = locations.NewLocalDirectory(wd)
 	}
 
 	// Default CheckpointsPath to ./checkpoints

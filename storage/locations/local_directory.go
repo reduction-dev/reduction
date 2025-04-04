@@ -11,19 +11,19 @@ import (
 	"path/filepath"
 )
 
-type Directory struct {
+type LocalDirectory struct {
 	Path          string
 	subscriptions []chan FileEvent
 }
 
-func NewLocal(path string) *Directory {
-	return &Directory{
+func NewLocalDirectory(path string) *LocalDirectory {
+	return &LocalDirectory{
 		Path:          path,
 		subscriptions: make([]chan FileEvent, 0),
 	}
 }
 
-func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
+func (d *LocalDirectory) Write(fname string, reader io.Reader) (string, error) {
 	fullPath := filepath.Join(d.Path, fname)
 	destDir := filepath.Dir(fullPath)
 
@@ -57,7 +57,7 @@ func (d *Directory) Write(fname string, reader io.Reader) (string, error) {
 
 // Read accepts both relative and absolute paths or URIs.
 // If a relative path is provided, it will be resolved relative to the Directory's Path.
-func (d *Directory) Read(filePath string) ([]byte, error) {
+func (d *LocalDirectory) Read(filePath string) ([]byte, error) {
 	fullFilePath := filePath
 	if !filepath.IsAbs(filePath) {
 		fullFilePath = filepath.Join(d.Path, filePath)
@@ -80,7 +80,7 @@ func (d *Directory) Read(filePath string) ([]byte, error) {
 	return data, nil
 }
 
-func (d *Directory) Remove(paths ...string) error {
+func (d *LocalDirectory) Remove(paths ...string) error {
 	for _, path := range paths {
 		fullPath := path
 		if !filepath.IsAbs(path) {
@@ -110,7 +110,7 @@ func (d *Directory) Remove(paths ...string) error {
 	return nil
 }
 
-func (d *Directory) List() iter.Seq2[string, error] {
+func (d *LocalDirectory) List() iter.Seq2[string, error] {
 	errStop := errors.New("walk-dir-stop")
 
 	return func(yield func(string, error) bool) {
@@ -137,7 +137,7 @@ func (d *Directory) List() iter.Seq2[string, error] {
 	}
 }
 
-func (d *Directory) URI(fname string) (string, error) {
+func (d *LocalDirectory) URI(fname string) (string, error) {
 	fullPath := d.Path + "/" + fname
 	_, err := os.Stat(fullPath)
 	if err != nil {
@@ -149,7 +149,7 @@ func (d *Directory) URI(fname string) (string, error) {
 	return fullPath, nil
 }
 
-func (d *Directory) Copy(sourceURI string, destination string) error {
+func (d *LocalDirectory) Copy(sourceURI string, destination string) error {
 	destinationPath := destination
 	if !filepath.IsAbs(destination) {
 		destinationPath = filepath.Join(d.Path, destination)
@@ -177,10 +177,10 @@ func (d *Directory) Copy(sourceURI string, destination string) error {
 	return nil
 }
 
-func (d *Directory) Subscribe() <-chan FileEvent {
+func (d *LocalDirectory) Subscribe() <-chan FileEvent {
 	ch := make(chan FileEvent)
 	d.subscriptions = append(d.subscriptions, ch)
 	return ch
 }
 
-var _ StorageLocation = (*Directory)(nil)
+var _ StorageLocation = (*LocalDirectory)(nil)

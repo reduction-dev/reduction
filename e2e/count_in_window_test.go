@@ -129,7 +129,7 @@ func TestCountInWindowRecoveryWithTimers(t *testing.T) {
 	operator.Connect(sink)
 
 	clock := clocks.NewFrozenClock()
-	jobStore := locations.NewLocal(filepath.Join(testDir, "job"))
+	jobStore := locations.NewLocalDirectory(filepath.Join(testDir, "job"))
 	job, stop := jobstest.Run(jobDef, jobstest.WithClock(clock), jobstest.WithStore(jobStore))
 	defer stop()
 
