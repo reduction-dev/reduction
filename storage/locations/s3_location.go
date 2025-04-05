@@ -145,7 +145,7 @@ func (l *S3Location) URI(path string) (string, error) {
 	}
 
 	key := resolveKey(l.prefix, path)
-	_, err := l.s3.GetObject(context.TODO(), &s3.GetObjectInput{
+	_, err := l.s3.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: &l.bucket,
 		Key:    &key,
 	})

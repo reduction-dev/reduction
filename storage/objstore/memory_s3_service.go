@@ -48,6 +48,15 @@ func (m *MemoryS3Service) GetObject(ctx context.Context, input *s3.GetObjectInpu
 	}, nil
 }
 
+func (m *MemoryS3Service) HeadObject(ctx context.Context, input *s3.HeadObjectInput, options ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	_, ok := m.data[path.Join(*input.Bucket, *input.Key)]
+	if !ok {
+		return nil, &types.NoSuchKey{}
+	}
+
+	return &s3.HeadObjectOutput{}, nil
+}
+
 func (m *MemoryS3Service) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	// Get sorted list of keys that match the prefix
 	var keys []string
