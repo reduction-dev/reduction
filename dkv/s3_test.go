@@ -14,7 +14,7 @@ import (
 
 func TestS3_PutAndGet(t *testing.T) {
 	s3Service := objstore.NewMemoryS3Service()
-	db := dkv.Open(dkv.DBOptions{FileSystem: storage.NewS3FileSystem(s3Service, "bucket")}, nil)
+	db := dkv.Open(dkv.DBOptions{FileSystem: storage.NewS3FileSystem(s3Service, "bucket", "prefix")}, nil)
 
 	// Putting a key and successfully getting it.
 	db.Put([]byte("k1"), []byte("v1"))

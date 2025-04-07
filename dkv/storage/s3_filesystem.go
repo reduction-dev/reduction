@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -15,30 +17,55 @@ import (
 )
 
 type S3FileSystem struct {
-	client     objstore.S3Service
-	bucketName string
-	awsUsage   *S3Usage
+	client   objstore.S3Service
+	bucket   string
+	prefix   string
+	awsUsage *S3Usage
 }
 
-func NewS3FileSystem(client objstore.S3Service, bucketName string) *S3FileSystem {
+func NewS3FileSystem(client objstore.S3Service, bucket, prefix string) *S3FileSystem {
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
 	return &S3FileSystem{
-		bucketName: bucketName,
-		client:     client,
-		awsUsage:   &S3Usage{},
+		bucket:   bucket,
+		prefix:   prefix,
+		client:   client,
+		awsUsage: &S3Usage{},
 	}
 }
 
-func (fs *S3FileSystem) New(key string) File {
+func (fs *S3FileSystem) New(name string) File {
+	if strings.HasPrefix(name, "s3://") {
+		panic(fmt.Sprintf("creating a file with URI path (%s) not supported", name))
+	}
 	return &S3Object{
-		key:      key,
+		bucket:   fs.bucket,
+		key:      fs.prefix + name,
+		name:     name,
 		fs:       fs,
 		buffer:   new(bytes.Buffer),
 		fileMode: FILE_MODE_WRITE,
 	}
 }
 
-func (fs *S3FileSystem) Open(key string) File {
+func (fs *S3FileSystem) Open(name string) File {
+	var bucket, key string
+	if strings.HasPrefix(name, "s3://") {
+		u, err := url.Parse(name)
+		if err != nil {
+			panic(fmt.Sprintf("invalid s3 URI: %s", name))
+		}
+		bucket = u.Host
+		key = strings.TrimPrefix(u.Path, "/")
+	} else {
+		key = fs.prefix + name
+		bucket = fs.bucket
+	}
+
 	return &S3Object{
+		bucket:   bucket,
 		key:      key,
 		fs:       fs,
 		fileMode: FILE_MODE_READ,
@@ -52,9 +79,9 @@ func (fs *S3FileSystem) Copy(sourceURI string, destination string) error {
 	}
 
 	_, err = fs.client.CopyObject(context.Background(), &s3.CopyObjectInput{
-		Bucket:     &fs.bucketName,
 		CopySource: ptr.New(filepath.Join(u.Host, u.Path)),
-		Key:        ptr.New(destination),
+		Bucket:     &fs.bucket,
+		Key:        ptr.New(fs.prefix + destination),
 	})
 	fs.awsUsage.AddExpensiveRequest()
 	return err
@@ -67,7 +94,9 @@ func (fs *S3FileSystem) USDCost() string {
 var _ FileSystem = (*S3FileSystem)(nil)
 
 type S3Object struct {
+	bucket   string
 	key      string
+	name     string
 	fs       *S3FileSystem
 	buffer   *bytes.Buffer
 	reader   *bytes.Reader
@@ -76,19 +105,19 @@ type S3Object struct {
 }
 
 func (o *S3Object) Name() string {
-	return o.key
+	return o.name
 }
 
 func (o *S3Object) ReadAt(p []byte, off int64) (n int, err error) {
 	// For now download the whole file if we don't have it
 	if o.reader == nil {
 		output, err := o.fs.client.GetObject(context.Background(), &s3.GetObjectInput{
-			Bucket: &o.fs.bucketName,
+			Bucket: &o.bucket,
 			Key:    &o.key,
 		})
 		if err != nil {
 			if isNoSuchKeyErr(err) {
-				return 0, ErrNotFound
+				return 0, fmt.Errorf("reading s3://%s/%s: %w", o.bucket, o.key, ErrNotFound)
 			}
 			return 0, err
 		}
@@ -115,7 +144,7 @@ func (o *S3Object) Save() error {
 	o.fileMode = FILE_MODE_READ
 	b := o.buffer.Bytes()
 	_, err := o.fs.client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket: &o.fs.bucketName,
+		Bucket: &o.bucket,
 		Key:    &o.key,
 		Body:   bytes.NewReader(b),
 	})
@@ -139,14 +168,14 @@ func (o *S3Object) Delete() error {
 		panic("tried to delete a file being written")
 	}
 	_, err := o.fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
-		Bucket: &o.fs.bucketName,
+		Bucket: &o.bucket,
 		Key:    &o.key,
 	})
 	return err
 }
 
 func (o *S3Object) URI() string {
-	return "s3://" + filepath.Join(o.fs.bucketName, o.key)
+	return "s3://" + filepath.Join(o.bucket, o.key)
 }
 
 func (o *S3Object) CreateDeleteFunc() func() error {
@@ -154,7 +183,7 @@ func (o *S3Object) CreateDeleteFunc() func() error {
 	key := o.key
 	return func() error {
 		_, err := fs.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
-			Bucket: &fs.bucketName,
+			Bucket: &fs.bucket,
 			Key:    &key,
 		})
 		return err

@@ -22,7 +22,7 @@ func TestMemoryFilesystem(t *testing.T) {
 
 func TestS3FileSystem(t *testing.T) {
 	s3Service := objstore.NewMemoryS3Service()
-	fs := storage.NewS3FileSystem(s3Service, "bucket")
+	fs := storage.NewS3FileSystem(s3Service, "bucket", "prefix")
 	fileSystemSemanticsSuite(t, fs)
 }
 
@@ -68,15 +68,32 @@ func fileSystemSemanticsSuite(t *testing.T, fs storage.FileSystem) {
 
 		b := []byte{0}
 		n, err := f.ReadAt(b, 0)
+		require.NoError(t, err, "no error reading from file")
 		assert.Equal(t, []byte{1}, b, "can read after opening")
 		assert.Equal(t, 1, n, "read correct value from file")
-		assert.NoError(t, err, "no error reading from file")
 
 		b = []byte{0, 0}
 		n, err = f.ReadAt(b, 0)
 		assert.Equal(t, []byte{1, 0}, b, "reading beyond EOF reads available bytes")
 		assert.Equal(t, 1, n)
 		assert.ErrorIs(t, err, io.EOF, "reading beyond EOF returns EOF error")
+	})
+
+	t.Run("Reading a file from URI", func(t *testing.T) {
+		// Create a file with one byte
+		f := fs.New("file.txt")
+		_, err := f.Write([]byte{1})
+		require.NoError(t, err)
+		err = f.Save()
+		require.NoError(t, err)
+
+		// Read the file from its URI
+		fileFromURI := fs.Open(f.URI())
+		b := []byte{0}
+		n, err := fileFromURI.ReadAt(b, 0)
+		require.NoError(t, err)
+		assert.Equal(t, n, 1)
+		assert.Equal(t, []byte{1}, b, "read file contents from URI")
 	})
 
 	t.Run("Copying", func(t *testing.T) {

@@ -83,7 +83,7 @@ func TestLoad_S3_PutAndGet(t *testing.T) {
 	}
 
 	s3Service := objstore.NewMemoryS3Service()
-	fs := storage.NewS3FileSystem(s3Service, "bucket")
+	fs := storage.NewS3FileSystem(s3Service, "bucket", "prefix")
 	db := dkv.Open(dkv.DBOptions{
 		FileSystem:     fs,
 		MemTableSize:   1 * size.MB,
