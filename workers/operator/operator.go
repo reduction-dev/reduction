@@ -201,9 +201,15 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	o.status.LoadingStarted()
 	dkvOpenStart := time.Now()
 
+	// Initialize the DKV filesystem using the ID for a prefix
+	fs, err := storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id))
+	if err != nil {
+		return fmt.Errorf("creating filesystem: %w", err)
+	}
+
 	// Start the DKV database.
 	o.db = dkv.Open(dkv.DBOptions{
-		FileSystem:    storage.NewFileSystemFromLocation(storage.Join(req.StorageLocation, o.id)),
+		FileSystem:    fs,
 		Logger:        o.Logger,
 		DataOwnership: newOperatorPartition(o.keyGroupRange, neighborPartitions),
 	}, ckptHandles)

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"reduction.dev/reduction/storage/objstore"
@@ -22,6 +23,8 @@ type S3FileSystem struct {
 	prefix   string
 	awsUsage *S3Usage
 }
+
+const s3Protocol = "s3://"
 
 func NewS3FileSystem(client objstore.S3Service, bucket, prefix string) *S3FileSystem {
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
@@ -36,8 +39,23 @@ func NewS3FileSystem(client objstore.S3Service, bucket, prefix string) *S3FileSy
 	}
 }
 
+func NewS3FileSystemFromURI(uri string) (*S3FileSystem, error) {
+	bucket, prefix, err := parseS3URI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid s3 URI: %s", uri)
+	}
+
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS configuration: %w", err)
+	}
+	client := s3.NewFromConfig(cfg)
+
+	return NewS3FileSystem(client, bucket, prefix), nil
+}
+
 func (fs *S3FileSystem) New(name string) File {
-	if strings.HasPrefix(name, "s3://") {
+	if strings.HasPrefix(name, s3Protocol) {
 		panic(fmt.Sprintf("creating a file with URI path (%s) not supported", name))
 	}
 	return &S3Object{
@@ -52,13 +70,12 @@ func (fs *S3FileSystem) New(name string) File {
 
 func (fs *S3FileSystem) Open(name string) File {
 	var bucket, key string
-	if strings.HasPrefix(name, "s3://") {
-		u, err := url.Parse(name)
+	if strings.HasPrefix(name, s3Protocol) {
+		var err error
+		bucket, key, err = parseS3URI(name)
 		if err != nil {
 			panic(fmt.Sprintf("invalid s3 URI: %s", name))
 		}
-		bucket = u.Host
-		key = strings.TrimPrefix(u.Path, "/")
 	} else {
 		key = fs.prefix + name
 		bucket = fs.bucket
@@ -67,19 +84,19 @@ func (fs *S3FileSystem) Open(name string) File {
 	return &S3Object{
 		bucket:   bucket,
 		key:      key,
+		name:     name,
 		fs:       fs,
 		fileMode: FILE_MODE_READ,
 	}
 }
 
 func (fs *S3FileSystem) Copy(sourceURI string, destination string) error {
-	u, err := url.Parse(sourceURI)
-	if err != nil {
-		return err
+	if !strings.HasPrefix(sourceURI, s3Protocol) {
+		return fmt.Errorf("s3 source URI must start with %s", s3Protocol)
 	}
 
-	_, err = fs.client.CopyObject(context.Background(), &s3.CopyObjectInput{
-		CopySource: ptr.New(filepath.Join(u.Host, u.Path)),
+	_, err := fs.client.CopyObject(context.Background(), &s3.CopyObjectInput{
+		CopySource: ptr.New(strings.TrimPrefix(sourceURI, s3Protocol)),
 		Bucket:     &fs.bucket,
 		Key:        ptr.New(fs.prefix + destination),
 	})
@@ -89,6 +106,16 @@ func (fs *S3FileSystem) Copy(sourceURI string, destination string) error {
 
 func (fs *S3FileSystem) USDCost() string {
 	return fs.awsUsage.TotalCost()
+}
+
+func parseS3URI(uri string) (string, string, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid s3 URI: %s", uri)
+	}
+	bucket := u.Host
+	key := strings.TrimPrefix(u.Path, "/")
+	return bucket, key, nil
 }
 
 var _ FileSystem = (*S3FileSystem)(nil)
@@ -175,7 +202,7 @@ func (o *S3Object) Delete() error {
 }
 
 func (o *S3Object) URI() string {
-	return "s3://" + filepath.Join(o.bucket, o.key)
+	return s3Protocol + filepath.Join(o.bucket, o.key)
 }
 
 func (o *S3Object) CreateDeleteFunc() func() error {
