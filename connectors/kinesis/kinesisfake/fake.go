@@ -10,9 +10,10 @@ import (
 	"strings"
 )
 
-func StartFake() *httptest.Server {
+func StartFake() (*httptest.Server, *Fake) {
 	db := &db{
-		streams: make(map[string]*stream),
+		streams:              make(map[string]*stream),
+		activeShardIterators: make(map[string]bool),
 	}
 	mux := http.NewServeMux()
 	fk := &Fake{db}
@@ -21,7 +22,7 @@ func StartFake() *httptest.Server {
 		route(fk, w, r)
 	})
 
-	return httptest.NewServer(mux)
+	return httptest.NewServer(mux), fk
 }
 
 func route(f *Fake, w http.ResponseWriter, r *http.Request) {
@@ -38,19 +39,19 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 	var resp any
 	switch operation {
 	case "DescribeStream":
-		resp, err = f.DescribeStream(body)
+		resp, err = f.describeStream(body)
 	case "CreateStream":
-		resp, err = f.CreateStream(body)
+		resp, err = f.createStream(body)
 	case "PutRecords":
-		resp, err = f.PutRecords(body)
+		resp, err = f.putRecords(body)
 	case "ListShards":
-		resp, err = f.ListShards(body)
+		resp, err = f.listShards(body)
 	case "GetShardIterator":
-		resp, err = f.GetShardIterator(body)
+		resp, err = f.getShardIterator(body)
 	case "GetRecords":
-		resp, err = f.GetRecords(body)
+		resp, err = f.getRecords(body)
 	case "DeleteStream":
-		resp, err = f.DeleteStream(body)
+		resp, err = f.deleteStream(body)
 	default:
 		err = &UnsupportedOperationError{operation}
 	}
@@ -65,7 +66,8 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 }
 
 type db struct {
-	streams map[string]*stream
+	streams              map[string]*stream
+	activeShardIterators map[string]bool
 }
 
 type stream struct {

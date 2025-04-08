@@ -10,7 +10,7 @@ type DeleteStreamRequest struct {
 
 type DeleteStreamResponse struct{}
 
-func (f *Fake) DeleteStream(body []byte) (*DeleteStreamResponse, error) {
+func (f *Fake) deleteStream(body []byte) (*DeleteStreamResponse, error) {
 	var request DeleteStreamRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {

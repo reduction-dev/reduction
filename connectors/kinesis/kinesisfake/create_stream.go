@@ -13,7 +13,7 @@ type CreateStreamRequest struct {
 
 type CreateStreamResponse struct{}
 
-func (f *Fake) CreateStream(body []byte) (*CreateStreamResponse, error) {
+func (f *Fake) createStream(body []byte) (*CreateStreamResponse, error) {
 	var request CreateStreamRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {

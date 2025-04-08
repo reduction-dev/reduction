@@ -55,3 +55,24 @@ func (e *ResourceNotFoundException) StatusCode() int {
 func (e *ResourceNotFoundException) AWSExceptionCode() string {
 	return "ResourceNotFoundException"
 }
+
+/* ExpiredIteratorException */
+
+type ExpiredIteratorException struct {
+	message string
+}
+
+func (e *ExpiredIteratorException) Error() string {
+	if e.message != "" {
+		return e.message
+	}
+	return "Iterator expired"
+}
+
+func (e *ExpiredIteratorException) StatusCode() int {
+	return http.StatusBadRequest
+}
+
+func (e *ExpiredIteratorException) AWSExceptionCode() string {
+	return "ExpiredIteratorException"
+}

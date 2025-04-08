@@ -29,7 +29,7 @@ func TestKinesis(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "aws-acccess-key-id")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-access-key")
 
-	kinesisService := kinesisfake.StartFake()
+	kinesisService, _ := kinesisfake.StartFake()
 	defer kinesisService.Close()
 
 	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{

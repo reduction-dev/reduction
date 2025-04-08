@@ -26,7 +26,7 @@ type ListShardsResponse struct {
 	Shards    []Shard
 }
 
-func (f *Fake) ListShards(body []byte) (*ListShardsResponse, error) {
+func (f *Fake) listShards(body []byte) (*ListShardsResponse, error) {
 	var request PutRecordsRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {

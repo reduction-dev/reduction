@@ -32,7 +32,7 @@ type PutRecordsResponse struct {
 	StreamName string
 }
 
-func (f *Fake) PutRecords(body []byte) (*PutRecordsResponse, error) {
+func (f *Fake) putRecords(body []byte) (*PutRecordsResponse, error) {
 	var request PutRecordsRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {

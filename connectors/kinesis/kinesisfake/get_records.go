@@ -29,7 +29,7 @@ type Record struct {
 	SequenceNumber              string
 }
 
-func (f *Fake) GetRecords(body []byte) (*GetRecordsResponse, error) {
+func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	var request GetRecordsRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {
@@ -39,6 +39,14 @@ func (f *Fake) GetRecords(body []byte) (*GetRecordsResponse, error) {
 	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
 	if stream == nil {
 		return nil, &ResourceNotFoundException{fmt.Sprintf("no stream %s", request.StreamARN)}
+	}
+
+	// Check if the shard iterator has expired
+	active, exists := f.db.activeShardIterators[request.ShardIterator]
+	if exists && !active {
+		return nil, &ExpiredIteratorException{
+			message: fmt.Sprintf("Iterator %s has expired", request.ShardIterator),
+		}
 	}
 
 	shardID, pos := splitShardIterator(request.ShardIterator)
@@ -70,6 +78,10 @@ func (f *Fake) GetRecords(body []byte) (*GetRecordsResponse, error) {
 
 func splitShardIterator(iter string) (string, int) {
 	parts := strings.Split(iter, ":")
+	if len(parts) != 2 {
+		panic(fmt.Sprintf("invalid shard iterator: %s", iter))
+	}
+
 	pos, err := strconv.Atoi(parts[1])
 	if err != nil {
 		panic(err)

@@ -58,7 +58,7 @@ type StreamDescription struct {
 	StreamStatus            string
 }
 
-func (f *Fake) DescribeStream(body []byte) (*DescribeStreamResponse, error) {
+func (f *Fake) describeStream(body []byte) (*DescribeStreamResponse, error) {
 	var request DescribeStreamRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {

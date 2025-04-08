@@ -7,6 +7,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
@@ -24,8 +25,9 @@ type SourceReader struct {
 }
 
 type kinesisShard struct {
-	id     string
-	cursor string
+	id             string
+	shardIterator  string
+	sequenceNumber string
 }
 
 func NewSourceReader(config SourceConfig) *SourceReader {
@@ -50,14 +52,60 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	// Wait until we have assigned splits
 	s.assignedShards.ready.Wait()
+
+	// Read from shards round-robin
 	shard := s.assignedShards.next()
 
-	records, err := s.client.ReadEvents(context.Background(), s.streamARN, shard.id, shard.cursor)
-	if err != nil {
-		return nil, fmt.Errorf("kinesis SourceReader ReadEvents: %w", sourceErrorFrom(err))
+	// If we don't have a shardIterator yet, we need to get one
+	if shard.shardIterator == "" {
+		if shard.sequenceNumber == "" {
+			fmt.Println("starting from trim horizon")
+			// If we don't have a sequence number, we start from the trim horizon
+			it, err := s.client.GetShardIterator(context.Background(), &kinesis.GetShardIteratorInput{
+				StreamARN:         &s.streamARN,
+				ShardId:           &shard.id,
+				ShardIteratorType: kinesistypes.ShardIteratorTypeTrimHorizon,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("kinesis SourceReader.ReadEvents getting shard iterator: %w", sourceErrorFrom(err))
+			}
+			shard.shardIterator = it
+		} else {
+			// If we do have a sequence number, we start after that
+			fmt.Println("starting from sequence number: ", shard.sequenceNumber)
+			it, err := s.client.GetShardIterator(context.Background(), &kinesis.GetShardIteratorInput{
+				StreamARN:              &s.streamARN,
+				ShardId:                &shard.id,
+				ShardIteratorType:      kinesistypes.ShardIteratorTypeAfterSequenceNumber,
+				StartingSequenceNumber: &shard.sequenceNumber,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("kinesis SourceReader.ReadEvents getting shard iterator: %w", sourceErrorFrom(err))
+			}
+			shard.shardIterator = it
+		}
 	}
-	shard.cursor = *records.NextShardIterator
 
+	records, err := s.client.GetRecords(context.Background(), &kinesis.GetRecordsInput{
+		StreamARN:     &s.streamARN,
+		ShardIterator: &shard.shardIterator,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("kinesis SourceReader.ReadEvents: %w", sourceErrorFrom(err))
+	}
+
+	// Store the next shard iterator for subsequent reads
+	shard.shardIterator = *records.NextShardIterator
+
+	// If we have records, update the sequence number with the last one
+	if len(records.Records) > 0 {
+		lastRecord := records.Records[len(records.Records)-1]
+		if lastRecord.SequenceNumber != nil {
+			shard.sequenceNumber = *lastRecord.SequenceNumber
+		}
+	}
+
+	// Convert the records to protobuf format
 	events := make([][]byte, len(records.Records))
 	for i, r := range records.Records {
 		pbRecord := &protocol.Record{
@@ -78,8 +126,8 @@ func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
 	shards := make([]*kinesisShard, len(splits))
 	for i, split := range splits {
 		shards[i] = &kinesisShard{
-			id:     split.SplitId,
-			cursor: string(split.Cursor),
+			id:             split.SplitId,
+			sequenceNumber: string(split.Cursor),
 		}
 	}
 	s.assignedShards.add(shards)
@@ -88,10 +136,10 @@ func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
 
 func (s *SourceReader) Checkpoint() []byte {
 	shards := make([]*kinesispb.Shard, len(s.assignedShards.shards))
-	for i, s := range s.assignedShards.list() {
+	for i, shard := range s.assignedShards.list() {
 		shards[i] = &kinesispb.Shard{
-			ShardId: s.id,
-			Cursor:  s.cursor,
+			ShardId: shard.id,
+			Cursor:  shard.sequenceNumber,
 		}
 	}
 	snapshot := &kinesispb.Checkpoint{

@@ -2,7 +2,6 @@ package kinesis
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -166,19 +165,7 @@ func (c *Client) DeleteStream(ctx context.Context, params *DeleteStreamParams) e
 	return nil
 }
 
-func (c *Client) ReadEvents(ctx context.Context, streamARN, shardID, shardIterator string) (*kinesis.GetRecordsOutput, error) {
-	if shardIterator == "" {
-		var err error
-		shardIterator, err = c.getShardIterator(ctx, streamARN, shardID, types.ShardIteratorTypeTrimHorizon)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	params := &kinesis.GetRecordsInput{
-		StreamARN:     &streamARN,
-		ShardIterator: &shardIterator,
-	}
+func (c *Client) GetRecords(ctx context.Context, params *kinesis.GetRecordsInput) (*kinesis.GetRecordsOutput, error) {
 	out, err := c.svc.GetRecords(ctx, params)
 	if err != nil {
 		return nil, err
@@ -187,20 +174,10 @@ func (c *Client) ReadEvents(ctx context.Context, streamARN, shardID, shardIterat
 	return out, nil
 }
 
-func (c *Client) getShardIterator(ctx context.Context, streamARN, shardID string, startingType types.ShardIteratorType) (string, error) {
-	params := &kinesis.GetShardIteratorInput{
-		StreamARN:         &streamARN,
-		ShardId:           &shardID,
-		ShardIteratorType: startingType,
-	}
-
+func (c *Client) GetShardIterator(ctx context.Context, params *kinesis.GetShardIteratorInput) (string, error) {
 	out, err := c.svc.GetShardIterator(ctx, params)
 	if err != nil {
 		return "", err
-	}
-
-	if out.ShardIterator == nil {
-		return "", errors.New("nil ShardIterator returned")
 	}
 
 	return *out.ShardIterator, nil

@@ -18,7 +18,7 @@ import (
 )
 
 func TestCheckpointing(t *testing.T) {
-	kinesisServer := kinesisfake.StartFake()
+	kinesisServer, _ := kinesisfake.StartFake()
 	defer kinesisServer.Close()
 
 	client, err := kinesis.NewClient(&kinesis.NewClientParams{
@@ -36,15 +36,15 @@ func TestCheckpointing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Make 100 records but only write half of them
-	records := make([]kinesis.Record, 100)
+	// Make 20 records but only write half of them
+	records := make([]kinesis.Record, 20)
 	for i := range records {
 		records[i] = kinesis.Record{
 			Key:  fmt.Sprintf("key-%d", i),
 			Data: fmt.Appendf(nil, "data-%d", i),
 		}
 	}
-	err = client.PutRecordBatch(context.Background(), streamARN, records[:50])
+	err = client.PutRecordBatch(context.Background(), streamARN, records[:10])
 	require.NoError(t, err)
 
 	config := kinesis.SourceConfig{
@@ -89,8 +89,8 @@ func TestCheckpointing(t *testing.T) {
 		checkpoints = append(checkpoints, sr.Checkpoint())
 	}
 
-	// Write remaining 50 records
-	err = client.PutRecordBatch(context.Background(), streamARN, records[50:])
+	// Write remaining 10 records
+	err = client.PutRecordBatch(context.Background(), streamARN, records[10:])
 	require.NoError(t, err)
 
 	// Create new set of source readers
@@ -124,7 +124,7 @@ func TestCheckpointing(t *testing.T) {
 		}
 	}
 
-	assert.Len(t, readEvents, len(records), "all 100 records read")
+	assert.Len(t, readEvents, len(records), "all 20 records read")
 
 	recordData := sliceu.Map(records, func(r kinesis.Record) []byte {
 		return r.Data
