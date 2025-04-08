@@ -17,16 +17,18 @@ import (
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/telemetry"
 	"reduction.dev/reduction/util/httpu"
+	"reduction.dev/reduction/util/netu"
 	"reduction.dev/reduction/workers"
 
 	"connectrpc.com/connect"
 )
 
 type server struct {
-	worker     *workers.Worker
-	httpServer *httpu.Server
-	log        *slog.Logger
-	listener   net.Listener
+	worker      *workers.Worker
+	httpServer  *httpu.Server
+	log         *slog.Logger
+	listener    net.Listener
+	diagnostics []any
 }
 
 type NewServerParams struct {
@@ -40,6 +42,8 @@ type NewServerParams struct {
 	DBDir string
 	// A local path for storing savepoint files
 	SavepointDir string
+	// An override to set the worker's host rather then trying to resolve it
+	Host string
 }
 
 func NewServer(params NewServerParams) *server {
@@ -48,13 +52,29 @@ func NewServer(params NewServerParams) *server {
 
 	logger := slog.With("instanceID", "worker")
 
+	diagnostics := []any{}
+
+	// Resolve the address the other nodes can reach this node at.
+	if params.Host == "" {
+		params.Host = netu.NodeAddress()
+	}
+	diagnostics = append(diagnostics, "nodeHost", params.Host)
+
 	// Create a listener so that the final port is known if 0 is passed.
 	listener, err := net.Listen("tcp", params.Addr)
 	if err != nil {
 		panic(fmt.Sprintf("failed to listen on address: %v", err))
 	}
+	diagnostics = append(diagnostics, "listeningAddr", listener.Addr().String())
+
+	// Get the port used by the listener
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		panic(fmt.Sprintf("failed to get port from listener address: %v", err))
+	}
+
 	worker := workers.New(workers.NewParams{
-		Host: listener.Addr().String(),
+		Host: fmt.Sprintf("%s:%s", params.Host, port),
 		Handler: rpc.NewHandlerConnectClient(rpc.NewHandlerConnectClientParams{
 			Host: params.HandlerAddr,
 			Opts: []connect.ClientOption{
@@ -104,10 +124,11 @@ func NewServer(params NewServerParams) *server {
 	mux.Handle(path, handler)
 
 	return &server{
-		listener:   listener,
-		worker:     worker,
-		httpServer: httpu.NewServer(mux),
-		log:        logger,
+		listener:    listener,
+		worker:      worker,
+		httpServer:  httpu.NewServer(mux),
+		log:         logger,
+		diagnostics: diagnostics,
 	}
 }
 
@@ -130,7 +151,7 @@ func (s *server) Start(ctx context.Context) error {
 
 	// Start the http server
 	g.Go(func() error {
-		s.log.Info("starting worker server", "addr", s.listener.Addr())
+		s.log.Info("starting worker server", s.diagnostics...)
 
 		if err := s.httpServer.Serve(gctx, s.listener); err != http.ErrServerClosed {
 			return fmt.Errorf("failed to start http server: %w", err)
