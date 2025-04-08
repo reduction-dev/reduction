@@ -48,7 +48,7 @@ func (r KeyGroupRange) Size() int {
 // KeyGroups returns a slices of all key groups in the range.
 func (r KeyGroupRange) KeyGroups() []KeyGroup {
 	keyGroups := make([]KeyGroup, r.Size())
-	for i := 0; i < r.Size(); i++ {
+	for i := range r.Size() {
 		keyGroups[i] = KeyGroup(r.Start + i)
 	}
 	return keyGroups

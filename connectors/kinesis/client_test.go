@@ -71,7 +71,7 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	for i := range writeEvents {
 		writeEvents[i] = kinesis.Record{
 			Key:  fmt.Sprintf("key-%d", i),
-			Data: []byte(fmt.Sprintf("data-%d", i)),
+			Data: fmt.Appendf(nil, "data-%d", i),
 		}
 	}
 	err = kclient.PutRecordBatch(context.Background(), streamARN, writeEvents)

@@ -110,10 +110,10 @@ func TestTimerStore_ExceedingCacheSize(t *testing.T) {
 
 	// Add more timers than the cache can hold
 	var expectedTimestamps []time.Time
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		ts := time.Unix(int64(i), 0)
 		expectedTimestamps = append(expectedTimestamps, ts)
-		store.Put([]byte(fmt.Sprintf("key%d", i)), ts)
+		store.Put(fmt.Appendf(nil, "key%d", i), ts)
 	}
 
 	timers := queues.Drain(store)

@@ -15,7 +15,7 @@ func TestRunningTasksSerially(t *testing.T) {
 	c := make(chan int, limit)
 
 	expected := make([]int, limit)
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		expected[i] = i
 		g.Enqueue(q, func() error {
 			c <- i

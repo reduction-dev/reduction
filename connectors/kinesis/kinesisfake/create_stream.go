@@ -33,7 +33,7 @@ func createShards(count int64) []*shard {
 	max.Exp(big.NewInt(2), big.NewInt(128), nil)
 	shardRange := new(big.Int).Div(max, big.NewInt(count))
 
-	for i := 0; i < int(count); i++ {
+	for i := range int(count) {
 		bigIndex := big.NewInt(int64(i))
 		start := new(big.Int).Mul(shardRange, bigIndex)
 		var end *big.Int

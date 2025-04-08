@@ -29,7 +29,7 @@ func NewFilter(size uint32, hashes int) *Filter {
 
 // Add inserts an element into the Bloom filter
 func (bf *Filter) Add(data []byte) {
-	for i := 0; i < bf.hashCount; i++ {
+	for i := range bf.hashCount {
 		hash := murmur.Hash(data, i)
 		index := hash % bf.size
 		bf.setBit(index)
@@ -38,7 +38,7 @@ func (bf *Filter) Add(data []byte) {
 
 // MightHave checks if an element is possibly in the set
 func (bf *Filter) MightHave(data []byte) bool {
-	for i := 0; i < bf.hashCount; i++ {
+	for i := range bf.hashCount {
 		hash := murmur.Hash(data, i)
 		index := hash % bf.size
 		if !bf.getBit(index) {

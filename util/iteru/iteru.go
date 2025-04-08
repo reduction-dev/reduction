@@ -17,7 +17,7 @@ func Every(seq iter.Seq[bool]) bool {
 // Times creates a sequence of int from 0 to n.
 func Times(n int) iter.Seq[int] {
 	return func(yield func(int) bool) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if !yield(i) {
 				return
 			}

@@ -71,7 +71,7 @@ func Sample[T any](slice []T, n int) []T {
 	}
 
 	result := make([]T, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		result[i] = slice[rand.Intn(len(slice))]
 	}
 

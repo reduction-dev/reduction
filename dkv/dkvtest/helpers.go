@@ -18,7 +18,7 @@ import (
 )
 
 type testingT interface {
-	Errorf(format string, args ...interface{})
+	Errorf(format string, args ...any)
 	FailNow()
 	Helper()
 }
@@ -52,7 +52,7 @@ Got len %d`,
 	}
 
 	longestCount := max(len(want), len(got))
-	for i := 0; i < longestCount; i++ {
+	for i := range longestCount {
 		var wantEntry kv.Entry
 		if i < len(want) {
 			wantEntry = want[i]
@@ -126,8 +126,8 @@ func RandomEntriesList(length int) *EntryList {
 
 func RandomEntriesSeq(length int) iter.Seq[kv.Entry] {
 	return func(yield func(kv.Entry) bool) {
-		for i := 0; i < length; i++ {
-			iValue := []byte(fmt.Sprintf("%010d", rand.Uint32()))
+		for range length {
+			iValue := fmt.Appendf(nil, "%010d", rand.Uint32())
 			if !yield(NewKVEntry(string(iValue), string(iValue))) {
 				return
 			}
@@ -152,8 +152,8 @@ func SequentialEntriesList(length int) *EntryList {
 func SequentialEntriesSeq(length int, seqNum uint64) iter.Seq[kv.Entry] {
 	valueLen := len(strconv.Itoa(length))
 	return func(yield func(kv.Entry) bool) {
-		for i := 0; i < length; i++ {
-			iValue := []byte(fmt.Sprintf("%0*d", valueLen, i))
+		for i := range length {
+			iValue := fmt.Appendf(nil, "%0*d", valueLen, i)
 			if !yield(&TestEntry{
 				key:    string(iValue),
 				value:  iValue,
@@ -211,4 +211,3 @@ func (s *SequenceGenerator) All() iter.Seq2[uint64, KV] {
 		}
 	}
 }
-

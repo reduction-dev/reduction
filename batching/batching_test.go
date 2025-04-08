@@ -1,7 +1,6 @@
 package batching_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -11,8 +10,7 @@ import (
 )
 
 func TestEventBatcher2_FlushesOnSize(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	timer := &clocks.FakeTimer{}
 	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
@@ -32,8 +30,7 @@ func TestEventBatcher2_FlushesOnSize(t *testing.T) {
 }
 
 func TestEventBatcher2_FlushesOnTimer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	timer := &clocks.FakeTimer{}
 	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{
@@ -52,8 +49,7 @@ func TestEventBatcher2_FlushesOnTimer(t *testing.T) {
 }
 
 func TestEventBatcher2_TokenInvalidation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	timer := &clocks.FakeTimer{}
 	batcher := batching.NewEventBatcher[int](ctx, batching.EventBatcherParams{

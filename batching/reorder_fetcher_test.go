@@ -28,12 +28,12 @@ func TestReorderFetcher(t *testing.T) {
 	})
 
 	// Use AsyncBatcher.Add so flush occurs when batch is full.
-	for i := 0; i < eventCount; i++ {
+	for i := range eventCount {
 		rf.Add(ctx, strconv.Itoa(i))
 	}
 
 	var results []string
-	for i := 0; i < eventCount; i++ {
+	for i := range eventCount {
 		select {
 		case res := <-rf.Output:
 			t.Log("output", i, "res", res)
@@ -46,7 +46,7 @@ func TestReorderFetcher(t *testing.T) {
 	}
 
 	require.Len(t, results, eventCount)
-	for i := 0; i < eventCount; i++ {
+	for i := range eventCount {
 		assert.Equal(t, strconv.Itoa(i), results[i])
 	}
 }

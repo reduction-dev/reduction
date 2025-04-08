@@ -52,7 +52,7 @@ func TestKinesis(t *testing.T) {
 	for i := range records {
 		records[i] = kinesis.Record{
 			Key:  fmt.Sprintf("key-%d", i),
-			Data: []byte(fmt.Sprintf("data-%d", i)),
+			Data: fmt.Appendf(nil, "data-%d", i),
 		}
 	}
 	err = kclient.PutRecordBatch(context.Background(), streamARN, records)

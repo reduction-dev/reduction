@@ -191,7 +191,7 @@ func (p *sortedIntPartition) Index() int {
 func (p *sortedIntPartition) Delete(x int) {
 	for i := range p.items {
 		if p.items[i] == x {
-			p.items = append(p.items[:i], p.items[i+1:]...)
+			p.items = slices.Delete(p.items, i, i+1)
 			return
 		}
 	}

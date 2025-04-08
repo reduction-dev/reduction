@@ -20,7 +20,7 @@ func TestBloomFilter(t *testing.T) {
 	// Add random keys with known prefix to filter.
 	addedKeys := make([][]byte, numKeysToAdd)
 	for i := range addedKeys {
-		key := []byte(fmt.Sprintf("added-%d", i))
+		key := fmt.Appendf(nil, "added-%d", i)
 		addedKeys[i] = key
 		filter.Add(key)
 	}
@@ -32,8 +32,8 @@ func TestBloomFilter(t *testing.T) {
 
 	// Find the false positive rate for keys that were not added
 	falsePositiveCount := 0
-	for i := 0; i < numKeysToTest; i++ {
-		key := []byte(fmt.Sprintf("not-added-%d", i))
+	for i := range numKeysToTest {
+		key := fmt.Appendf(nil, "not-added-%d", i)
 		if filter.MightHave(key) {
 			falsePositiveCount++
 		}

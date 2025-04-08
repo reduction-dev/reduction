@@ -176,8 +176,8 @@ func TestCommitBeforeMemTableIsFull(t *testing.T) {
 func TestFillingMemTableStillAllowsNewWrites(t *testing.T) {
 	fs := storage.NewLocalFilesystem(t.TempDir())
 	db := dkv.Open(dkv.DBOptions{FileSystem: fs, MemTableSize: 1_000}, nil)
-	for i := 0; i < 100; i++ {
-		strBytes := []byte(fmt.Sprintf("%03d", i))
+	for i := range 100 {
+		strBytes := fmt.Appendf(nil, "%03d", i)
 		db.Put(strBytes, strBytes)
 	}
 
@@ -307,7 +307,7 @@ func TestWritingSameEntryDoesNotConsumeStorage(t *testing.T) {
 
 	// Write the same key 1000 times, which would exceed memtable size if each write
 	// consumed space
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		db.Put([]byte("key"), []byte("value"))
 	}
 	require.NoError(t, db.WaitOnTasks())
