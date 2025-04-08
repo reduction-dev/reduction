@@ -53,36 +53,13 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	// Wait until we have assigned splits
 	s.assignedShards.ready.Wait()
 
-	// Read from shards round-robin
+	// Read from one shard, pickign round-robin
 	shard := s.assignedShards.next()
 
 	// If we don't have a shardIterator yet, we need to get one
 	if shard.shardIterator == "" {
-		if shard.sequenceNumber == "" {
-			fmt.Println("starting from trim horizon")
-			// If we don't have a sequence number, we start from the trim horizon
-			it, err := s.client.GetShardIterator(context.Background(), &kinesis.GetShardIteratorInput{
-				StreamARN:         &s.streamARN,
-				ShardId:           &shard.id,
-				ShardIteratorType: kinesistypes.ShardIteratorTypeTrimHorizon,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("kinesis SourceReader.ReadEvents getting shard iterator: %w", sourceErrorFrom(err))
-			}
-			shard.shardIterator = it
-		} else {
-			// If we do have a sequence number, we start after that
-			fmt.Println("starting from sequence number: ", shard.sequenceNumber)
-			it, err := s.client.GetShardIterator(context.Background(), &kinesis.GetShardIteratorInput{
-				StreamARN:              &s.streamARN,
-				ShardId:                &shard.id,
-				ShardIteratorType:      kinesistypes.ShardIteratorTypeAfterSequenceNumber,
-				StartingSequenceNumber: &shard.sequenceNumber,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("kinesis SourceReader.ReadEvents getting shard iterator: %w", sourceErrorFrom(err))
-			}
-			shard.shardIterator = it
+		if err := s.refreshShardIterator(shard); err != nil {
+			return nil, err
 		}
 	}
 
@@ -90,6 +67,21 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		StreamARN:     &s.streamARN,
 		ShardIterator: &shard.shardIterator,
 	})
+
+	// Check for expired iterator and refresh if needed
+	var expiredIterator *kinesistypes.ExpiredIteratorException
+	if errors.As(err, &expiredIterator) {
+		if err := s.refreshShardIterator(shard); err != nil {
+			return nil, err
+		}
+
+		// Try again with the new iterator
+		records, err = s.client.GetRecords(context.Background(), &kinesis.GetRecordsInput{
+			StreamARN:     &s.streamARN,
+			ShardIterator: &shard.shardIterator,
+		})
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("kinesis SourceReader.ReadEvents: %w", sourceErrorFrom(err))
 	}
@@ -150,6 +142,31 @@ func (s *SourceReader) Checkpoint() []byte {
 		panic(err)
 	}
 	return bs
+}
+
+func (s *SourceReader) refreshShardIterator(shard *kinesisShard) error {
+	var iteratorType kinesistypes.ShardIteratorType
+	var sequenceNumber *string
+
+	if shard.sequenceNumber == "" {
+		iteratorType = kinesistypes.ShardIteratorTypeTrimHorizon
+	} else {
+		iteratorType = kinesistypes.ShardIteratorTypeAfterSequenceNumber
+		sequenceNumber = &shard.sequenceNumber
+	}
+
+	iterator, err := s.client.GetShardIterator(context.Background(), &kinesis.GetShardIteratorInput{
+		StreamARN:              &s.streamARN,
+		ShardId:                &shard.id,
+		ShardIteratorType:      iteratorType,
+		StartingSequenceNumber: sequenceNumber,
+	})
+	if err != nil {
+		return fmt.Errorf("kinesis SourceReader.refreshShardIterator getting shard iterator: %w", sourceErrorFrom(err))
+	}
+
+	shard.shardIterator = iterator
+	return nil
 }
 
 var _ connectors.SourceReader = (*SourceReader)(nil)

@@ -12,12 +12,14 @@ import (
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
 
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
+	awskinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKinesisAgainstFake(t *testing.T) {
-	svc := kinesisfake.StartFake()
+	svc, _ := kinesisfake.StartFake()
 	defer svc.Close()
 
 	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{
@@ -82,7 +84,17 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 
 	assert.Equal(t, []string{"shardId-000000000000", "shardId-000000000001"}, shardIDs)
 
-	eventBatch1, err := kclient.ReadEvents(ctx, streamARN, shardIDs[0], "")
+	shardIterator1, err := kclient.GetShardIterator(ctx, &awskinesis.GetShardIteratorInput{
+		StreamARN:         &streamARN,
+		ShardId:           &shardIDs[0],
+		ShardIteratorType: awskinesistypes.ShardIteratorTypeTrimHorizon,
+	})
+	require.NoError(t, err)
+
+	eventBatch1, err := kclient.GetRecords(ctx, &awskinesis.GetRecordsInput{
+		StreamARN:     &streamARN,
+		ShardIterator: &shardIterator1,
+	})
 	require.NoError(t, err)
 
 	var shard1Data []string
@@ -91,7 +103,17 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	}
 	assert.Equal(t, []string{"data-1", "data-3", "data-7"}, shard1Data)
 
-	eventBatch2, err := kclient.ReadEvents(ctx, streamARN, shardIDs[1], "")
+	shardIterator2, err := kclient.GetShardIterator(ctx, &awskinesis.GetShardIteratorInput{
+		StreamARN:         &streamARN,
+		ShardId:           &shardIDs[1],
+		ShardIteratorType: awskinesistypes.ShardIteratorTypeTrimHorizon,
+	})
+	require.NoError(t, err)
+
+	eventBatch2, err := kclient.GetRecords(ctx, &awskinesis.GetRecordsInput{
+		StreamARN:     &streamARN,
+		ShardIterator: &shardIterator2,
+	})
 	require.NoError(t, err)
 
 	var shard2Data []string
@@ -99,4 +121,46 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 		shard2Data = append(shard2Data, string(e.Data))
 	}
 	assert.Equal(t, []string{"data-0", "data-2", "data-4", "data-5", "data-6", "data-8", "data-9"}, shard2Data)
+}
+
+func TestExpiredShardIterator(t *testing.T) {
+	svc, fake := kinesisfake.StartFake()
+	defer svc.Close()
+
+	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{
+		Endpoint:    svc.URL,
+		Region:      "us-east-2",
+		Credentials: credentials.NewStaticCredentialsProvider("key", "secret", "session"),
+	})
+	require.NoError(t, err)
+
+	streamName := "test-stream"
+	streamARN, err := kclient.CreateStream(t.Context(), &kinesis.CreateStreamParams{
+		StreamName:      streamName,
+		ShardCount:      1,
+		MaxWaitDuration: 1 * time.Minute,
+	})
+	require.NoError(t, err)
+
+	// Get the shard ID
+	shardIDs, err := kclient.ListShards(t.Context(), streamARN)
+	require.NoError(t, err)
+	require.Len(t, shardIDs, 1)
+	shardID := shardIDs[0]
+
+	shardIterator, err := kclient.GetShardIterator(t.Context(), &awskinesis.GetShardIteratorInput{
+		StreamARN:         &streamARN,
+		ShardId:           &shardID,
+		ShardIteratorType: awskinesistypes.ShardIteratorTypeTrimHorizon,
+	})
+	require.NoError(t, err)
+
+	fake.ExpireShardIterators()
+
+	_, err = kclient.GetRecords(t.Context(), &awskinesis.GetRecordsInput{
+		StreamARN:     &streamARN,
+		ShardIterator: &shardIterator,
+	})
+	expiredIteratorErr := &awskinesistypes.ExpiredIteratorException{}
+	require.ErrorAs(t, err, &expiredIteratorErr)
 }

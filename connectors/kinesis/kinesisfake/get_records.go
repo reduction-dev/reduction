@@ -41,15 +41,20 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 		return nil, &ResourceNotFoundException{fmt.Sprintf("no stream %s", request.StreamARN)}
 	}
 
-	// Check if the shard iterator has expired
-	active, exists := f.db.activeShardIterators[request.ShardIterator]
-	if exists && !active {
+	// Parse the iterator
+	shardID, timestamp, pos, err := splitShardIterator(request.ShardIterator)
+	if err != nil {
+		return nil, fmt.Errorf("invalid shard iterator: %w", err)
+	}
+
+	// Check if the iterator has expired
+	if timestamp <= f.iteratorsExpirationAt {
 		return nil, &ExpiredIteratorException{
 			message: fmt.Sprintf("Iterator %s has expired", request.ShardIterator),
 		}
 	}
 
-	shardID, pos := splitShardIterator(request.ShardIterator)
+	// Find the shard
 	shardIndex := slices.IndexFunc(stream.shards, func(s *shard) bool {
 		return s.id == shardID
 	})
@@ -58,6 +63,7 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 	shard := stream.shards[shardIndex]
 
+	// Get the records from the position
 	records := shard.records[pos:]
 	responseRecords := make([]Record, len(records))
 	for i, r := range records {
@@ -69,22 +75,34 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 		}
 	}
 
+	// Calculate the next position and create the next iterator
 	nextPos := pos + len(records)
+
+	// Increment timestamp for the next iterator
+	f.lastIteratorTimestamp++
+	nextTimestamp := f.lastIteratorTimestamp
+
 	return &GetRecordsResponse{
-		NextShardIterator: shardID + ":" + strconv.Itoa(nextPos),
+		NextShardIterator: shardIteratorFor(shardID, nextTimestamp, nextPos),
 		Records:           responseRecords,
 	}, nil
 }
 
-func splitShardIterator(iter string) (string, int) {
+func splitShardIterator(iter string) (string, int, int, error) {
 	parts := strings.Split(iter, ":")
-	if len(parts) != 2 {
-		panic(fmt.Sprintf("invalid shard iterator: %s", iter))
+	if len(parts) != 3 {
+		return "", 0, 0, fmt.Errorf("invalid iterator format: %s", iter)
 	}
 
-	pos, err := strconv.Atoi(parts[1])
+	timestamp, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		panic(err)
+		return "", 0, 0, fmt.Errorf("invalid timestamp in iterator: %w", err)
 	}
-	return parts[0], pos
+
+	pos, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return "", 0, 0, fmt.Errorf("invalid position in iterator: %w", err)
+	}
+
+	return parts[0], int(timestamp), pos, nil
 }

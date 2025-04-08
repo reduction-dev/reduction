@@ -12,11 +12,10 @@ import (
 
 func StartFake() (*httptest.Server, *Fake) {
 	db := &db{
-		streams:              make(map[string]*stream),
-		activeShardIterators: make(map[string]bool),
+		streams: make(map[string]*stream),
 	}
 	mux := http.NewServeMux()
-	fk := &Fake{db}
+	fk := &Fake{db: db}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		route(fk, w, r)
@@ -66,8 +65,7 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 }
 
 type db struct {
-	streams              map[string]*stream
-	activeShardIterators map[string]bool
+	streams map[string]*stream
 }
 
 type stream struct {
@@ -90,5 +88,7 @@ func (r hashKeyRange) includes(key *big.Int) bool {
 }
 
 type Fake struct {
-	db *db
+	db                    *db
+	lastIteratorTimestamp int
+	iteratorsExpirationAt int
 }

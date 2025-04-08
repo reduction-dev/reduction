@@ -132,3 +132,63 @@ func TestCheckpointing(t *testing.T) {
 	// Compare with ElementsMatch because the read order is not predictable
 	assert.ElementsMatch(t, recordData, readEvents, "read events match those written to kinesis")
 }
+
+func TestReadingAfterShardIteratorExpired(t *testing.T) {
+	kinesisServer, fake := kinesisfake.StartFake()
+	defer kinesisServer.Close()
+
+	client, err := kinesis.NewClient(&kinesis.NewClientParams{
+		Endpoint:    kinesisServer.URL,
+		Region:      "us-east-2",
+		Credentials: aws.AnonymousCredentials{},
+	})
+	require.NoError(t, err)
+
+	// Create a Kinesis Stream with one shard
+	streamARN, err := client.CreateStream(context.Background(), &kinesis.CreateStreamParams{
+		StreamName:      "stream-name",
+		ShardCount:      1,
+		MaxWaitDuration: 1 * time.Minute,
+	})
+	require.NoError(t, err)
+
+	// Put a record on the stream
+	err = client.PutRecordBatch(context.Background(), streamARN, []kinesis.Record{
+		{Key: "key", Data: []byte("data")},
+	})
+	require.NoError(t, err)
+
+	config := kinesis.SourceConfig{
+		StreamARN: streamARN,
+		Client:    client,
+	}
+
+	// Create source reader
+	sr := kinesis.NewSourceReader(config)
+
+	// Assign split to source reader
+	ss := config.NewSourceSplitter()
+	splitAssignments, err := ss.AssignSplits([]string{"sr1"})
+	require.NoError(t, err)
+	err = sr.SetSplits(splitAssignments["sr1"])
+	require.NoError(t, err)
+
+	// Read the events initially
+	events, err := sr.ReadEvents()
+	require.NoError(t, err)
+	assert.Len(t, events, 1, "reads the event")
+
+	// Simulate shard iterator expiration by forcing the fake server to expire iterators
+	fake.ExpireShardIterators()
+
+	// Add another record
+	err = client.PutRecordBatch(context.Background(), streamARN, []kinesis.Record{
+		{Key: "new-key", Data: []byte("new-data")},
+	})
+	require.NoError(t, err)
+
+	// Try reading again - this should fail because iterator is expired
+	events, err = sr.ReadEvents()
+	assert.NoError(t, err, "doesn't error despite expired iterator")
+	assert.Len(t, events, 1, "reads the event")
+}
