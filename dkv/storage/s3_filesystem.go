@@ -18,10 +18,9 @@ import (
 )
 
 type S3FileSystem struct {
-	client   objstore.S3Service
-	bucket   string
-	prefix   string
-	awsUsage *S3Usage
+	client *objstore.S3StorageWithUsage
+	bucket string
+	prefix string
 }
 
 const s3Protocol = "s3://"
@@ -31,11 +30,12 @@ func NewS3FileSystem(client objstore.S3Service, bucket, prefix string) *S3FileSy
 		prefix += "/"
 	}
 
+	usageClient := objstore.NewS3StorageWithUsage(client)
+
 	return &S3FileSystem{
-		bucket:   bucket,
-		prefix:   prefix,
-		client:   client,
-		awsUsage: &S3Usage{},
+		bucket: bucket,
+		prefix: prefix,
+		client: usageClient,
 	}
 }
 
@@ -100,12 +100,11 @@ func (fs *S3FileSystem) Copy(sourceURI string, destination string) error {
 		Bucket:     &fs.bucket,
 		Key:        ptr.New(fs.prefix + destination),
 	})
-	fs.awsUsage.AddExpensiveRequest()
 	return err
 }
 
 func (fs *S3FileSystem) USDCost() string {
-	return fs.awsUsage.TotalCost()
+	return fs.client.TotalCost()
 }
 
 func parseS3URI(uri string) (string, string, error) {
@@ -175,7 +174,6 @@ func (o *S3Object) Save() error {
 		Key:    &o.key,
 		Body:   bytes.NewReader(b),
 	})
-	o.fs.awsUsage.AddExpensiveRequest()
 	o.reader = bytes.NewReader(o.buffer.Bytes())
 	return err
 }
