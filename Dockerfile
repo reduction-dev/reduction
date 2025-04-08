@@ -1,6 +1,6 @@
 FROM alpine:3.18
 WORKDIR /app
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates curl
 
 # Copy the pre-built binary for the target architecture
 ARG TARGET_ARCH
