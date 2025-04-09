@@ -49,7 +49,7 @@ type NewStoreParams struct {
 }
 
 func NewStore(params *NewStoreParams) *Store {
-	return &Store{
+	store := &Store{
 		fileStore:                  params.FileStore,
 		savepointsPath:             params.SavepointsPath,
 		checkpointsPath:            params.CheckpointsPath,
@@ -58,6 +58,8 @@ func NewStore(params *NewStoreParams) *Store {
 		subscriber:                 params.CheckpointEvents,
 		retainedCheckpointsUpdated: params.RetainedCheckpointsUpdated,
 	}
+
+	return store
 }
 
 func (s *Store) SnapshotForURI(uri string) (*snapshotpb.JobCheckpoint, error) {
@@ -144,7 +146,7 @@ func (s *Store) AddSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
 		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but there is no pending snapshot", ckpt.SourceRunnerId, ckpt.CheckpointId)
 	}
 	if s.state.pendingSnapshot.id != ckpt.CheckpointId {
-		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but pending snapshot is %d", ckpt.SourceRunnerId, ckpt.CheckpointId, s.state.pendingSnapshot.id)
+		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but pending checkpoint is %d", ckpt.SourceRunnerId, ckpt.CheckpointId, s.state.pendingSnapshot.id)
 	}
 
 	err := s.state.pendingSnapshot.addSourceSnapshot(ckpt)
@@ -224,66 +226,75 @@ func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
 	return uri, nil
 }
 
-func (s *Store) LoadLatestCheckpoint() (*snapshotpb.JobCheckpoint, error) {
+// CurrentCheckpoint returns the latest checkpoint from memory.
+func (s *Store) CurrentCheckpoint() *snapshotpb.JobCheckpoint {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	// For a running job, check memory for checkpoints
 	if len(s.state.completedSnapshots) > 0 {
-		return s.state.completedSnapshots[len(s.state.completedSnapshots)-1].toProto(), nil
+		return s.state.completedSnapshots[len(s.state.completedSnapshots)-1].toProto()
 	}
+	return nil
+}
+
+// LoadCheckpoint loads the latest checkpoint from disk and stores it in
+// memory.
+func (s *Store) LoadCheckpoint() error {
+	var loadedCheckpoint *snapshotpb.JobCheckpoint
 
 	// For now let savepoint always override using local checkpoints. Later will
-	// want to be able to start the job with an out-of-date checkpoint to make
+	// want to be able to start the job with an out-of-date savepoint to make
 	// configuring a starting savepoint possible. This means that the checkpoints
 	// will need to store their savepoint origin so that we know that a restart
 	// should use the newer checkpoints and not go back to the origin savepoint.
-	if s.savepointURI == "" {
+	if s.savepointURI != "" {
+		// Use the savepointURI when present
+		snap, err := s.SnapshotForURI(s.savepointURI)
+		if err != nil {
+			return err
+		}
+		loadedCheckpoint = snap
+
+		err = RestoreCheckpointFromSavepointArtifact(s.fileStore, s.savepointURI, snap)
+		if err != nil {
+			return fmt.Errorf("restore checkpoints from savepoint: %v", err)
+		}
+	} else {
 		// For a new job, check the file store for first (latest) snapshot file.
 		// Checkpoint IDs are encoded so that files will be in reverse chronological
 		// order.
-		var latestSnapshotFile string
+		var latestCheckpointFile string
 		for filePath, err := range s.fileStore.List() {
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if filepath.Ext(filePath) == ".snapshot" {
-				latestSnapshotFile = filePath
+				latestCheckpointFile = filePath
 				break
 			}
 		}
-		if latestSnapshotFile != "" {
-			snap, err := s.SnapshotForURI(latestSnapshotFile)
-			s.state.checkpointID = snap.Id
-			return snap, err
+
+		if latestCheckpointFile == "" {
+			return nil // No checkpoint to load
 		}
 
-		// No checkpoints and no savepoint to start from
-		return nil, nil
-	}
-
-	// We're starting a job with no checkpoint history so use the savepoint if available
-	snap, err := s.SnapshotForURI(s.savepointURI)
-	if err != nil {
-		return nil, err
-	}
-	s.state.checkpointID = snap.Id
-
-	if err := RestoreFromSavepointArtifact(s.fileStore, s.savepointURI, snap); err != nil {
-		return nil, fmt.Errorf("restore checkpoints from savepoint: %v", err)
-	}
-
-	return snap, nil
-}
-
-func (s *Store) LatestCheckpointURI() (string, error) {
-	var lastPath string
-	for filePath, err := range s.fileStore.List() {
-		lastPath = filePath
+		snap, err := s.SnapshotForURI(latestCheckpointFile)
 		if err != nil {
-			return "", err
+			return err
 		}
+		loadedCheckpoint = snap
 	}
 
-	return lastPath, nil
+	// Set the initial checkpoint ID counter
+	s.state.checkpointID = loadedCheckpoint.Id
+
+	// Create a job snapshot from the loaded checkpoint
+	jSnapshot := &jobSnapshot{
+		id:                    loadedCheckpoint.Id,
+		operatorCheckpoints:   loadedCheckpoint.OperatorCheckpoints,
+		sourceRunnerSnapshots: loadedCheckpoint.SourceCheckpoints,
+	}
+	s.state.completedSnapshots = []*jobSnapshot{jSnapshot}
+
+	return nil
 }

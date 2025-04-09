@@ -54,7 +54,7 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize storage location %s: %w", jd.WorkingStorageLocation, err)
 	}
 
-	job := jobs.New(&jobs.NewParams{
+	job, err := jobs.New(&jobs.NewParams{
 		JobConfig: jd,
 		OperatorFactory: func(senderID string, node *jobpb.NodeIdentity) proto.Operator {
 			return rpc.NewOperatorConnectClient(rpc.NewOperatorConnectClientParams{
@@ -68,6 +68,9 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 		CheckpointEvents: checkpointEvents,
 		Store:            store,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle(rpc.NewJobUIConnectHandler(job))

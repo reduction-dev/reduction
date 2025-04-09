@@ -64,6 +64,9 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	spURI, err := store.SavepointURIForID(cpID)
 	require.NoError(t, err)
 
+	// Remove the previous checkpoint files.
+	os.RemoveAll(filepath.Join(testDir, "op1"))
+
 	// Create a new store like we're booting from scratch
 	store = snapshots.NewStore(&snapshots.NewStoreParams{
 		FileStore:       fs,
@@ -71,12 +74,11 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		CheckpointsPath: "checkpoints",
 		SavepointURI:    spURI,
 	})
+	require.NoError(t, err, store.LoadCheckpoint())
 
-	// Remove the previous checkpoint files. These will be replaced by LoadLatestCheckpoint.
-	os.RemoveAll(filepath.Join(testDir, "op1"))
-
-	_, err = store.LoadLatestCheckpoint()
-	require.NoError(t, err)
+	// Get the checkpoint from memory
+	ckpt := store.CurrentCheckpoint()
+	require.NotNil(t, ckpt, "should have a checkpoint loaded")
 
 	db = dkv.Open(dkv.DBOptions{
 		FileSystem:   dkvstorage.NewLocalFilesystem(dkvstorage.Join(testDir, "op2")),

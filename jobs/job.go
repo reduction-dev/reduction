@@ -48,7 +48,7 @@ type NewParams struct {
 	CheckpointEvents    chan snapshots.CheckpointEvent
 }
 
-func New(params *NewParams) *Job {
+func New(params *NewParams) (*Job, error) {
 	// Default KeyGroupCount to 256
 	if params.JobConfig.KeyGroupCount == 0 {
 		params.JobConfig.KeyGroupCount = 256
@@ -68,7 +68,7 @@ func New(params *NewParams) *Job {
 	if params.Store == nil {
 		wd, err := os.Getwd()
 		if err != nil {
-			panic(fmt.Errorf("failed to get working directory: %w", err))
+			return nil, fmt.Errorf("failed to get working directory: %w", err)
 		}
 		params.Store = locations.NewLocalDirectory(wd)
 	}
@@ -98,6 +98,11 @@ func New(params *NewParams) *Job {
 		CheckpointEvents:           params.CheckpointEvents,
 		RetainedCheckpointsUpdated: retainedCheckpointsUpdatedChan,
 	})
+	err := snapshotStore.LoadCheckpoint()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load initial checkpoint: %w", err)
+	}
+
 	job := &Job{
 		snapshotStore:       snapshotStore,
 		log:                 params.Logger,
@@ -121,7 +126,7 @@ func New(params *NewParams) *Job {
 		}
 	}()
 
-	return job
+	return job, nil
 }
 
 func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
@@ -255,11 +260,8 @@ func (j *Job) processStateUpdates() {
 func (j *Job) start() error {
 	j.log.Info("starting")
 
-	// Get the job's current checkpoint
-	ckpt, err := j.snapshotStore.LoadLatestCheckpoint()
-	if err != nil {
-		return fmt.Errorf("loading latest job checkpoint: %v", err)
-	}
+	// Get the job's current checkpoint which may be nil
+	ckpt := j.snapshotStore.CurrentCheckpoint()
 
 	// Load the source checkpoint into the source splitter
 	if len(ckpt.GetSourceCheckpoints()) > 0 {

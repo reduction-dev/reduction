@@ -55,7 +55,7 @@ func CreateSavepointArtifact(fs locations.StorageLocation, savepointsPath string
 }
 
 // Copy files from a savepoint into place to be read as checkpoints.
-func RestoreFromSavepointArtifact(fs locations.StorageLocation, savepointURI string, jobCheckpoint *snapshotpb.JobCheckpoint) error {
+func RestoreCheckpointFromSavepointArtifact(fs locations.StorageLocation, savepointURI string, jobCheckpoint *snapshotpb.JobCheckpoint) error {
 	spDir := filepath.Dir(savepointURI)
 
 	for _, opCkpt := range jobCheckpoint.GetOperatorCheckpoints() {
