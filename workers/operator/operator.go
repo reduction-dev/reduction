@@ -244,15 +244,14 @@ func (o *Operator) HandleEvent(ctx context.Context, senderID string, req *worker
 
 	o.Logger.Debug("handling", "sender", senderID, "event", req.Event)
 
-	// Collect the err response from the queued event.
-	respErr := make(chan error)
-
 	// Block the sender to align checkpoint barriers if needed
 	o.mu.RLock()
 	waitOnAlignment := o.checkpoint.alignSender(senderID)
 	o.mu.RUnlock()
 	waitOnAlignment()
 
+	// Collect the err response from the queued event.
+	respErr := make(chan error)
 	switch typedEvent := req.Event.(type) {
 	case *workerpb.Event_KeyedEvent:
 		o.events <- func() {
