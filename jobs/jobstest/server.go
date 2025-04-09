@@ -16,7 +16,6 @@ import (
 	"reduction.dev/reduction-go/topology"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
-	cfg "reduction.dev/reduction/config"
 	"reduction.dev/reduction/jobs"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
@@ -26,7 +25,7 @@ import (
 )
 
 // Create a new local job server for testing.
-func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) (*Server, error) {
+func NewServer(jobConfig *config.Config, rpcListener, uiListener net.Listener, options ...func(*jobs.NewParams)) (*Server, error) {
 	logger := slog.With("instanceID", "job")
 	store, err := locations.New(jobConfig.WorkingStorageLocation)
 	if err != nil {
@@ -53,7 +52,10 @@ func NewServer(jobConfig *cfg.Config, rpcListener, uiListener net.Listener, opti
 	for _, o := range options {
 		o(jobParams)
 	}
-	job := jobs.New(jobParams)
+	job, err := jobs.New(jobParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle(rpc.NewJobUIConnectHandler(job))
@@ -90,7 +92,7 @@ func Run(jd *topology.Job, options ...func(*ServerParams)) (server *Server, stop
 	if err != nil {
 		panic(err)
 	}
-	jobConfig, err := cfg.Unmarshal(synthesis.Config.Marshal(), config.NewParams())
+	jobConfig, err := config.Unmarshal(synthesis.Config.Marshal(), config.NewParams())
 	if err != nil {
 		panic(err)
 	}
