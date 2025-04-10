@@ -4,5 +4,5 @@ package kinesisfake
 // lastIteratorTimestamp as expired. Any future GetRecords calls with these iterators will receive
 // an ExpiredIteratorException.
 func (f *Fake) ExpireShardIterators() {
-	f.iteratorsExpirationAt = f.lastIteratorTimestamp
+	f.iteratorsExpirationAt.Store(f.lastIteratorTimestamp.Load())
 }

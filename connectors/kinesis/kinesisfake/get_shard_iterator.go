@@ -43,15 +43,14 @@ func (f *Fake) getShardIterator(body []byte) (*GetShardIteratorResponse, error) 
 		position = seqNum + 1
 	}
 
-	// Increment the timestamp for this iterator
-	f.lastIteratorTimestamp++
-	timestamp := f.lastIteratorTimestamp
+	// Increment the timestamp for this iterator using atomic operations
+	timestamp := f.lastIteratorTimestamp.Add(1)
 
 	shardIterator := shardIteratorFor(request.ShardId, timestamp, position)
 
 	return &GetShardIteratorResponse{ShardIterator: shardIterator}, nil
 }
 
-func shardIteratorFor(shardID string, timestamp int, position int) string {
-	return shardID + ":" + strconv.FormatInt(int64(timestamp), 10) + ":" + strconv.Itoa(position)
+func shardIteratorFor(shardID string, timestamp int64, position int) string {
+	return shardID + ":" + strconv.FormatInt(timestamp, 10) + ":" + strconv.Itoa(position)
 }

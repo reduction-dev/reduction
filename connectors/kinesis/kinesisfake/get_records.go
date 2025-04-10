@@ -48,7 +48,7 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 
 	// Check if the iterator has expired
-	if timestamp <= f.iteratorsExpirationAt {
+	if int64(timestamp) <= f.iteratorsExpirationAt.Load() {
 		return nil, &ExpiredIteratorException{
 			message: fmt.Sprintf("Iterator %s has expired", request.ShardIterator),
 		}
@@ -78,9 +78,8 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	// Calculate the next position and create the next iterator
 	nextPos := pos + len(records)
 
-	// Increment timestamp for the next iterator
-	f.lastIteratorTimestamp++
-	nextTimestamp := f.lastIteratorTimestamp
+	// Increment timestamp for the next iterator using atomic operations
+	nextTimestamp := f.lastIteratorTimestamp.Add(1)
 
 	return &GetRecordsResponse{
 		NextShardIterator: shardIteratorFor(shardID, nextTimestamp, nextPos),
@@ -88,13 +87,13 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}, nil
 }
 
-func splitShardIterator(iter string) (string, int, int, error) {
+func splitShardIterator(iter string) (shardID string, timestamp int64, position int, err error) {
 	parts := strings.Split(iter, ":")
 	if len(parts) != 3 {
 		return "", 0, 0, fmt.Errorf("invalid iterator format: %s", iter)
 	}
 
-	timestamp, err := strconv.ParseInt(parts[1], 10, 64)
+	timestamp, err = strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("invalid timestamp in iterator: %w", err)
 	}
@@ -104,5 +103,5 @@ func splitShardIterator(iter string) (string, int, int, error) {
 		return "", 0, 0, fmt.Errorf("invalid position in iterator: %w", err)
 	}
 
-	return parts[0], int(timestamp), pos, nil
+	return parts[0], timestamp, pos, nil
 }

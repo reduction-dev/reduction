@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 )
 
 func StartFake() (*httptest.Server, *Fake) {
@@ -89,6 +90,6 @@ func (r hashKeyRange) includes(key *big.Int) bool {
 
 type Fake struct {
 	db                    *db
-	lastIteratorTimestamp int
-	iteratorsExpirationAt int
+	lastIteratorTimestamp atomic.Int64
+	iteratorsExpirationAt atomic.Int64
 }
