@@ -44,7 +44,8 @@ type SourceRunner struct {
 	batchingParams      batching.EventBatcherParams
 	outputStream        chan *workerpb.Event
 	keyEventChannel     *batching.ReorderFetcher[[]byte, []*handlerpb.KeyedEvent]
-	initDone            chan struct{} // Used by HandleStart to wait until Start finishes initializing
+	initDone            chan struct{}              // Used by HandleStart to wait until Start finishes initializing
+	sourceChannel       <-chan connectors.ReadFunc // The channel to read events from the source
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
@@ -200,6 +201,11 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 		errChan:        r.errChan,
 	})
 
+	// Create a new source channel only if there are splits to read
+	if len(msg.Splits) > 0 {
+		r.sourceChannel = connectors.NewReadSourceChannel(loopCtx, r.sourceReader)
+	}
+
 	r.stopLoop = cancel
 	go func() {
 		if err := r.processEvents(loopCtx); err != nil {
@@ -219,8 +225,6 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 }
 
 func (r *SourceRunner) processEvents(ctx context.Context) error {
-	readEvents := connectors.NewReadSourceChannel(ctx, r.sourceReader)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -233,7 +237,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				return fmt.Errorf("creating checkpoint: %w", err)
 			}
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
-		case readFunc, ok := <-readEvents:
+		case readFunc, ok := <-r.sourceChannel:
 			if !ok {
 				// Channel closed, Flush events, Send watermark, send source complete event
 				r.keyEventChannel.Flush(ctx)
@@ -242,8 +246,8 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				}}
 				r.outputStream <- &workerpb.Event{Event: &workerpb.Event_SourceComplete{}}
 
-				// Stop reading from readEvents
-				readEvents = nil
+				// Stop reading from sourceChannel
+				r.sourceChannel = nil
 				continue
 			}
 

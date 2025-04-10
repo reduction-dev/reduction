@@ -50,10 +50,12 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 
 // Poll the assigned Kinesis shards for records.
 func (s *SourceReader) ReadEvents() ([][]byte, error) {
-	// Wait until we have assigned splits
-	s.assignedShards.ready.Wait()
+	// No-op if there are no shards to read
+	if s.assignedShards.isEmpty() {
+		return [][]byte{}, nil
+	}
 
-	// Read from one shard, pickign round-robin
+	// Read from one shard, picking round-robin
 	shard := s.assignedShards.next()
 
 	// If we don't have a shardIterator yet, we need to get one
@@ -174,29 +176,25 @@ var _ connectors.SourceReader = (*SourceReader)(nil)
 type shardList struct {
 	shards []*kinesisShard
 	mu     *sync.Mutex
-	ready  *sync.WaitGroup
 	index  int
 }
 
 func newShardList() *shardList {
-	ready := &sync.WaitGroup{}
-	ready.Add(1)
-
 	return &shardList{
-		mu:    &sync.Mutex{},
-		ready: ready,
+		mu: &sync.Mutex{},
 	}
 }
 
 func (l *shardList) add(shards []*kinesisShard) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	// Going from 0 to some marks the list ready
-	if len(l.shards) == 0 && len(shards) != 0 {
-		defer l.ready.Done()
-	}
 	l.shards = append(l.shards, shards...)
+}
+
+func (l *shardList) isEmpty() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.shards) == 0
 }
 
 func (l *shardList) next() *kinesisShard {
