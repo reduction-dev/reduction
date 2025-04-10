@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"reduction.dev/reduction/proto/workerpb"
@@ -17,7 +18,7 @@ type SourceRunnerConnectHandler struct {
 
 func NewSourceRunnerConnectHandler(sourceRunner *sourcerunner.SourceRunner) (string, http.Handler) {
 	h := &SourceRunnerConnectHandler{sourceRunner: sourceRunner}
-	return workerpbconnect.NewSourceRunnerHandler(h, connect.WithInterceptors(NewLoggingInterceptor(sourceRunner.Logger)))
+	return workerpbconnect.NewSourceRunnerHandler(h, connect.WithInterceptors(NewLoggingInterceptor(sourceRunner.Logger, slog.LevelDebug)))
 }
 
 func (s *SourceRunnerConnectHandler) Start(ctx context.Context, req *connect.Request[workerpb.StartSourceRunnerRequest]) (*connect.Response[workerpb.Empty], error) {

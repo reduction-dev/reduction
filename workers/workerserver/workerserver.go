@@ -79,7 +79,7 @@ func NewServer(params NewServerParams) *server {
 			Host: params.HandlerAddr,
 			Opts: []connect.ClientOption{
 				connect.WithInterceptors(
-					rpc.NewLoggingInterceptor(logger),
+					rpc.NewLoggingInterceptor(logger, slog.LevelDebug),
 					telemetry.NewRPCInterceptor("handler"),
 				),
 			},
@@ -95,7 +95,7 @@ func NewServer(params NewServerParams) *server {
 				SenderID:     senderID,
 				OperatorNode: node,
 				ConnectOptions: []connect.ClientOption{
-					connect.WithInterceptors(telemetry.NewRPCInterceptor("operator")),
+					connect.WithInterceptors(telemetry.NewRPCInterceptor("operator"), rpc.NewLoggingInterceptor(logger, slog.LevelDebug)),
 				},
 			})
 		},

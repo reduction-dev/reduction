@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"reduction.dev/reduction/config"
@@ -18,7 +19,7 @@ type OperatorConnectHandler struct {
 
 func NewOperatorConnectHandler(operator *operator.Operator) (string, http.Handler) {
 	l := &OperatorConnectHandler{operator: operator}
-	return workerpbconnect.NewOperatorHandler(l, connect.WithInterceptors(NewLoggingInterceptor(operator.Logger)))
+	return workerpbconnect.NewOperatorHandler(l, connect.WithInterceptors(NewLoggingInterceptor(operator.Logger, slog.LevelDebug)))
 }
 
 // HandleEventBatch implements workerpbconnect.OperatorHandler.

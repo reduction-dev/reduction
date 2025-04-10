@@ -21,7 +21,7 @@ type JobConnectHandler struct {
 func NewJobConnectHandler(job *jobs.Job) (path string, handler http.Handler) {
 	h := &JobConnectHandler{job: job}
 	logger := slog.With("instanceID", "job")
-	return jobpbconnect.NewJobHandler(h, connect.WithInterceptors(NewLoggingInterceptor(logger)))
+	return jobpbconnect.NewJobHandler(h, connect.WithInterceptors(NewLoggingInterceptor(logger, slog.LevelDebug)))
 }
 
 func (l *JobConnectHandler) SourceCheckpointComplete(ctx context.Context, req *connect.Request[snapshotpb.SourceCheckpoint]) (*connect.Response[jobpb.Empty], error) {
