@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Script to connect to an ECS task given its ARN
+# Usage: ./ecs-task-session <task-arn> [container-name]
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <task-arn> [container-name]"
+    echo "Example: $0 arn:aws:ecs:us-east-2:619071318835:task/ReductionWordCountDemo-JobClusterBF751514-dGi6nM2zpJMG/1661f85ec5b74d1a9b75b60d72c71e8d"
+    exit 1
+fi
+
+TASK_ARN="$1"
+CONTAINER_NAME="${2:-WorkerContainer}"  # Default to WorkerContainer if not specified
+
+# Extract the region from the ARN
+REGION=$(echo "$TASK_ARN" | sed -E 's|arn:aws:ecs:([^:]+):.*|\1|')
+
+# Extract the task ID from the ARN
+TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+
+# Extract the cluster from the ARN
+CLUSTER=$(echo "$TASK_ARN" | sed -E 's|.*task/([^/]+)/.*|\1|')
+
+echo "Region: $REGION"
+echo "Connecting to task $TASK_ID in cluster $CLUSTER"
+echo "Container: $CONTAINER_NAME"
+
+aws ecs execute-command \
+    --region "$REGION" \
+    --cluster "$CLUSTER" \
+    --task "$TASK_ID" \
+    --container "$CONTAINER_NAME" \
+    --interactive \
+    --command "/bin/sh"
