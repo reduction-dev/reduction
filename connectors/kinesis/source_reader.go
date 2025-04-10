@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"github.com/aws/smithy-go"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
@@ -21,7 +21,8 @@ import (
 type SourceReader struct {
 	client         *Client
 	streamARN      string
-	assignedShards *shardList
+	assignedShards []*kinesisShard
+	shardIndex     int
 }
 
 type kinesisShard struct {
@@ -42,21 +43,21 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 	}
 
 	return &SourceReader{
-		client:         config.Client,
-		streamARN:      config.StreamARN,
-		assignedShards: newShardList(),
+		client:    config.Client,
+		streamARN: config.StreamARN,
 	}
 }
 
 // Poll the assigned Kinesis shards for records.
 func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	// No-op if there are no shards to read
-	if s.assignedShards.isEmpty() {
+	if len(s.assignedShards) == 0 {
 		return [][]byte{}, nil
 	}
 
 	// Read from one shard, picking round-robin
-	shard := s.assignedShards.next()
+	shard := s.assignedShards[s.shardIndex]
+	s.shardIndex = (s.shardIndex + 1) % len(s.assignedShards)
 
 	// If we don't have a shardIterator yet, we need to get one
 	if shard.shardIterator == "" {
@@ -88,10 +89,8 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		return nil, fmt.Errorf("kinesis SourceReader.ReadEvents: %w", sourceErrorFrom(err))
 	}
 
-	// Store the next shard iterator for subsequent reads
+	// Update shard state
 	shard.shardIterator = *records.NextShardIterator
-
-	// If we have records, update the sequence number with the last one
 	if len(records.Records) > 0 {
 		lastRecord := records.Records[len(records.Records)-1]
 		if lastRecord.SequenceNumber != nil {
@@ -124,13 +123,13 @@ func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
 			sequenceNumber: string(split.Cursor),
 		}
 	}
-	s.assignedShards.add(shards)
+	s.assignedShards = shards
 	return nil
 }
 
 func (s *SourceReader) Checkpoint() []byte {
-	shards := make([]*kinesispb.Shard, len(s.assignedShards.shards))
-	for i, shard := range s.assignedShards.list() {
+	shards := make([]*kinesispb.Shard, len(s.assignedShards))
+	for i, shard := range s.assignedShards {
 		shards[i] = &kinesispb.Shard{
 			ShardId: shard.id,
 			Cursor:  shard.sequenceNumber,
@@ -173,59 +172,17 @@ func (s *SourceReader) refreshShardIterator(shard *kinesisShard) error {
 
 var _ connectors.SourceReader = (*SourceReader)(nil)
 
-type shardList struct {
-	shards []*kinesisShard
-	mu     *sync.Mutex
-	index  int
-}
-
-func newShardList() *shardList {
-	return &shardList{
-		mu: &sync.Mutex{},
-	}
-}
-
-func (l *shardList) add(shards []*kinesisShard) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.shards = append(l.shards, shards...)
-}
-
-func (l *shardList) isEmpty() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.shards) == 0
-}
-
-func (l *shardList) next() *kinesisShard {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Reset to zero if we're out of bounds
-	if l.index >= len(l.shards) {
-		l.index = 0
-	}
-	defer func() { l.index++ }()
-
-	return l.shards[l.index]
-}
-
-func (l *shardList) list() []*kinesisShard {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	return l.shards
-}
-
 func sourceErrorFrom(err error) *connectors.SourceError {
-	var accessDenied *kinesistypes.AccessDeniedException
-	if errors.As(err, &accessDenied) {
-		return connectors.NewTerminalError(err)
+	kinesisErrToConnectorErr := map[smithy.APIError]func(error) *connectors.SourceError{
+		&kinesistypes.AccessDeniedException{}:    connectors.NewTerminalError,
+		&kinesistypes.InvalidArgumentException{}: connectors.NewTerminalError,
 	}
 
-	var invalidArgument *kinesistypes.InvalidArgumentException
-	if errors.As(err, &invalidArgument) {
-		return connectors.NewTerminalError(err)
+	// Check if the error is a terminal error
+	for kinesisErr, connectorErr := range kinesisErrToConnectorErr {
+		if errors.As(err, &kinesisErr) {
+			return connectorErr(err)
+		}
 	}
 
 	// Default to retryable for unknown errors
