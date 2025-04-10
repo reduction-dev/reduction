@@ -8,7 +8,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
-	"github.com/aws/smithy-go"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
@@ -173,18 +172,13 @@ func (s *SourceReader) refreshShardIterator(shard *kinesisShard) error {
 var _ connectors.SourceReader = (*SourceReader)(nil)
 
 func sourceErrorFrom(err error) *connectors.SourceError {
-	kinesisErrToConnectorErr := map[smithy.APIError]func(error) *connectors.SourceError{
-		&kinesistypes.AccessDeniedException{}:    connectors.NewTerminalError,
-		&kinesistypes.InvalidArgumentException{}: connectors.NewTerminalError,
+	switch {
+	case errors.As(err, new(*kinesistypes.AccessDeniedException)):
+		return connectors.NewTerminalError(err)
+	case errors.As(err, new(*kinesistypes.InvalidArgumentException)):
+		return connectors.NewTerminalError(err)
+	default:
+		// All other errors are retryable
+		return connectors.NewRetryableError(err)
 	}
-
-	// Check if the error is a terminal error
-	for kinesisErr, connectorErr := range kinesisErrToConnectorErr {
-		if errors.As(err, &kinesisErr) {
-			return connectorErr(err)
-		}
-	}
-
-	// Default to retryable for unknown errors
-	return connectors.NewRetryableError(err)
 }

@@ -1,16 +1,32 @@
 package kinesisfake
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/aws/smithy-go"
 )
 
+var errCodeToStatusCode = map[string]int{
+	"ResourceNotFoundException":              http.StatusNotFound,
+	"ExpiredIteratorException":               http.StatusBadRequest,
+	"ProvisionedThroughputExceededException": http.StatusBadRequest,
+	"AccessDeniedException":                  http.StatusForbidden,
+	"InvalidArgumentException":               http.StatusBadRequest,
+}
+
 func handleError(w http.ResponseWriter, err error) {
-	if kerr, ok := err.(KinesisError); ok {
-		w.WriteHeader(kerr.StatusCode())
-		fmt.Fprintf(w, "{ \"__type\": \"%s\", \"message\": \"%s\" }", kerr.AWSExceptionCode(), kerr.Error())
-		return
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		statusCode := errCodeToStatusCode[apiErr.ErrorCode()]
+		if statusCode == 0 {
+			statusCode = http.StatusInternalServerError
+		}
+		w.WriteHeader(statusCode)
+		fmt.Fprintf(w, "{ \"__type\": \"%s\", \"message\": \"%s\" }", apiErr.ErrorCode(), apiErr.ErrorMessage())
 	}
+
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, "{ \"error\": \"Internal Server Error: %v\" }", err)
 }
@@ -19,60 +35,4 @@ type KinesisError interface {
 	error
 	StatusCode() int
 	AWSExceptionCode() string
-}
-
-/* UnsupportedOperationError */
-
-type UnsupportedOperationError struct {
-	Operation string
-}
-
-func (e *UnsupportedOperationError) Error() string {
-	return fmt.Sprintf("Operation '%s' not supported", e.Operation)
-}
-
-func (e *UnsupportedOperationError) StatusCode() int {
-	return http.StatusNotImplemented
-}
-
-/* ResourceNotFoundException */
-
-type ResourceNotFoundException struct {
-	message string
-}
-
-func (e *ResourceNotFoundException) Error() string {
-	if e.message != "" {
-		return e.message
-	}
-	return "Resource not found"
-}
-
-func (e *ResourceNotFoundException) StatusCode() int {
-	return http.StatusBadRequest
-}
-
-func (e *ResourceNotFoundException) AWSExceptionCode() string {
-	return "ResourceNotFoundException"
-}
-
-/* ExpiredIteratorException */
-
-type ExpiredIteratorException struct {
-	message string
-}
-
-func (e *ExpiredIteratorException) Error() string {
-	if e.message != "" {
-		return e.message
-	}
-	return "Iterator expired"
-}
-
-func (e *ExpiredIteratorException) StatusCode() int {
-	return http.StatusBadRequest
-}
-
-func (e *ExpiredIteratorException) AWSExceptionCode() string {
-	return "ExpiredIteratorException"
 }

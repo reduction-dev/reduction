@@ -6,3 +6,9 @@ package kinesisfake
 func (f *Fake) ExpireShardIterators() {
 	f.iteratorsExpirationAt.Store(f.lastIteratorTimestamp.Load())
 }
+
+// SetGetRecordsError sets an error that will be returned by GetRecords calls.
+// Set to nil to clear the error.
+func (f *Fake) SetGetRecordsError(err error) {
+	f.getRecordsError = err
+}

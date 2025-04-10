@@ -6,6 +6,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"reduction.dev/reduction/util/ptr"
 )
 
 type GetRecordsRequest struct {
@@ -30,6 +33,11 @@ type Record struct {
 }
 
 func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
+	// Check if we have a simulated error
+	if f.getRecordsError != nil {
+		return nil, f.getRecordsError
+	}
+
 	var request GetRecordsRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {
@@ -38,7 +46,9 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 
 	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
 	if stream == nil {
-		return nil, &ResourceNotFoundException{fmt.Sprintf("no stream %s", request.StreamARN)}
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("no stream %s", request.StreamARN)),
+		}
 	}
 
 	// Parse the iterator
@@ -49,8 +59,8 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 
 	// Check if the iterator has expired
 	if int64(timestamp) <= f.iteratorsExpirationAt.Load() {
-		return nil, &ExpiredIteratorException{
-			message: fmt.Sprintf("Iterator %s has expired", request.ShardIterator),
+		return nil, &kinesistypes.ExpiredIteratorException{
+			Message: ptr.New(fmt.Sprintf("Iterator %s has expired", request.ShardIterator)),
 		}
 	}
 
@@ -59,7 +69,9 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 		return s.id == shardID
 	})
 	if shardIndex == -1 {
-		return nil, &ResourceNotFoundException{fmt.Sprintf("no shard %s", request.ShardIterator)}
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("no shard %s", request.ShardIterator)),
+		}
 	}
 	shard := stream.shards[shardIndex]
 

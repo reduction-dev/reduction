@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"reduction.dev/reduction/util/ptr"
 )
 
 type GetShardIteratorRequest struct {
@@ -28,7 +31,9 @@ func (f *Fake) getShardIterator(body []byte) (*GetShardIteratorResponse, error) 
 
 	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
 	if stream == nil {
-		return nil, &ResourceNotFoundException{}
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("Stream %s not found", request.StreamARN)),
+		}
 	}
 
 	position := 0
@@ -45,7 +50,6 @@ func (f *Fake) getShardIterator(body []byte) (*GetShardIteratorResponse, error) 
 
 	// Increment the timestamp for this iterator using atomic operations
 	timestamp := f.lastIteratorTimestamp.Add(1)
-
 	shardIterator := shardIteratorFor(request.ShardId, timestamp, position)
 
 	return &GetShardIteratorResponse{ShardIterator: shardIterator}, nil

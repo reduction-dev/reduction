@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"reduction.dev/reduction/util/ptr"
 )
 
 type DescribeStreamRequest struct {
@@ -66,10 +69,11 @@ func (f *Fake) describeStream(body []byte) (*DescribeStreamResponse, error) {
 	}
 
 	stream := f.db.streams[request.StreamName]
-	slog.Info("streams", "s", stream)
 	if stream == nil {
 		slog.Info("sending ResourceNotFoundException")
-		return nil, &ResourceNotFoundException{}
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("Stream %s not found.", request.StreamName)),
+		}
 	}
 	return &DescribeStreamResponse{
 		StreamDescription: StreamDescription{

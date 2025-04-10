@@ -27,6 +27,7 @@ type NewClientParams struct {
 	// falls back to credentials config file.
 	Profile     string
 	Credentials aws.CredentialsProvider
+	Retryer     aws.Retryer
 }
 
 func NewClient(params *NewClientParams) (*Client, error) {
@@ -52,6 +53,9 @@ func NewClient(params *NewClientParams) (*Client, error) {
 	svc := kinesis.NewFromConfig(cfg, func(opts *kinesis.Options) {
 		if params.Endpoint != "" {
 			opts.BaseEndpoint = ptr.New(params.Endpoint)
+		}
+		if params.Retryer != nil {
+			opts.Retryer = params.Retryer
 		}
 	})
 

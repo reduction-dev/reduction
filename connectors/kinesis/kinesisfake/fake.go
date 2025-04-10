@@ -2,6 +2,7 @@ package kinesisfake
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/big"
@@ -9,6 +10,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
+
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"reduction.dev/reduction/util/ptr"
 )
 
 func StartFake() (*httptest.Server, *Fake) {
@@ -53,7 +57,7 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 	case "DeleteStream":
 		resp, err = f.deleteStream(body)
 	default:
-		err = &UnsupportedOperationError{operation}
+		err = &kinesistypes.InvalidArgumentException{Message: ptr.New(fmt.Sprintf("Invalid Operation: %s", operation))}
 	}
 
 	if err != nil {
@@ -92,4 +96,5 @@ type Fake struct {
 	db                    *db
 	lastIteratorTimestamp atomic.Int64
 	iteratorsExpirationAt atomic.Int64
+	getRecordsError       error
 }

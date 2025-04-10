@@ -8,6 +8,9 @@ import (
 	"math/big"
 	"strconv"
 	"time"
+
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
+	"reduction.dev/reduction/util/ptr"
 )
 
 type PutRecordsRequest struct {
@@ -42,8 +45,8 @@ func (f *Fake) putRecords(body []byte) (*PutRecordsResponse, error) {
 	streamName := streamNameFromARN(request.StreamARN)
 	stream := f.db.streams[streamName]
 	if stream == nil {
-		return nil, &ResourceNotFoundException{
-			message: fmt.Sprintf("Stream %s under account %s not found.", streamName, "123456789012"),
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("Stream %s under account %s not found.", streamName, "123456789012")),
 		}
 	}
 
