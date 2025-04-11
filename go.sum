@@ -117,3 +117,5 @@ reduction.dev/reduction-go v0.0.4 h1:4QM90gDa7g9D70jsNdP6zWRAJ2OGwEh4Ud2GP/LKs+I
 reduction.dev/reduction-go v0.0.4/go.mod h1:+k1HxMzu5gXYVQR3zFfKdrBRuRyyfhiMflAb9RniWBw=
 reduction.dev/reduction-protocol v0.0.2 h1:nGVylLO89FIvps4mo1P7IKV4ViAmpsp3xEXZFdH+SI0=
 reduction.dev/reduction-protocol v0.0.2/go.mod h1:ehQdwhwyLJccD4Z1/iVetpjbjCDw0ytW+WwSk7JU2vA=
+reduction.dev/reduction-protocol v0.0.3 h1:bj95wrjsP2teFZH8aaZighI4CGvHjGl18TT6/RUor1s=
+reduction.dev/reduction-protocol v0.0.3/go.mod h1:Rno4FyyZ2olmzTWeRfUHWsYv30Lcvcc1Dp6ci5urgpE=
