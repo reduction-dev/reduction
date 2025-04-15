@@ -71,7 +71,8 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	iter := fetches.RecordIter()
 	for !iter.Done() {
 		record := iter.Next()
-		s.offsets.Set(record.Topic, record.Partition, record.Offset)
+		// Set the offset to the next offset to read (record.Offset + 1)
+		s.offsets.Set(record.Topic, record.Partition, record.Offset+1)
 		events = append(events, record.Value)
 	}
 	if err := fetches.Err(); err != nil {
