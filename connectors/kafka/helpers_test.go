@@ -2,6 +2,7 @@ package kafka_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 // KafkaCluster manages a test Kafka cluster in Docker and provides helpers.
 type KafkaCluster struct {
 	t          *testing.T
-	BrokerPort string
+	BrokerAddr string
 	client     *kgo.Client
 	admin      *kadm.Client
 }
@@ -39,13 +40,14 @@ func startKafka(t *testing.T) *KafkaCluster {
 		exec.Command("docker", "rm", "-f", containerName).Run()
 	})
 
-	client, err := kgo.NewClient(kgo.SeedBrokers("localhost:" + brokerPort))
+	brokerAddr := "localhost:" + brokerPort
+	client, err := kgo.NewClient(kgo.SeedBrokers(brokerAddr))
 	require.NoError(t, err, "failed to create kafka client")
 	admin := kadm.NewClient(client)
 
 	return &KafkaCluster{
 		t:          t,
-		BrokerPort: brokerPort,
+		BrokerAddr: brokerAddr,
 		client:     client,
 		admin:      admin,
 	}
@@ -65,4 +67,14 @@ func (k *KafkaCluster) Produce(ctx context.Context, records ...*kgo.Record) {
 	}
 	err := k.client.Flush(ctx)
 	require.NoError(k.t, err, "flush records")
+}
+
+func (k *KafkaCluster) Close() {
+	k.client.Close()
+}
+
+func integrationOnly(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" && os.Getenv("INTEGRATION_KAFKA") == "" {
+		t.Skip("integration-only")
+	}
 }

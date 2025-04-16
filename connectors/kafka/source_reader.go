@@ -71,12 +71,9 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	iter := fetches.RecordIter()
 	for !iter.Done() {
 		record := iter.Next()
-		// Set the offset to the next offset to read (record.Offset + 1)
+		// Set the offset to the next offset to read
 		s.offsets.Set(record.Topic, record.Partition, record.Offset+1)
 		events = append(events, record.Value)
-	}
-	if err := fetches.Err(); err != nil {
-		return nil, fmt.Errorf("kafka SourceReader.ReadEvents: %w", connectors.NewRetryableError(err))
 	}
 	return events, nil
 }
@@ -96,11 +93,11 @@ func (s *SourceReader) Checkpoint() []byte {
 			Partitions: partitions,
 		})
 	}
-	bs, err := proto.Marshal(checkpoint)
+	ckptData, err := proto.Marshal(checkpoint)
 	if err != nil {
 		panic(fmt.Sprintf("failed to marshal checkpoint: %v", err))
 	}
-	return bs
+	return ckptData
 }
 
 var _ connectors.SourceReader = (*SourceReader)(nil)
@@ -111,36 +108,22 @@ func NewOffsets() Offsets {
 	return make(Offsets)
 }
 
-// EnsurePartition ensures the topic/partition map exists and returns it.
-func (o Offsets) EnsurePartition(topic string, partition int32) {
+// Set sets the offset for a topic/partition.
+func (o Offsets) Set(topic string, partition int32, offset int64) {
 	if o[topic] == nil {
 		o[topic] = make(map[int32]int64)
 	}
-}
-
-// Set sets the offset for a topic/partition.
-func (o Offsets) Set(topic string, partition int32, offset int64) {
-	o.EnsurePartition(topic, partition)
 	o[topic][partition] = offset
 }
 
 // Get returns the offset and true if present.
 func (o Offsets) Get(topic string, partition int32) (int64, bool) {
-	partMap, ok := o[topic]
+	partitionMap, ok := o[topic]
 	if !ok {
 		return 0, false
 	}
-	offset, ok := partMap[partition]
+	offset, ok := partitionMap[partition]
 	return offset, ok
-}
-
-// ForEach calls fn for each topic/partition/offset.
-func (o Offsets) ForEach(fn func(topic string, partition int32, offset int64)) {
-	for topic, partMap := range o {
-		for partition, offset := range partMap {
-			fn(topic, partition, offset)
-		}
-	}
 }
 
 // AsPartitions converts the offset to the type expected by client.AddConsumePartitions.

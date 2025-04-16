@@ -35,7 +35,6 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
 )
 
 require (

@@ -12,10 +12,11 @@ import (
 )
 
 func TestKafkaSourceReader_ReadsAllEvents(t *testing.T) {
+	integrationOnly(t)
 	ctx := t.Context()
 
 	cluster := startKafka(t)
-	defer cluster.client.Close()
+	defer cluster.Close()
 
 	topic := "test-topic"
 	cluster.CreateTopic(ctx, topic)
@@ -31,7 +32,7 @@ func TestKafkaSourceReader_ReadsAllEvents(t *testing.T) {
 
 	config := kafka.SourceConfig{
 		ConsumerGroup: "test-group",
-		Brokers:       []string{"localhost:" + cluster.BrokerPort},
+		Brokers:       []string{cluster.BrokerAddr},
 		Topics:        []string{topic},
 	}
 
@@ -65,10 +66,11 @@ func TestKafkaSourceReader_ReadsAllEvents(t *testing.T) {
 }
 
 func TestKafkaSourceReader_Checkpoint(t *testing.T) {
+	integrationOnly(t)
 	ctx := t.Context()
 
 	cluster := startKafka(t)
-	defer cluster.client.Close()
+	defer cluster.Close()
 
 	topic := "test-topic"
 	cluster.CreateTopic(ctx, topic)
@@ -86,7 +88,7 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 
 	config := kafka.SourceConfig{
 		ConsumerGroup: "test-group",
-		Brokers:       []string{"localhost:" + cluster.BrokerPort},
+		Brokers:       []string{cluster.BrokerAddr},
 		Topics:        []string{topic},
 	}
 

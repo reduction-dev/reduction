@@ -1,6 +1,10 @@
 package confvars
 
-import "reduction.dev/reduction-protocol/jobconfigpb"
+import (
+	"strings"
+
+	"reduction.dev/reduction-protocol/jobconfigpb"
+)
 
 // StringValue creates a StringValue with the given value
 func StringValue(value string) *jobconfigpb.StringVar {
@@ -18,4 +22,8 @@ func IntValue(value int) *jobconfigpb.Int32Var {
 			Value: int32(value),
 		},
 	}
+}
+
+func StringListValue(values []string) *jobconfigpb.StringVar {
+	return StringValue(strings.Join(values, ","))
 }
