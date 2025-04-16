@@ -8,6 +8,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	rpkafkapb "reduction.dev/reduction-protocol/kafkapb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kafka/kafkapb"
 	"reduction.dev/reduction/proto/workerpb"
@@ -73,7 +75,30 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		record := iter.Next()
 		// Set the offset to the next offset to read
 		s.offsets.Set(record.Topic, record.Partition, record.Offset+1)
-		events = append(events, record.Value)
+
+		pbRecord := &rpkafkapb.Record{
+			Key:   record.Key,
+			Value: record.Value,
+			Topic: record.Topic,
+		}
+		if !record.Timestamp.IsZero() {
+			pbRecord.Timestamp = timestamppb.New(record.Timestamp)
+		}
+		if len(record.Headers) > 0 {
+			headers := make([]*rpkafkapb.Header, 0, len(record.Headers))
+			for _, h := range record.Headers {
+				headers = append(headers, &rpkafkapb.Header{
+					Key:   h.Key,
+					Value: h.Value,
+				})
+			}
+			pbRecord.Headers = headers
+		}
+		data, err := proto.Marshal(pbRecord)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal kafkapb.Record: %w", err)
+		}
+		events = append(events, data)
 	}
 	return events, nil
 }

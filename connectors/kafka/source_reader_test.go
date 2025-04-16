@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"google.golang.org/protobuf/proto"
+	kafkapb "reduction.dev/reduction-protocol/kafkapb"
 	"reduction.dev/reduction/connectors/kafka"
 )
 
@@ -55,7 +57,10 @@ func TestKafkaSourceReader_ReadsAllEvents(t *testing.T) {
 		require.NoError(t, err, "read events")
 		t.Log("read events:", events)
 		for _, ev := range events {
-			consumedEvents = append(consumedEvents, string(ev))
+			var pbRecord kafkapb.Record
+			err := proto.Unmarshal(ev, &pbRecord)
+			require.NoError(t, err, "unmarshal kafkapb.Record")
+			consumedEvents = append(consumedEvents, string(pbRecord.Value))
 		}
 	}
 	assert.Eventually(t, func() bool {
@@ -110,7 +115,10 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 		events, err := reader.ReadEvents()
 		require.NoError(t, err, "read events")
 		for _, ev := range events {
-			consumedEvents = append(consumedEvents, string(ev))
+			var pbRecord kafkapb.Record
+			err := proto.Unmarshal(ev, &pbRecord)
+			require.NoError(t, err, "unmarshal kafkapb.Record")
+			consumedEvents = append(consumedEvents, string(pbRecord.Value))
 		}
 	}
 	// Read first 10 records

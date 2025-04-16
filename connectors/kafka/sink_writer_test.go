@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	kafkapb "reduction.dev/reduction-protocol/kafkapb"
 	"reduction.dev/reduction/connectors/kafka"
 )
 
@@ -55,5 +57,13 @@ func TestSinkWriter_WriteAndReadBack(t *testing.T) {
 		return len(readEvents) == len(eventsToWrite)
 	}, 3*time.Second, 100*time.Millisecond, "should read all written events")
 
-	assert.ElementsMatch(t, eventsToWrite, readEvents, "read events match written events")
+	// Unmarshal protobuf records and compare only the Value field
+	var readValues [][]byte
+	for _, ev := range readEvents {
+		var pbRecord kafkapb.Record
+		err := proto.Unmarshal(ev, &pbRecord)
+		assert.NoError(t, err, "unmarshal kafkapb.Record")
+		readValues = append(readValues, pbRecord.Value)
+	}
+	assert.ElementsMatch(t, eventsToWrite, readValues, "read events match written events")
 }
