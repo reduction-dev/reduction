@@ -77,12 +77,11 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		s.offsets.Set(record.Topic, record.Partition, record.Offset+1)
 
 		pbRecord := &rpkafkapb.Record{
-			Key:   record.Key,
-			Value: record.Value,
-			Topic: record.Topic,
-		}
-		if !record.Timestamp.IsZero() {
-			pbRecord.Timestamp = timestamppb.New(record.Timestamp)
+			Topic:     record.Topic,
+			Partition: record.Partition,
+			Key:       record.Key,
+			Value:     record.Value,
+			Timestamp: timestamppb.New(record.Timestamp),
 		}
 		if len(record.Headers) > 0 {
 			headers := make([]*rpkafkapb.Header, 0, len(record.Headers))
