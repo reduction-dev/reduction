@@ -19,8 +19,8 @@ require (
 	golang.org/x/sync v0.12.0
 	golang.org/x/text v0.23.0
 	google.golang.org/protobuf v1.36.3
-	reduction.dev/reduction-go v0.0.5
-	reduction.dev/reduction-protocol v0.0.3
+	reduction.dev/reduction-go v0.0.6
+	reduction.dev/reduction-protocol v0.0.4
 )
 
 require (
