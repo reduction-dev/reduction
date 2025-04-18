@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"reduction.dev/reduction/util/ptr"
-	"reduction.dev/reduction/util/sliceu"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -116,14 +115,16 @@ func (c *Client) CreateStream(ctx context.Context, params *CreateStreamParams) (
 	return *out.StreamDescription.StreamARN, nil
 }
 
-func (c *Client) ListShards(ctx context.Context, streamARN string) ([]string, error) {
-	var shardIDs []string
+func (c *Client) ListShards(ctx context.Context, streamARN string) ([]types.Shard, error) {
+	var shards []types.Shard
 
-	var lastSeenShardID *string
+	var nextToken *string
 	for {
 		input := &kinesis.ListShardsInput{
-			ExclusiveStartShardId: lastSeenShardID,
-			StreamARN:             &streamARN,
+			StreamARN: &streamARN,
+		}
+		if nextToken != nil {
+			input.NextToken = nextToken
 		}
 
 		out, err := c.svc.ListShards(ctx, input)
@@ -131,17 +132,15 @@ func (c *Client) ListShards(ctx context.Context, streamARN string) ([]string, er
 			return nil, err
 		}
 
-		for _, s := range out.Shards {
-			shardIDs = append(shardIDs, *s.ShardId)
-		}
+		shards = append(shards, out.Shards...)
 
 		if out.NextToken == nil {
 			break
 		}
-		lastSeenShardID = ptr.New(sliceu.Last(shardIDs))
+		nextToken = out.NextToken
 	}
 
-	return shardIDs, nil
+	return shards, nil
 }
 
 type DeleteStreamParams struct {

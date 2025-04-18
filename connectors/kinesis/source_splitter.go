@@ -43,10 +43,13 @@ func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.Sour
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var err error
-	s.shardIDs, err = s.client.ListShards(ctx, s.streamARN)
+	shards, err := s.client.ListShards(ctx, s.streamARN)
 	if err != nil {
 		return nil, fmt.Errorf("kinesis.SourceSplitter failed to discover splits: %w", err)
+	}
+	s.shardIDs = make([]string, len(shards))
+	for i, shard := range shards {
+		s.shardIDs[i] = *shard.ShardId
 	}
 
 	assignments := make(map[string][]*workerpb.SourceSplit, len(ids))

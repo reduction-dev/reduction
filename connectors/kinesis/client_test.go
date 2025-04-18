@@ -79,8 +79,13 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	err = kclient.PutRecordBatch(context.Background(), streamARN, writeEvents)
 	require.NoError(t, err)
 
-	shardIDs, err := kclient.ListShards(ctx, streamARN)
+	shards, err := kclient.ListShards(ctx, streamARN)
 	require.NoError(t, err)
+
+	shardIDs := make([]string, len(shards))
+	for i, shard := range shards {
+		shardIDs[i] = *shard.ShardId
+	}
 
 	assert.Equal(t, []string{"shardId-000000000000", "shardId-000000000001"}, shardIDs)
 
@@ -142,15 +147,15 @@ func TestExpiredShardIterator(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Get the shard ID
-	shardIDs, err := kclient.ListShards(t.Context(), streamARN)
+	// Get the shard
+	shards, err := kclient.ListShards(t.Context(), streamARN)
 	require.NoError(t, err)
-	require.Len(t, shardIDs, 1)
-	shardID := shardIDs[0]
+	require.Len(t, shards, 1)
+	shard := shards[0]
 
 	shardIterator, err := kclient.GetShardIterator(t.Context(), &awskinesis.GetShardIteratorInput{
 		StreamARN:         &streamARN,
-		ShardId:           &shardID,
+		ShardId:           shard.ShardId,
 		ShardIteratorType: awskinesistypes.ShardIteratorTypeTrimHorizon,
 	})
 	require.NoError(t, err)

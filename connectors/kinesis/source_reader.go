@@ -20,13 +20,16 @@ import (
 type SourceReader struct {
 	client         *Client
 	streamARN      string
-	assignedShards []*kinesisShard
+	assignedShards []*assignedShard
 	shardIndex     int
 }
 
-type kinesisShard struct {
-	id             string
-	shardIterator  string
+type assignedShard struct {
+	// Kinesis Provided Shard ID
+	id string
+	// The continuation token for the next read. Only lasts 5m and then expires.
+	shardIterator string
+	// The sequence number of the last record read from this shard.
 	sequenceNumber string
 }
 
@@ -115,9 +118,9 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 }
 
 func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
-	shards := make([]*kinesisShard, len(splits))
+	shards := make([]*assignedShard, len(splits))
 	for i, split := range splits {
-		shards[i] = &kinesisShard{
+		shards[i] = &assignedShard{
 			id:             split.SplitId,
 			sequenceNumber: string(split.Cursor),
 		}
@@ -144,7 +147,7 @@ func (s *SourceReader) Checkpoint() []byte {
 	return bs
 }
 
-func (s *SourceReader) refreshShardIterator(shard *kinesisShard) error {
+func (s *SourceReader) refreshShardIterator(shard *assignedShard) error {
 	var iteratorType kinesistypes.ShardIteratorType
 	var sequenceNumber *string
 
