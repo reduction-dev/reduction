@@ -236,6 +236,11 @@ func (s *Server) Stop() error {
 		return s.uiServer.Shutdown(gctx)
 	})
 
+	g.Go(func() error {
+		s.job.Close()
+		return nil
+	})
+
 	if err := g.Wait(); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("server shutdown error: %v", err)
 	}

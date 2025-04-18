@@ -192,6 +192,11 @@ func (j *Job) HandleSourceCheckpointComplete(ctx context.Context, snapshot *snap
 	return j.snapshotStore.AddSourceSnapshot(snapshot)
 }
 
+func (j *Job) Close() {
+	j.checkpointTicker.Stop()
+	j.sourceSplitter.Close()
+}
+
 // Evaluate the cluster state and transition to paused or running. This
 // method and others that modify the cluster state are invoked serially.
 func (j *Job) processStateUpdates() {
@@ -272,6 +277,9 @@ func (j *Job) start() error {
 			return fmt.Errorf("loading checkpoint into source splitter: %v", err)
 		}
 	}
+
+	// Allow the source splitter to start any background work
+	j.sourceSplitter.Start()
 
 	// Assign splits to the source runners
 	splitAssignments, err := j.sourceSplitter.AssignSplits(j.assembly.SourceRunnerIDs())

@@ -27,4 +27,8 @@ func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.Sour
 	return map[string][]*workerpb.SourceSplit{}, nil // No split assignment needed for stdin
 }
 
+func (s *SourceSplitter) Start() {}
+
+func (s *SourceSplitter) Close() error { return nil }
+
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

@@ -95,6 +95,7 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 		rpcServer:        rpcServer,
 		RPCListener:      rpcListener,
 		checkpointEvents: checkpointEvents,
+		job:              job,
 	}, nil
 }
 
@@ -126,6 +127,7 @@ type Server struct {
 	rpcServer        *httpu.Server
 	RPCListener      net.Listener
 	checkpointEvents chan snapshots.CheckpointEvent
+	job              *jobs.Job // Track the job to Close it on shutdown
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -170,6 +172,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) Stop() error {
 	slog.Info("stopping job server")
+	s.job.Close()
+
 	var err error
 	if s.rpcServer != nil {
 		err = s.rpcServer.Shutdown(context.Background())
