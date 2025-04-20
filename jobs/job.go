@@ -23,7 +23,7 @@ import (
 type Job struct {
 	snapshotStore       *snapshots.Store
 	log                 *slog.Logger
-	stateUpdates        chan func()
+	taskQueue           chan func() error
 	assembly            *Assembly
 	sourceSplitter      connectors.SourceSplitter
 	registry            *Registry
@@ -107,7 +107,7 @@ func New(params *NewParams) (*Job, error) {
 	job := &Job{
 		snapshotStore: snapshotStore,
 		log:           params.Logger,
-		stateUpdates:  make(chan func()),
+		taskQueue:     make(chan func() error),
 		registry:      NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
 		config:        params.JobConfig,
 		clock:         params.Clock,
@@ -121,7 +121,7 @@ func New(params *NewParams) (*Job, error) {
 
 	ctx := context.TODO()
 
-	go job.processStateUpdates()
+	go job.processTaskQueue()
 
 	go func() {
 		for retained := range retainedCheckpointsUpdatedChan {
@@ -133,32 +133,40 @@ func New(params *NewParams) (*Job, error) {
 }
 
 func (j *Job) HandleRegisterOperator(node *jobpb.NodeIdentity) {
-	j.stateUpdates <- func() {
+	j.taskQueue <- func() error {
 		j.log.Debug("registering operator", "id", node.Id, "host", node.Host)
 		operator := j.operatorFactory("job", node)
 		j.registry.RegisterOperator(operator)
+		j.evaluateClusterStatus()
+		return nil
 	}
 }
 
 func (j *Job) HandleDeregisterOperator(op *jobpb.NodeIdentity) {
-	j.stateUpdates <- func() {
+	j.taskQueue <- func() error {
 		j.log.Debug("deregistered operator", "id", op.Id, "host", op.Host)
 		j.registry.DeregisterOperator(op)
+		j.evaluateClusterStatus()
+		return nil
 	}
 }
 
 func (j *Job) HandleRegisterSourceRunner(node *jobpb.NodeIdentity) {
-	j.stateUpdates <- func() {
+	j.taskQueue <- func() error {
 		j.log.Debug("registered source runner", "id", node.Id, "host", node.Host)
 		sr := j.sourceRunnerFactory(node)
 		j.registry.RegisterSourceRunner(sr)
+		j.evaluateClusterStatus()
+		return nil
 	}
 }
 
 func (j *Job) HandleDeregisterSourceRunner(sr *jobpb.NodeIdentity) {
-	j.stateUpdates <- func() {
+	j.taskQueue <- func() error {
 		j.log.Debug("deregistered source runner", "id", sr.Id, "host", sr.Host)
 		j.registry.DeregisterSourceRunner(sr)
+		j.evaluateClusterStatus()
+		return nil
 	}
 }
 
@@ -200,67 +208,74 @@ func (j *Job) Close() {
 	j.sourceSplitter.Close()
 }
 
+// Process the next available task.
+func (j *Job) processTaskQueue() {
+	for update := range j.taskQueue {
+		err := update()
+		if err != nil {
+			j.log.Error("failed to process task", "err", err)
+		}
+	}
+}
+
 // Evaluate the cluster state and transition to paused or running. This
 // method and others that modify the cluster state are invoked serially.
-func (j *Job) processStateUpdates() {
-	for update := range j.stateUpdates {
-		// Process the state update
-		update()
+func (j *Job) evaluateClusterStatus() {
+	// Evaluate the cluster state
+	if purged := j.registry.Purge(); len(purged) > 0 {
+		j.log.Info("registry purged", "nodes", purged)
+	}
 
-		// Evaluate the cluster state
-		if purged := j.registry.Purge(); len(purged) > 0 {
-			j.log.Info("registry purged", "nodes", purged)
-		}
+	if j.registry.HasChanges() {
+		j.log.Info("registry updated", append(
+			[]any{
+				slog.String("status", j.status.String()),
+				slog.String("assembly", j.assembly.String()),
+			},
+			j.registry.Diagnostics()...)...)
+		j.registry.AcknowledgeChanges()
+	}
 
-		if j.registry.HasChanges() {
-			j.log.Info("registry updated", append(
-				[]any{
-					slog.String("status", j.status.String()),
-					slog.String("assembly", j.assembly.String()),
-				},
-				j.registry.Diagnostics()...)...)
-			j.registry.AcknowledgeChanges()
-		}
-
-		// Transition the job to new state if needed
-		switch j.status.Value() {
-		case StatusRunning:
-			if ok, reason := j.assembly.Healthy(j.registry); !ok {
-				j.log.Info("assembly not healthy", "reason", reason)
-				j.status.Set(StatusPaused)
-				if j.checkpointTicker != nil {
-					j.checkpointTicker.Stop()
-				}
+	// Transition the job to new state if needed
+	switch j.status.Value() {
+	case StatusRunning:
+		if ok, reason := j.assembly.Healthy(j.registry); !ok {
+			j.log.Info("assembly not healthy", "reason", reason)
+			j.status.Set(StatusPaused)
+			if j.checkpointTicker != nil {
+				j.checkpointTicker.Stop()
 			}
+		}
 
-		case StatusInit, StatusPaused:
-			// Try to create a new assembly if there are enough nodes
-			assembly, err := j.registry.NewAssembly()
-			if err != nil {
-				// Not enough resources yet, continue waiting
-				if errors.Is(err, ErrNotEnoughResources) {
-					break
-				}
-				j.log.Error("failed to assemble resources", "err", err)
+	case StatusInit, StatusPaused:
+		// Try to create a new assembly if there are enough nodes
+		assembly, err := j.registry.NewAssembly()
+		if err != nil {
+			// Not enough resources yet, continue waiting
+			if errors.Is(err, ErrNotEnoughResources) {
 				break
 			}
-
-			j.status.Set(StatusAssemblyStarting)
-			j.assembly = assembly
-
-			go func() {
-				err := j.start()
-				if err != nil {
-					j.stateUpdates <- func() {
-						j.log.Error("failed to start job", "err", err)
-						j.status.Set(StatusPaused)
-						if j.checkpointTicker != nil {
-							j.checkpointTicker.Stop()
-						}
-					}
-				}
-			}()
+			j.log.Error("failed to assemble resources", "err", err)
+			break
 		}
+
+		j.status.Set(StatusAssemblyStarting)
+		j.assembly = assembly
+
+		go func() {
+			err := j.start()
+			if err != nil {
+				j.taskQueue <- func() error {
+					j.log.Error("failed to start job", "err", err)
+					j.status.Set(StatusPaused)
+					if j.checkpointTicker != nil {
+						j.checkpointTicker.Stop()
+					}
+					j.evaluateClusterStatus()
+					return nil
+				}
+			}
+		}()
 	}
 }
 
@@ -298,7 +313,7 @@ func (j *Job) start() error {
 	// Assign the splits to the source runners
 	j.assembly.AssignSplits(splitAssignments)
 
-	j.stateUpdates <- func() {
+	j.taskQueue <- func() error {
 		j.log.Info("running")
 		j.status.Set(StatusRunning)
 
@@ -312,6 +327,8 @@ func (j *Job) start() error {
 				j.log.Error("failed to start checkpoint", "err", err)
 			}
 		}, "checkpointing")
+		j.evaluateClusterStatus()
+		return nil
 	}
 
 	return nil
