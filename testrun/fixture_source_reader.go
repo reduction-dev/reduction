@@ -19,7 +19,7 @@ func (f *fixtureSourceReader) ReadEvents() ([][]byte, error) {
 	return f.events, connectors.ErrEndOfInput
 }
 
-func (f *fixtureSourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (f *fixtureSourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	return nil
 }
 

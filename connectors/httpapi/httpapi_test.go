@@ -46,7 +46,7 @@ func TestReadWriteBatchOfEvents(t *testing.T) {
 		Addr:   svr.URL(),
 		Topics: []string{"topic-a"},
 	})
-	source.SetSplits([]*workerpb.SourceSplit{{
+	source.AssignSplits([]*workerpb.SourceSplit{{
 		SplitId:  "only",
 		SourceId: "tbd",
 	}})
@@ -90,7 +90,7 @@ func TestReadWriteSingleEvents(t *testing.T) {
 		Addr:   svr.URL(),
 		Topics: []string{"topic-a"},
 	})
-	source.SetSplits([]*workerpb.SourceSplit{{
+	source.AssignSplits([]*workerpb.SourceSplit{{
 		SplitId:  "only",
 		SourceId: "tbd",
 	}})

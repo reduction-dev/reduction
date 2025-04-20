@@ -44,7 +44,7 @@ func TestSourceReader_ProvisionedThroughputExceededIsRetried(t *testing.T) {
 		Client:    client,
 		StreamARN: streamARN,
 	})
-	err = reader.SetSplits([]*workerpb.SourceSplit{{SplitId: "shardId-000000000000"}})
+	err = reader.AssignSplits([]*workerpb.SourceSplit{{SplitId: "shardId-000000000000"}})
 	require.NoError(t, err, "should set splits")
 
 	// Configure the fake to return a throughput exceeded error
@@ -98,7 +98,7 @@ func TestSourceReader_AccessDeniedIsTerminal(t *testing.T) {
 		Client:    client,
 		StreamARN: streamARN,
 	})
-	err = reader.SetSplits([]*workerpb.SourceSplit{
+	err = reader.AssignSplits([]*workerpb.SourceSplit{
 		{SplitId: "shardId-000000000000"},
 	})
 	assert.NoError(t, err, "should set splits")

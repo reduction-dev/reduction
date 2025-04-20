@@ -50,7 +50,7 @@ func (a *Assembly) Healthy(registry NodeRegistry) (bool, string) {
 }
 
 // Start tells the assembly of nodes to begin working from a checkpoint
-func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, splitAssignments map[string][]*workerpb.SourceSplit) error {
+func (a *Assembly) Deploy(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint) error {
 	// Gather attributes source runner messages
 	srIdentities := make([]*jobpb.NodeIdentity, len(a.sourceRunners))
 	srIDs := make([]string, len(a.sourceRunners))
@@ -68,8 +68,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 	eg, gctx := errgroup.WithContext(context.Background())
 	for _, sr := range a.sourceRunners {
 		eg.Go(func() error {
-			return sr.Start(gctx, &workerpb.StartSourceRunnerRequest{
-				Splits:        splitAssignments[sr.ID()],
+			return sr.Deploy(gctx, &workerpb.DeploySourceRunnerRequest{
 				Operators:     opIdentities,
 				KeyGroupCount: int32(cfg.KeyGroupCount),
 				Sources: sliceu.Map(cfg.Sources, func(s connectors.SourceConfig) *jobconfigpb.Source {
@@ -88,7 +87,7 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 	opCkptAssignments := partitioning.AssignRanges(cfg.KeySpace().KeyGroupRanges(), ckptRanges)
 	for i, op := range a.operators {
 		eg.Go(func() error {
-			return op.Start(gctx, &workerpb.StartOperatorRequest{
+			return op.Deploy(gctx, &workerpb.DeployOperatorRequest{
 				Operators:       opIdentities,
 				SourceRunnerIds: srIDs,
 				Checkpoints:     sliceu.Pick(ckpt.GetOperatorCheckpoints(), opCkptAssignments[i]),
@@ -102,6 +101,16 @@ func (a *Assembly) Start(cfg *config.Config, ckpt *snapshotpb.JobCheckpoint, spl
 	}
 
 	return eg.Wait()
+}
+
+func (a *Assembly) AssignSplits(splits map[string][]*workerpb.SourceSplit) error {
+	g, gctx := errgroup.WithContext(context.Background())
+	for _, sr := range a.sourceRunners {
+		g.Go(func() error {
+			return sr.AssignSplits(gctx, splits[sr.ID()])
+		})
+	}
+	return g.Wait()
 }
 
 func (a *Assembly) StartCheckpoint(ctx context.Context, id uint64) error {

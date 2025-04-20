@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
+	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
 	"reduction.dev/reduction/util/ds"
@@ -61,11 +62,11 @@ func TestCheckpointing(t *testing.T) {
 	}
 
 	// Assign splits to source readers
-	ss := config.NewSourceSplitter()
+	ss := config.NewSourceSplitter(connectors.NoOpSourceSplitterHooks)
 	splitAssignments, err := ss.AssignSplits(sourceReaderIDs)
 	require.NoError(t, err)
 	for id, sr := range srs.All() {
-		sr.SetSplits(splitAssignments[id])
+		sr.AssignSplits(splitAssignments[id])
 	}
 
 	// Read half the events from the splits
@@ -107,7 +108,7 @@ func TestCheckpointing(t *testing.T) {
 	splitAssignments, err = ss.AssignSplits(sourceReaderIDs)
 	require.NoError(t, err)
 	for id, sr := range srs.All() {
-		sr.SetSplits(splitAssignments[id])
+		sr.AssignSplits(splitAssignments[id])
 	}
 
 	// Read newly written events from the splits
@@ -167,10 +168,10 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	sr := kinesis.NewSourceReader(config)
 
 	// Assign split to source reader
-	ss := config.NewSourceSplitter()
+	ss := config.NewSourceSplitter(connectors.NoOpSourceSplitterHooks)
 	splitAssignments, err := ss.AssignSplits([]string{"sr1"})
 	require.NoError(t, err)
-	err = sr.SetSplits(splitAssignments["sr1"])
+	err = sr.AssignSplits(splitAssignments["sr1"])
 	require.NoError(t, err)
 
 	// Read the events initially

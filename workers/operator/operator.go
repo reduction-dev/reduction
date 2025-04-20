@@ -155,11 +155,11 @@ func (o *Operator) Halt() {
 	o.stop()
 }
 
-func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorRequest, sink connectors.SinkWriter) error {
+func (o *Operator) HandleDeploy(ctx context.Context, req *workerpb.DeployOperatorRequest, sink connectors.SinkWriter) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	o.Logger.Info("start command",
+	o.Logger.Info("deploy command",
 		"operators", req.Operators,
 		"keyGroupCount", req.KeyGroupCount,
 		"checkpoints", req.Checkpoints)
@@ -178,7 +178,7 @@ func (o *Operator) HandleStart(ctx context.Context, req *workerpb.StartOperatorR
 	o.keyGroupRange = keyGroupRanges[ownIndex]
 
 	// Create the neighbor operator partitions
-	neighborPartitions := make([]neighborPartition, len(req.Operators)-1 /* exclude self */)
+	neighborPartitions := make([]neighborPartition, 0, len(req.Operators)-1)
 	for i, op := range req.Operators {
 		if i == ownIndex {
 			continue

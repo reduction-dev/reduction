@@ -19,22 +19,39 @@ const (
 // results or an error.
 type ReadFunc func() ([][]byte, error)
 
-// NewReadSourceChannel sends read functions over a channel that the caller invokes to
+type ReadSourceChannel struct {
+	// The channel to read from
+	C chan ReadFunc
+
+	// The source reader to read from
+	sourceReader SourceReader
+
+	// signal to stop sending read functions
+	cancel context.CancelFunc
+}
+
+func NewReadSourceChannel(sourceReader SourceReader) *ReadSourceChannel {
+	return &ReadSourceChannel{
+		C:            make(chan ReadFunc),
+		sourceReader: sourceReader,
+	}
+}
+
+// Start sends read functions over a channel that the caller invokes to
 // read events from the source reader.
-func NewReadSourceChannel(ctx context.Context, sourceReader SourceReader) <-chan ReadFunc {
-	channel := make(chan ReadFunc)
+func (c *ReadSourceChannel) Start(ctx context.Context) {
+	// Allow Stop to cancel the loop
+	ctx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
 
-	// Start a goroutine to manage the channel
 	go func() {
-		defer close(channel)
-
 		// Track if we've received end of input
 		atEOI := false
 
 		// Track consecutive failures for backoff calculations
 		consecutiveFailures := 0
 
-		// Singal that the previous `ReadFunc` finished
+		// Signal that the previous `ReadFunc` finished
 		readComplete := make(chan struct{}, 1)
 		readComplete <- struct{}{}
 
@@ -54,9 +71,10 @@ func NewReadSourceChannel(ctx context.Context, sourceReader SourceReader) <-chan
 			select {
 			case <-ctx.Done():
 				return
-			case channel <- func() ([][]byte, error) {
+			case c.C <- func() ([][]byte, error) {
 				defer func() { readComplete <- struct{}{} }()
-				events, err := sourceReader.ReadEvents()
+
+				events, err := c.sourceReader.ReadEvents()
 				if errors.Is(err, ErrEndOfInput) {
 					// Stop sending read functions
 					atEOI = true
@@ -79,8 +97,24 @@ func NewReadSourceChannel(ctx context.Context, sourceReader SourceReader) <-chan
 			}
 		}
 	}()
+}
 
-	return channel
+// Stop stops sending read functions over the channel. The channel can be
+// Started again.
+func (c *ReadSourceChannel) Stop() {
+	// Cancel the context to stop the loop
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
+}
+
+func (c *ReadSourceChannel) Close() {
+	if c.cancel != nil {
+		c.cancel()
+	}
+
+	close(c.C)
 }
 
 // backoff sleeps for an increasingly longer duration as failures accumulate, up

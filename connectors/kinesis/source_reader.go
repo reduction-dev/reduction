@@ -117,7 +117,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	shards := make([]*assignedShard, len(splits))
 	for i, split := range splits {
 		shards[i] = &assignedShard{

@@ -29,8 +29,15 @@ func NewSourceRunnerConnectClient(identity *jobpb.NodeIdentity, opts ...connect.
 	}
 }
 
-func (c *SourceRunnerConnectClient) Start(ctx context.Context, req *workerpb.StartSourceRunnerRequest) error {
-	_, err := c.sourceRunnerClient.Start(ctx, connect.NewRequest(req))
+func (c *SourceRunnerConnectClient) Deploy(ctx context.Context, req *workerpb.DeploySourceRunnerRequest) error {
+	_, err := c.sourceRunnerClient.Deploy(ctx, connect.NewRequest(req))
+	return err
+}
+
+func (c *SourceRunnerConnectClient) AssignSplits(ctx context.Context, splits []*workerpb.SourceSplit) error {
+	_, err := c.sourceRunnerClient.AssignSplits(ctx, connect.NewRequest(&workerpb.AssignSplitsRequest{
+		Splits: splits,
+	}))
 	return err
 }
 

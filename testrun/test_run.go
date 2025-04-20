@@ -41,7 +41,7 @@ func Run(input io.Reader, output io.Writer) error {
 		opResult <- op.Start(context.Background())
 	}()
 
-	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
+	err = op.HandleDeploy(context.Background(), &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "testrun", Host: "testrun"}},
 		SourceRunnerIds: []string{"testrun"},
 		KeyGroupCount:   1,

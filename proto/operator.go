@@ -11,7 +11,7 @@ type Operator interface {
 	ID() string
 	Host() string
 	HandleEventBatch(ctx context.Context, batch []*workerpb.Event) error
-	Start(ctx context.Context, req *workerpb.StartOperatorRequest) error
+	Deploy(ctx context.Context, req *workerpb.DeployOperatorRequest) error
 	UpdateRetainedCheckpoints(ctx context.Context, ids []uint64) error
 	NeedsTable(ctx context.Context, fileURI string) (bool, error)
 }
@@ -36,7 +36,7 @@ func (u *UnimplementedOperator) NeedsTable(ctx context.Context, fileURI string) 
 	panic("unimplemented")
 }
 
-func (u *UnimplementedOperator) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
+func (u *UnimplementedOperator) Deploy(ctx context.Context, req *workerpb.DeployOperatorRequest) error {
 	panic("unimplemented")
 }
 

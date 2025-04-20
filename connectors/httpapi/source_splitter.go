@@ -7,7 +7,7 @@ import (
 	"reduction.dev/reduction/proto/workerpb"
 )
 
-func NewSourceSplitter(params SourceConfig) *SourceSplitter {
+func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
 	return &SourceSplitter{&http.Client{}, nil}
 }
 

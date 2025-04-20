@@ -95,7 +95,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	if len(splits) > 1 {
 		return fmt.Errorf("httpapi.SourceReader can handle at most one split currently but got %d", len(splits))
 	}

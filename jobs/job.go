@@ -14,6 +14,7 @@ import (
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
+	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
 	"reduction.dev/reduction/util/sliceu"
@@ -104,13 +105,15 @@ func New(params *NewParams) (*Job, error) {
 	}
 
 	job := &Job{
-		snapshotStore:       snapshotStore,
-		log:                 params.Logger,
-		stateUpdates:        make(chan func()),
-		registry:            NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
-		config:              params.JobConfig,
-		clock:               params.Clock,
-		sourceSplitter:      params.JobConfig.Sources[0].NewSourceSplitter(),
+		snapshotStore: snapshotStore,
+		log:           params.Logger,
+		stateUpdates:  make(chan func()),
+		registry:      NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
+		config:        params.JobConfig,
+		clock:         params.Clock,
+		sourceSplitter: params.JobConfig.Sources[0].NewSourceSplitter(connectors.SourceSplitterHooks{
+			OnSplitAssignmentsUpdated: func(map[string][]*workerpb.SourceSplit) {},
+		}),
 		operatorFactory:     params.OperatorFactory,
 		sourceRunnerFactory: params.SourceRunnerFactory,
 		status:              newJobStatus(),
@@ -288,9 +291,12 @@ func (j *Job) start() error {
 	}
 
 	// Start the assembly
-	if err := j.assembly.Start(j.config, ckpt, splitAssignments); err != nil {
+	if err := j.assembly.Deploy(j.config, ckpt); err != nil {
 		return fmt.Errorf("starting assembly: %v", err)
 	}
+
+	// Assign the splits to the source runners
+	j.assembly.AssignSplits(splitAssignments)
 
 	j.stateUpdates <- func() {
 		j.log.Info("running")

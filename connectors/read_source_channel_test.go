@@ -18,25 +18,27 @@ func TestNewReadSourceChannel_ReturnsEventsFromSourceReader(t *testing.T) {
 		returnEOIAfterCallCount: 2,
 	}
 
-	channel := connectors.NewReadSourceChannel(t.Context(), reader)
+	rsc := connectors.NewReadSourceChannel(reader)
+	rsc.Start(t.Context())
 
 	// Read first set of events
-	readFunc := <-channel
+	readFunc := <-rsc.C
 	receivedEvents, err := readFunc()
 	assert.NoError(t, err)
 	assert.Equal(t, events, receivedEvents)
 	assert.Equal(t, 1, reader.callCount)
 
 	// Read second set (which will trigger EOI)
-	readFunc = <-channel
+	readFunc = <-rsc.C
 	receivedEvents, err = readFunc()
 	assert.NoError(t, err, "EOI is hidden from caller")
 	assert.Equal(t, events, receivedEvents)
 	assert.Equal(t, 2, reader.callCount)
 
-	// Channel should be closed after EOI
-	_, ok := <-channel
-	assert.False(t, ok, "channel should be closed after EOI")
+	// No more readFuncs sent after EOI
+	rsc.Close()
+	_, ok := <-rsc.C
+	assert.False(t, ok, "channel should be closed")
 }
 
 func TestNewReadSourceChannel_PropagatesErrors(t *testing.T) {
@@ -45,34 +47,42 @@ func TestNewReadSourceChannel_PropagatesErrors(t *testing.T) {
 		err: expectedErr,
 	}
 
-	channel := connectors.NewReadSourceChannel(t.Context(), reader)
-	readFunc := <-channel
+	rsc := connectors.NewReadSourceChannel(reader)
+	rsc.Start(t.Context())
+
+	readFunc := <-rsc.C
 	events, err := readFunc()
 	assert.ErrorIs(t, err, expectedErr)
 	assert.Nil(t, events)
 }
 
-func TestNewReadSourceChannel_ClosesOnContextCancellation(t *testing.T) {
+func TestNewReadSourceChannel_StopsOnContextCancellation(t *testing.T) {
 	reader := &fakeSourceReader{
 		events: [][]byte{[]byte("event")},
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	channel := connectors.NewReadSourceChannel(ctx, reader)
+	rsc := connectors.NewReadSourceChannel(reader)
+	rsc.Start(ctx)
 
-	// Cancel the context
+	// Read the first function
+	readFunc := <-rsc.C
+
+	// Cancel the context before calling the read function
 	cancel()
 
-	// The channel should be closed soon
-	assert.Eventually(t, func() bool {
-		_, ok := <-channel
-		return !ok
-	}, time.Second, 10*time.Millisecond, "channel should be closed after context cancellation")
+	// Call the read function to unblock the channel
+	_, _ = readFunc()
+
+	// Closing channel shows that are no more read functions
+	rsc.Close()
+	_, ok := <-rsc.C
+	assert.False(t, ok, "channel should be closed")
+
 }
 
 func TestNewReadSourceChannel_Backoff(t *testing.T) {
 	retryableErr := connectors.NewRetryableError(errors.New("temporary error"))
-	// terminalErr := connectors.NewTerminalError(errors.New("terminal error"))
 	reader := &fakeSourceReader{
 		err: retryableErr,
 	}
@@ -81,11 +91,12 @@ func TestNewReadSourceChannel_Backoff(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
-		channel := connectors.NewReadSourceChannel(ctx, reader)
+		rsc := connectors.NewReadSourceChannel(reader)
+		rsc.Start(ctx)
 
 		// Read the first function
 		beforeReadTime := time.Now()
-		readFunc := <-channel
+		readFunc := <-rsc.C
 		_, err := readFunc()
 		assert.ErrorIs(t, err, retryableErr)
 		assert.Equal(t, time.Now(), beforeReadTime, "no backoff applied")
@@ -96,7 +107,7 @@ func TestNewReadSourceChannel_Backoff(t *testing.T) {
 
 		// Read the second function
 		beforeReadTime = time.Now()
-		readFunc = <-channel
+		readFunc = <-rsc.C
 		_, err = readFunc()
 		assert.ErrorIs(t, err, terminalErr)
 		assert.Equal(t, time.Now(), beforeReadTime.Add(200*time.Millisecond), "200ms backoff applied")

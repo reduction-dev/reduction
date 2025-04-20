@@ -20,12 +20,12 @@ type SourceSplitter struct {
 	cursors   map[string]string
 }
 
-func NewSourceSplitter(params SourceConfig) *SourceSplitter {
-	client := params.Client
+func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
+	client := config.Client
 	if client == nil {
 		var err error
 		client, err = NewClient(&NewClientParams{
-			Endpoint: params.Endpoint,
+			Endpoint: config.Endpoint,
 		})
 		if err != nil {
 			log.Fatalf("Failed to create Kinesis Client: %s", err)
@@ -34,8 +34,9 @@ func NewSourceSplitter(params SourceConfig) *SourceSplitter {
 
 	return &SourceSplitter{
 		client:    client,
-		streamARN: params.StreamARN,
+		streamARN: config.StreamARN,
 		cursors:   make(map[string]string),
+		// TODO: Use splitterParams.OnSplitAssignmentsUpdated
 	}
 }
 

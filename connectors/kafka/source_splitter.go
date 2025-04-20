@@ -22,7 +22,7 @@ type SourceSplitter struct {
 }
 
 // NewSourceSplitter creates a Kafka source splitter
-func NewSourceSplitter(config SourceConfig) (*SourceSplitter, error) {
+func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) (*SourceSplitter, error) {
 	if config.Client == nil {
 		var err error
 		config.Client, err = kgo.NewClient(

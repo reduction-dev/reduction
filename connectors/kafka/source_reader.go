@@ -31,7 +31,7 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 	return &SourceReader{client: config.Client}
 }
 
-func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	offsets := NewOffsets()
 	for _, split := range splits {
 		parts := strings.Split(split.SplitId, ":")

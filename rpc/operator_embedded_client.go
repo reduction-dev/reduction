@@ -50,10 +50,10 @@ func (c *OperatorEmbeddedClient) ID() string {
 	return c.id
 }
 
-func (c *OperatorEmbeddedClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
+func (c *OperatorEmbeddedClient) Deploy(ctx context.Context, req *workerpb.DeployOperatorRequest) error {
 	// Sink parameter is nil because this code is currently used in testrun, where
 	// the caller provides an in-memory sink for testing.
-	return c.op.HandleStart(ctx, req, nil)
+	return c.op.HandleDeploy(ctx, req, nil)
 }
 
 func (c *OperatorEmbeddedClient) UpdateRetainedCheckpoints(ctx context.Context, ids []uint64) error {

@@ -56,8 +56,9 @@ func (c *OperatorConnectClient) HandleEventBatch(ctx context.Context, events []*
 	return err
 }
 
-func (c *OperatorConnectClient) Start(ctx context.Context, req *workerpb.StartOperatorRequest) error {
-	_, err := c.connectClient.Start(ctx, connect.NewRequest(req))
+// Deploy sends the Deploy request to the operator worker.
+func (c *OperatorConnectClient) Deploy(ctx context.Context, req *workerpb.DeployOperatorRequest) error {
+	_, err := c.connectClient.Deploy(ctx, connect.NewRequest(req))
 	return err
 }
 

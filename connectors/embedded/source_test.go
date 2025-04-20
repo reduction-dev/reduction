@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/embedded"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/iteru"
@@ -18,7 +19,7 @@ func TestGeneratingIncNums(t *testing.T) {
 		BatchSize:   3,
 		GeneratorID: "inc-nums",
 	}
-	ss := embedded.NewSourceSplitter(config)
+	ss := embedded.NewSourceSplitter(config, connectors.NoOpSourceSplitterHooks)
 
 	sourceReaderIDs := []string{"sr1", "sr2"}
 	splitAssignments, err := ss.AssignSplits(sourceReaderIDs)
@@ -28,7 +29,7 @@ func TestGeneratingIncNums(t *testing.T) {
 	srs := ds.NewSortedMap[string, *embedded.SourceReader]()
 	for id, splits := range splitAssignments {
 		sr := embedded.NewSourceReader(config)
-		sr.SetSplits(splits)
+		sr.AssignSplits(splits)
 		srs.Set(id, sr)
 	}
 

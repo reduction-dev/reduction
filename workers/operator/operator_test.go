@@ -37,7 +37,7 @@ func TestOperatorUsesMinimumOfSourceWatermarks(t *testing.T) {
 	ctx := context.Background()
 
 	sink := &embedded.RecordingSink{}
-	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
+	err := op.HandleDeploy(ctx, &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
@@ -111,7 +111,7 @@ func TestOperatorAlignsOnCheckpointBarriers(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	sink := &embedded.RecordingSink{}
-	op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
+	op.HandleDeploy(context.Background(), &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
@@ -175,7 +175,7 @@ func TestOperatorAlignsOnCheckpointBarriers(t *testing.T) {
 	assert.Equal(t, 3, workerstest.UnmarshalSumState(sliceu.Last(sink.Values)).Sum)
 
 	// Restart the operator from the checkpoint
-	op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
+	op.HandleDeploy(context.Background(), &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"sr1", "sr2"},
 		KeyGroupCount:   256,
@@ -236,7 +236,7 @@ func TestOperatorStatusTransitions(t *testing.T) {
 	// After HandleStart it should transition to Loading, then Ready (Loading
 	// state is untested)
 	sink := &embedded.RecordingSink{}
-	err = op.HandleStart(context.Background(), &workerpb.StartOperatorRequest{
+	err = op.HandleDeploy(context.Background(), &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"src1"},
 		KeyGroupCount:   256,
@@ -274,7 +274,7 @@ func TestUniqueKeyStatesInProcessEventBatchRequest(t *testing.T) {
 
 	// Initialize operator
 	sink := &embedded.RecordingSink{}
-	err := op.HandleStart(ctx, &workerpb.StartOperatorRequest{
+	err := op.HandleDeploy(ctx, &workerpb.DeployOperatorRequest{
 		Operators:       []*jobpb.NodeIdentity{{Id: "op1", Host: "op1-host"}},
 		SourceRunnerIds: []string{"src1"},
 		KeyGroupCount:   256,

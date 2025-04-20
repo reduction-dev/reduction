@@ -10,7 +10,8 @@ import (
 type SourceRunner interface {
 	Host() string
 	ID() string
-	Start(context.Context, *workerpb.StartSourceRunnerRequest) error
+	Deploy(context.Context, *workerpb.DeploySourceRunnerRequest) error
+	AssignSplits(context.Context, []*workerpb.SourceSplit) error
 	StartCheckpoint(ctx context.Context, id uint64) error
 }
 
@@ -26,7 +27,11 @@ func (u *UnimplementedSourceRunner) ID() string {
 	panic("unimplemented")
 }
 
-func (u *UnimplementedSourceRunner) Start(context.Context, *workerpb.StartSourceRunnerRequest) error {
+func (u *UnimplementedSourceRunner) Deploy(context.Context, *workerpb.DeploySourceRunnerRequest) error {
+	panic("unimplemented")
+}
+
+func (u *UnimplementedSourceRunner) AssignSplits(context.Context, []*workerpb.SourceSplit) error {
 	panic("unimplemented")
 }
 

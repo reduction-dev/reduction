@@ -10,18 +10,19 @@ option go_package = "reduction.dev/reduction/proto/workerpb";
 package worker;
 
 service Operator {
-  rpc Start(StartOperatorRequest) returns (Empty);
+  rpc Deploy(DeployOperatorRequest) returns (Empty);
   rpc HandleEventBatch(HandleEventBatchRequest) returns (Empty);
   rpc UpdateRetainedCheckpoints(UpdateRetainedCheckpointsRequest) returns (Empty);
   rpc NeedsTable(NeedsTableRequest) returns (NeedsTableResponse);
 }
 
 service SourceRunner {
-  rpc Start(StartSourceRunnerRequest) returns (Empty);
+  rpc Deploy(DeploySourceRunnerRequest) returns (Empty);
+  rpc AssignSplits(AssignSplitsRequest) returns (Empty);
   rpc StartCheckpoint(StartCheckpointRequest) returns (Empty);
 }
 
-message StartOperatorRequest {
+message DeployOperatorRequest {
   repeated job.NodeIdentity operators = 1;
   repeated string source_runner_ids = 2;
   repeated snapshot.OperatorCheckpoint checkpoints = 3;
@@ -56,18 +57,22 @@ message Watermark {
   google.protobuf.Timestamp timestamp = 2;
 }
 
+message DeploySourceRunnerRequest {
+  repeated job.NodeIdentity operators = 2;
+  int32 key_group_count = 3;
+  repeated dev.reduction.jobconfig.Source sources = 4;
+}
+
+message AssignSplitsRequest {
+  repeated SourceSplit splits = 1;
+}
+
 message SourceSplit {
   string split_id = 1;
   string source_id = 2;
   bytes cursor = 3;
 }
 
-message StartSourceRunnerRequest {
-  repeated SourceSplit splits = 1;
-  repeated job.NodeIdentity operators = 2;
-  int32 key_group_count = 3;
-  repeated dev.reduction.jobconfig.Source sources = 4;
-}
 
 message StartCheckpointRequest {
   uint64 checkpoint_id = 1;

@@ -11,7 +11,7 @@ import (
 	"reduction.dev/reduction/util/sliceu"
 )
 
-func NewSourceSplitter(config SourceConfig) *SourceSplitter {
+func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
 	return &SourceSplitter{
 		splitCount:         config.SplitCount,
 		checkpointedSplits: make(map[string]*workerpb.SourceSplit),

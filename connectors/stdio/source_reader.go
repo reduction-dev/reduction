@@ -57,7 +57,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	// No split assignment needed for stdin
 	return nil
 }

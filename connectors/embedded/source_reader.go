@@ -49,7 +49,9 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-func (s *SourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+// TODO: Change the semantics of this method so that it only adds new splits
+// and does not remove any existing splits.
+func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	nextSplits := make([]*split, len(splits))
 	for i, sp := range splits {
 		readerSplit := &split{SplitID: sp.SplitId}

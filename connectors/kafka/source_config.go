@@ -23,8 +23,8 @@ func (c SourceConfig) NewSourceReader() connectors.SourceReader {
 	return NewSourceReader(c)
 }
 
-func (c SourceConfig) NewSourceSplitter() connectors.SourceSplitter {
-	splitter, err := NewSourceSplitter(c)
+func (c SourceConfig) NewSourceSplitter(hooks connectors.SourceSplitterHooks) connectors.SourceSplitter {
+	splitter, err := NewSourceSplitter(c, hooks)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Kafka source splitter: %v", err))
 	}

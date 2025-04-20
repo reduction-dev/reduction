@@ -4,7 +4,7 @@ import "reduction.dev/reduction/proto/workerpb"
 
 type SourceReader interface {
 	ReadEvents() ([][]byte, error)
-	SetSplits(splits []*workerpb.SourceSplit) error
+	AssignSplits(splits []*workerpb.SourceSplit) error
 	Checkpoint() []byte
 }
 
@@ -18,7 +18,7 @@ func (u *UnimplementedSourceReader) ReadEvents() ([][]byte, error) {
 	panic("unimplemented")
 }
 
-func (u *UnimplementedSourceReader) SetSplits(splits []*workerpb.SourceSplit) error {
+func (u *UnimplementedSourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	panic("unimplemented")
 }
 

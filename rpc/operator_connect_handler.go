@@ -34,12 +34,12 @@ func (l *OperatorConnectHandler) HandleEventBatch(ctx context.Context, req *conn
 	return connect.NewResponse(&workerpb.Empty{}), nil
 }
 
-func (l *OperatorConnectHandler) Start(ctx context.Context, req *connect.Request[workerpb.StartOperatorRequest]) (*connect.Response[workerpb.Empty], error) {
+func (l *OperatorConnectHandler) Deploy(ctx context.Context, req *connect.Request[workerpb.DeployOperatorRequest]) (*connect.Response[workerpb.Empty], error) {
 	if len(req.Msg.Sinks) != 1 {
 		panic("exactly one Sink config required")
 	}
 	sink := config.NewSinkFromProto(req.Msg.GetSinks()[0])
-	err := l.operator.HandleStart(ctx, req.Msg, sink)
+	err := l.operator.HandleDeploy(ctx, req.Msg, sink)
 	return connect.NewResponse(&workerpb.Empty{}), err
 }
 

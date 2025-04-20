@@ -44,14 +44,17 @@ type SourceRunner struct {
 	batchingParams      batching.EventBatcherParams
 	outputStream        chan *workerpb.Event
 	keyEventChannel     *batching.ReorderFetcher[[]byte, []*handlerpb.KeyedEvent]
-	initDone            chan struct{}              // Used by HandleStart to wait until Start finishes initializing
-	sourceChannel       <-chan connectors.ReadFunc // The channel to read events from the source
+	initDone            chan struct{}                 // Used by HandleStart to wait until Start finishes initializing
+	sourceChannel       *connectors.ReadSourceChannel // The channel to read events from the source
 
 	// Checkpoint barriers are enqueued for processing in series with other events.
 	checkpointBarrier chan *workerpb.CheckpointBarrier
 
 	Logger         *slog.Logger
 	registerPoller *clocks.Ticker
+
+	// Add a context field to SourceRunner for use in HandleAssignSplits
+	ctx context.Context
 }
 
 type NewParams struct {
@@ -173,8 +176,8 @@ func (r *SourceRunner) Halt() {
 	r.stop(nil)
 }
 
-// HandleStart is invoked by the Job when the SourceRunner has joined an assembly.
-func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourceRunnerRequest) error {
+// HandleDeploy is invoked by the Job when the SourceRunner has joined an assembly.
+func (r *SourceRunner) HandleDeploy(ctx context.Context, msg *workerpb.DeploySourceRunnerRequest) error {
 	<-r.initDone // Wait for Start to finish initializing
 
 	if len(msg.Sources) != 1 {
@@ -183,32 +186,26 @@ func (r *SourceRunner) HandleStart(ctx context.Context, msg *workerpb.StartSourc
 
 	r.watermarkTicker = time.NewTicker(time.Millisecond * 200)
 
-	r.sourceReader = r.sourceReaderFactory(msg.Sources[0])
-	if err := r.sourceReader.SetSplits(msg.Splits); err != nil {
-		return err
-	}
+	deploymentCtx, cancel := context.WithCancel(context.Background())
+	r.stopLoop = cancel
+	r.ctx = deploymentCtx // assign loopCtx to r.ctx for later use
 
-	loopCtx, cancel := context.WithCancel(context.Background())
+	r.sourceReader = r.sourceReaderFactory(msg.Sources[0])
+	r.sourceChannel = connectors.NewReadSourceChannel(r.sourceReader)
 
 	ops := make([]proto.Operator, len(msg.Operators))
 	for i, op := range msg.Operators {
 		ops[i] = r.operatorFactory(r.ID, op)
 	}
-	r.operators = newOperatorCluster(loopCtx, &newClusterParams{
+	r.operators = newOperatorCluster(r.ctx, &newClusterParams{
 		keyGroupCount:  int(msg.KeyGroupCount),
 		operators:      ops,
 		batchingParams: r.batchingParams,
 		errChan:        r.errChan,
 	})
 
-	// Create a new source channel only if there are splits to read
-	if len(msg.Splits) > 0 {
-		r.sourceChannel = connectors.NewReadSourceChannel(loopCtx, r.sourceReader)
-	}
-
-	r.stopLoop = cancel
 	go func() {
-		if err := r.processEvents(loopCtx); err != nil {
+		if err := r.processEvents(r.ctx); err != nil {
 			r.Logger.Error("processEvents stopped with error", "err", err)
 		}
 		cancel()
@@ -237,7 +234,7 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 				return fmt.Errorf("creating checkpoint: %w", err)
 			}
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_CheckpointBarrier{CheckpointBarrier: barrier}}
-		case readFunc, ok := <-r.sourceChannel:
+		case readFunc, ok := <-r.sourceChannel.C:
 			if !ok {
 				// Channel closed, Flush events, Send watermark, send source complete event
 				r.keyEventChannel.Flush(ctx)
@@ -319,4 +316,19 @@ func (r *SourceRunner) createCheckpoint(id uint64) error {
 		Data:           data,
 		SourceRunnerId: r.ID,
 	})
+}
+
+// HandleAssignSplits is invoked to assign new splits and start reading from them.
+func (r *SourceRunner) HandleAssignSplits(splits []*workerpb.SourceSplit) error {
+	if r.sourceReader == nil {
+		return fmt.Errorf("sourceReader is not initialized")
+	}
+	if err := r.sourceReader.AssignSplits(splits); err != nil {
+		return err
+	}
+	// TODO: Add method r.sourceReader.HasSplits() to check if there are splits
+	if len(splits) > 0 {
+		r.sourceChannel.Start(r.ctx)
+	}
+	return nil
 }
