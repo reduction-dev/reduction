@@ -100,8 +100,7 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 		return fmt.Errorf("httpapi.SourceReader can handle at most one split currently but got %d", len(splits))
 	}
 
-	nextSplits := make([]*split, len(splits))
-	for i, sp := range splits {
+	for _, sp := range splits {
 		readerSplit := &split{splitID: sp.SplitId}
 
 		// Read the binary cursor if available
@@ -114,9 +113,8 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 			readerSplit.cursor = int(cursor)
 		}
 
-		nextSplits[i] = readerSplit
+		s.splits = append(s.splits, readerSplit)
 	}
-	s.splits = nextSplits
 
 	return nil
 }

@@ -28,11 +28,14 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 			panic(fmt.Sprintf("failed to create Kafka client: %v", err))
 		}
 	}
-	return &SourceReader{client: config.Client}
+	return &SourceReader{
+		client:  config.Client,
+		offsets: NewOffsets(),
+	}
 }
 
 func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
-	offsets := NewOffsets()
+	newOffsets := NewOffsets()
 	for _, split := range splits {
 		parts := strings.Split(split.SplitId, ":")
 		if len(parts) != 2 {
@@ -50,11 +53,11 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 			}
 		}
 		topic := parts[0]
-		offsets.Set(topic, int32(partition), offset)
+		s.offsets.Set(topic, int32(partition), offset)
+		newOffsets.Set(topic, int32(partition), offset)
 	}
-	s.offsets = offsets
 
-	s.client.AddConsumePartitions(s.offsets.AsPartitions())
+	s.client.AddConsumePartitions(newOffsets.AsPartitions())
 	return nil
 }
 

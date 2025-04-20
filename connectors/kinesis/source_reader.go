@@ -118,14 +118,12 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 }
 
 func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
-	shards := make([]*assignedShard, len(splits))
-	for i, split := range splits {
-		shards[i] = &assignedShard{
+	for _, split := range splits {
+		s.assignedShards = append(s.assignedShards, &assignedShard{
 			id:             split.SplitId,
 			sequenceNumber: string(split.Cursor),
-		}
+		})
 	}
-	s.assignedShards = shards
 	return nil
 }
 

@@ -49,11 +49,9 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-// TODO: Change the semantics of this method so that it only adds new splits
-// and does not remove any existing splits.
+// AssignSplits assigns new splits to the reader.
 func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
-	nextSplits := make([]*split, len(splits))
-	for i, sp := range splits {
+	for _, sp := range splits {
 		readerSplit := &split{SplitID: sp.SplitId}
 
 		// Read the binary cursor if available
@@ -66,10 +64,9 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 			readerSplit.Cursor = int(cursor)
 		}
 
-		nextSplits[i] = readerSplit
+		s.splits = append(s.splits, readerSplit)
 	}
 
-	s.splits = nextSplits
 	return nil
 }
 
