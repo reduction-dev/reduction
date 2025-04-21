@@ -12,6 +12,9 @@ service Job {
   rpc DeregisterOperator(NodeIdentity) returns (Empty);
   rpc OperatorCheckpointComplete(snapshot.OperatorCheckpoint) returns (Empty);
   rpc SourceCheckpointComplete(snapshot.SourceCheckpoint) returns (Empty);
+
+  // Notifies the job that splits have been finished by a SourceRunner.
+  rpc NotifySplitsFinished(NotifySplitsFinishedRequest) returns (Empty);
 }
 
 service JobUI {
@@ -36,4 +39,9 @@ message GetSavepointRequest {
 
 message GetSavepointResponse {
   string uri = 1;
+}
+
+message NotifySplitsFinishedRequest {
+  string source_runner_id = 1;
+  repeated string split_ids = 2;
 }

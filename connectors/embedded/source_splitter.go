@@ -77,4 +77,6 @@ func (s *SourceSplitter) IsSourceSplitter() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 
+func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []string) {}
+
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

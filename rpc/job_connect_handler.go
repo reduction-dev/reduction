@@ -55,4 +55,9 @@ func (l *JobConnectHandler) DeregisterSourceRunner(ctx context.Context, req *con
 	return connect.NewResponse(&jobpb.Empty{}), nil
 }
 
+func (l *JobConnectHandler) NotifySplitsFinished(ctx context.Context, req *connect.Request[jobpb.NotifySplitsFinishedRequest]) (*connect.Response[jobpb.Empty], error) {
+	err := l.job.HandleNotifySplitsFinished(req.Msg.GetSourceRunnerId(), req.Msg.GetSplitIds())
+	return connect.NewResponse(&jobpb.Empty{}), err
+}
+
 var _ jobpbconnect.JobHandler = (*JobConnectHandler)(nil)

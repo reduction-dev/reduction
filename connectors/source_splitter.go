@@ -12,4 +12,7 @@ type SourceSplitter interface {
 
 	// Close signals the SourceSplitter to stop and clean up resources.
 	Close() error
+
+	// NotifySplitsFinished informs the splitter that the given splits have been finished.
+	NotifySplitsFinished(sourceRunnerID string, splitIDs []string)
 }

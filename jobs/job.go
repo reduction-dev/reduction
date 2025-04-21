@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"connectrpc.com/connect"
 	"reduction.dev/reduction/clocks"
 	"reduction.dev/reduction/config"
 	"reduction.dev/reduction/connectors"
@@ -200,6 +201,17 @@ func (j *Job) HandleOperatorCheckpointComplete(ctx context.Context, req *snapsho
 
 func (j *Job) HandleSourceCheckpointComplete(ctx context.Context, snapshot *snapshotpb.SourceCheckpoint) error {
 	return j.snapshotStore.AddSourceSnapshot(snapshot)
+}
+
+func (j *Job) HandleNotifySplitsFinished(sourceRunnerID string, splitIDs []string) error {
+	if j.sourceSplitter == nil {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("sourceSplitter not initialized"))
+	}
+	j.taskQueue <- func() error {
+		j.sourceSplitter.NotifySplitsFinished(sourceRunnerID, splitIDs)
+		return nil
+	}
+	return nil
 }
 
 func (j *Job) Close() {
