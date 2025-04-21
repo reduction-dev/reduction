@@ -20,9 +20,11 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	testDir := t.TempDir()
 	fs := locations.NewLocalDirectory(testDir)
 
-	checkpointEvents := make(chan snapshots.CheckpointEvent)
+	checkpointEvents := make(chan string)
+	errChan := make(chan error)
 	store := snapshots.NewStore(&snapshots.NewStoreParams{
 		CheckpointEvents: checkpointEvents,
+		ErrChan:          errChan,
 		FileStore:        fs,
 		SavepointsPath:   "savepoints",
 		CheckpointsPath:  "checkpoints",
@@ -58,8 +60,11 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for the savepoint to be created
-	result := <-checkpointEvents
-	require.NoError(t, result.Err)
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-checkpointEvents:
+	}
 
 	spURI, err := store.SavepointURIForID(cpID)
 	require.NoError(t, err)

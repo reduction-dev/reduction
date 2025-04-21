@@ -21,7 +21,6 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/storage/locations"
-	"reduction.dev/reduction/storage/snapshots"
 )
 
 // Create a new local job server for testing.
@@ -46,8 +45,8 @@ func NewServer(jobConfig *config.Config, rpcListener, uiListener net.Listener, o
 		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
 			return rpc.NewSourceRunnerConnectClient(node, connect.WithProtoJSON())
 		},
-		CheckpointEvents: make(chan snapshots.CheckpointEvent, 1),
-		Store:            store,
+		ErrChan: make(chan error, 1),
+		Store:   store,
 	}
 	for _, o := range options {
 		o(jobParams)
@@ -69,13 +68,13 @@ func NewServer(jobConfig *config.Config, rpcListener, uiListener net.Listener, o
 	rpcServer := &http.Server{Handler: mux}
 
 	svr := &Server{
-		uiServer:         uiServer,
-		uiListener:       uiListener,
-		rpcServer:        rpcServer,
-		rpcListener:      rpcListener,
-		job:              job,
-		log:              logger,
-		checkpointEvents: jobParams.CheckpointEvents,
+		uiServer:    uiServer,
+		uiListener:  uiListener,
+		rpcServer:   rpcServer,
+		rpcListener: rpcListener,
+		job:         job,
+		log:         logger,
+		errChan:     jobParams.ErrChan,
 	}
 	return svr, nil
 }
@@ -170,13 +169,13 @@ func WithRPCAddr(addr string) func(*ServerParams) {
 }
 
 type Server struct {
-	uiServer         *http.Server
-	uiListener       net.Listener
-	rpcServer        *http.Server
-	rpcListener      net.Listener
-	job              *jobs.Job
-	log              *slog.Logger
-	checkpointEvents chan snapshots.CheckpointEvent
+	uiServer    *http.Server
+	uiListener  net.Listener
+	rpcServer   *http.Server
+	rpcListener net.Listener
+	job         *jobs.Job
+	log         *slog.Logger
+	errChan     chan error
 }
 
 func (s *Server) Start() error {

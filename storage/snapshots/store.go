@@ -22,15 +22,11 @@ type Store struct {
 	checkpointsPath            string
 	log                        *slog.Logger
 	savepointURI               string
-	subscriber                 chan CheckpointEvent
+	subscriber                 chan string
+	errChan                    chan error
 	retainedCheckpointsUpdated chan []uint64
 	state                      storeState
 	stateMu                    sync.Mutex
-}
-
-type CheckpointEvent struct {
-	URI string
-	Err error
 }
 
 type storeState struct {
@@ -44,7 +40,8 @@ type NewStoreParams struct {
 	FileStore                  locations.StorageLocation
 	SavepointsPath             string
 	CheckpointsPath            string
-	CheckpointEvents           chan CheckpointEvent
+	CheckpointEvents           chan string
+	ErrChan                    chan error
 	RetainedCheckpointsUpdated chan []uint64
 }
 
@@ -164,7 +161,13 @@ func (s *Store) AddSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
 func (s *Store) finishSnapshotAsync(snap *jobSnapshot) {
 	go func() {
 		uri, err := s.finishSnapshot(snap)
-		s.subscriber <- CheckpointEvent{URI: uri, Err: err}
+		if err != nil {
+			s.errChan <- err
+			return
+		}
+		if s.subscriber != nil {
+			s.subscriber <- uri
+		}
 	}()
 }
 

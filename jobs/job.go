@@ -33,6 +33,7 @@ type Job struct {
 	operatorFactory     proto.OperatorFactory
 	sourceRunnerFactory proto.SourceRunnerFactory
 	status              *jobStatus
+	errChan             chan error
 }
 
 type NewParams struct {
@@ -46,7 +47,7 @@ type NewParams struct {
 	Logger              *slog.Logger
 	OperatorFactory     proto.OperatorFactory
 	SourceRunnerFactory proto.SourceRunnerFactory
-	CheckpointEvents    chan snapshots.CheckpointEvent
+	ErrChan             chan error
 }
 
 func New(params *NewParams) (*Job, error) {
@@ -96,7 +97,7 @@ func New(params *NewParams) (*Job, error) {
 		FileStore:                  params.Store,
 		SavepointsPath:             params.SavepointsPath,
 		CheckpointsPath:            params.CheckpointsPath,
-		CheckpointEvents:           params.CheckpointEvents,
+		ErrChan:                    params.ErrChan,
 		RetainedCheckpointsUpdated: retainedCheckpointsUpdatedChan,
 	})
 	err := snapshotStore.LoadCheckpoint()
@@ -114,6 +115,7 @@ func New(params *NewParams) (*Job, error) {
 		operatorFactory:     params.OperatorFactory,
 		sourceRunnerFactory: params.SourceRunnerFactory,
 		status:              newJobStatus(),
+		errChan:             params.ErrChan,
 	}
 
 	ctx := context.TODO()
@@ -291,7 +293,7 @@ func (j *Job) start() error {
 				return nil
 			}
 		},
-	}, nil)
+	}, j.errChan)
 
 	// Load the source checkpoint into the source splitter
 	if len(ckpt.GetSourceCheckpoints()) > 0 {

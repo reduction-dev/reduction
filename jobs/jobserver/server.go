@@ -14,7 +14,6 @@ import (
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/rpc"
 	"reduction.dev/reduction/storage/locations"
-	"reduction.dev/reduction/storage/snapshots"
 	"reduction.dev/reduction/util/httpu"
 
 	"golang.org/x/sync/errgroup"
@@ -45,8 +44,8 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 		serverOptions.rpcAddr = "127.0.0.1:8081"
 	}
 
-	// A channel for handling checkpoint errors
-	checkpointEvents := make(chan snapshots.CheckpointEvent, 1)
+	// A channel for handling job errors
+	jobErrChan := make(chan error, 1)
 
 	// Create the working storage location
 	store, err := locations.New(jd.WorkingStorageLocation)
@@ -65,8 +64,8 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 		SourceRunnerFactory: func(node *jobpb.NodeIdentity) proto.SourceRunner {
 			return rpc.NewSourceRunnerConnectClient(node)
 		},
-		CheckpointEvents: checkpointEvents,
-		Store:            store,
+		ErrChan: jobErrChan,
+		Store:   store,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create job: %w", err)
@@ -90,12 +89,12 @@ func NewServer(jd *cfg.Config, options ...Option) (*Server, error) {
 	}
 
 	return &Server{
-		uiServer:         uiServer,
-		UIListener:       uiListener,
-		rpcServer:        rpcServer,
-		RPCListener:      rpcListener,
-		checkpointEvents: checkpointEvents,
-		job:              job,
+		uiServer:    uiServer,
+		UIListener:  uiListener,
+		rpcServer:   rpcServer,
+		RPCListener: rpcListener,
+		errChan:     jobErrChan,
+		job:         job,
 	}, nil
 }
 
@@ -122,12 +121,12 @@ func WithUIAddress(addr string) func(*serverOptions) {
 }
 
 type Server struct {
-	uiServer         *httpu.Server
-	UIListener       net.Listener
-	rpcServer        *httpu.Server
-	RPCListener      net.Listener
-	checkpointEvents chan snapshots.CheckpointEvent
-	job              *jobs.Job // Track the job to Close it on shutdown
+	uiServer    *httpu.Server
+	UIListener  net.Listener
+	rpcServer   *httpu.Server
+	RPCListener net.Listener
+	errChan     chan error
+	job         *jobs.Job // Track the job to Close it on shutdown
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -153,14 +152,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	})
 
-	// Listen for checkpoint errors
+	// Listen for job errors
 	g.Go(func() error {
 		for {
 			select {
-			case event := <-s.checkpointEvents:
-				if event.Err != nil {
-					return fmt.Errorf("checkpoint error: %w", event.Err)
-				}
+			case err := <-s.errChan:
+				return fmt.Errorf("job error: %w", err)
 			case <-gctx.Done():
 				return nil
 			}
