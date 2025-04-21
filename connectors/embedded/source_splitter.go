@@ -11,19 +11,23 @@ import (
 	"reduction.dev/reduction/util/sliceu"
 )
 
-func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
+func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks) *SourceSplitter {
 	return &SourceSplitter{
 		splitCount:         config.SplitCount,
 		checkpointedSplits: make(map[string]*workerpb.SourceSplit),
+		sourceRunnerIDs:    sourceRunnerIDs,
+		hooks:              hooks,
 	}
 }
 
 type SourceSplitter struct {
 	splitCount         int
 	checkpointedSplits map[string]*workerpb.SourceSplit
+	sourceRunnerIDs    []string
+	hooks              connectors.SourceSplitterHooks
 }
 
-func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.SourceSplit, error) {
+func (s *SourceSplitter) Start() {
 	// Pretend to "discover" splits here.
 	sourceSplits := make([]*workerpb.SourceSplit, s.splitCount)
 	for splitIndex := range iteru.Times(s.splitCount) {
@@ -36,12 +40,12 @@ func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.Sour
 	}
 
 	// Assign the splits to the source runner IDs
-	assignments := make(map[string][]*workerpb.SourceSplit, len(ids))
-	splitGroups := sliceu.Partition(sourceSplits, len(ids))
-	for i, id := range ids {
+	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
+	splitGroups := sliceu.Partition(sourceSplits, len(s.sourceRunnerIDs))
+	for i, id := range s.sourceRunnerIDs {
 		assignments[id] = splitGroups[i]
 	}
-	return assignments, nil
+	s.hooks.AssignSplits(assignments)
 }
 
 // LoadCheckpoints gets a list of lists of split documents
@@ -70,8 +74,6 @@ func (s *SourceSplitter) LoadCheckpoints(docs [][]byte) error {
 }
 
 func (s *SourceSplitter) IsSourceSplitter() {}
-
-func (s *SourceSplitter) Start() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 

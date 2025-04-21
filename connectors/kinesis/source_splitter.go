@@ -14,13 +14,16 @@ import (
 )
 
 type SourceSplitter struct {
-	client    *Client
-	streamARN string
-	shardIDs  []string
-	cursors   map[string]string
+	client          *Client
+	streamARN       string
+	shardIDs        []string
+	cursors         map[string]string
+	sourceRunnerIDs []string
+	errChan         chan<- error
+	hooks           connectors.SourceSplitterHooks
 }
 
-func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
+func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) *SourceSplitter {
 	client := config.Client
 	if client == nil {
 		var err error
@@ -33,41 +36,13 @@ func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks
 	}
 
 	return &SourceSplitter{
-		client:    client,
-		streamARN: config.StreamARN,
-		cursors:   make(map[string]string),
-		// TODO: Use splitterParams.OnSplitAssignmentsUpdated
+		client:          client,
+		streamARN:       config.StreamARN,
+		cursors:         make(map[string]string),
+		errChan:         errChan,
+		hooks:           hooks,
+		sourceRunnerIDs: sourceRunnerIDs,
 	}
-}
-
-func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.SourceSplit, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	shards, err := s.client.ListShards(ctx, s.streamARN)
-	if err != nil {
-		return nil, fmt.Errorf("kinesis.SourceSplitter failed to discover splits: %w", err)
-	}
-	s.shardIDs = make([]string, len(shards))
-	for i, shard := range shards {
-		s.shardIDs[i] = *shard.ShardId
-	}
-
-	assignments := make(map[string][]*workerpb.SourceSplit, len(ids))
-	shardIDGroups := sliceu.Partition(s.shardIDs, len(ids))
-	for i, id := range ids {
-		assignedShards := shardIDGroups[i]
-		assignments[id] = make([]*workerpb.SourceSplit, len(assignedShards))
-		for i, shardID := range assignedShards {
-			assignments[id][i] = &workerpb.SourceSplit{
-				SourceId: "tbd",
-				SplitId:  shardID,
-				Cursor:   []byte(s.cursors[shardID]),
-			}
-		}
-	}
-
-	return assignments, nil
 }
 
 // LoadCheckpoints receives checkpoint data created by source readers
@@ -85,9 +60,37 @@ func (s *SourceSplitter) LoadCheckpoints(checkpoints [][]byte) error {
 	return nil
 }
 
-func (s *SourceSplitter) IsSourceSplitter() {}
+func (s *SourceSplitter) Start() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-func (s *SourceSplitter) Start() {}
+	shards, err := s.client.ListShards(ctx, s.streamARN)
+	if err != nil {
+		s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
+	}
+	s.shardIDs = make([]string, len(shards))
+	for i, shard := range shards {
+		s.shardIDs[i] = *shard.ShardId
+	}
+
+	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
+	shardIDGroups := sliceu.Partition(s.shardIDs, len(s.sourceRunnerIDs))
+	for i, id := range s.sourceRunnerIDs {
+		assignedShards := shardIDGroups[i]
+		assignments[id] = make([]*workerpb.SourceSplit, len(assignedShards))
+		for i, shardID := range assignedShards {
+			assignments[id][i] = &workerpb.SourceSplit{
+				SourceId: "tbd",
+				SplitId:  shardID,
+				Cursor:   []byte(s.cursors[shardID]),
+			}
+		}
+	}
+
+	s.hooks.AssignSplits(assignments)
+}
+
+func (s *SourceSplitter) IsSourceSplitter() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 

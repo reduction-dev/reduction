@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/embedded"
+	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/iteru"
 )
@@ -19,11 +20,20 @@ func TestGeneratingIncNums(t *testing.T) {
 		BatchSize:   3,
 		GeneratorID: "inc-nums",
 	}
-	ss := embedded.NewSourceSplitter(config, connectors.NoOpSourceSplitterHooks)
-
 	sourceReaderIDs := []string{"sr1", "sr2"}
-	splitAssignments, err := ss.AssignSplits(sourceReaderIDs)
-	require.NoError(t, err)
+	var splitAssignments map[string][]*workerpb.SourceSplit
+
+	didAssign := make(chan struct{})
+	ss := embedded.NewSourceSplitter(config, sourceReaderIDs, connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			splitAssignments = assignments
+			close(didAssign)
+		},
+	})
+
+	// Start the splitter and wait for it to assign splits
+	ss.Start()
+	<-didAssign
 
 	// Create source readers and assign splits to them
 	srs := ds.NewSortedMap[string, *embedded.SourceReader]()

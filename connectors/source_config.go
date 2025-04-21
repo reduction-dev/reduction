@@ -8,17 +8,17 @@ import (
 // Callbacks used for SourceSplitter to notify and get information from its call
 // context.
 type SourceSplitterHooks struct {
-	OnSplitAssignmentsUpdated func(assignments map[string][]*workerpb.SourceSplit)
+	AssignSplits func(assignments map[string][]*workerpb.SourceSplit)
 }
 
 // Non-functional default hooks for SourceSplitter.
 var NoOpSourceSplitterHooks = SourceSplitterHooks{
-	OnSplitAssignmentsUpdated: func(assignments map[string][]*workerpb.SourceSplit) {},
+	AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {},
 }
 
 type SourceConfig interface {
 	Validate() error
-	NewSourceSplitter(hooks SourceSplitterHooks) SourceSplitter
+	NewSourceSplitter(sourceRunnerIDs []string, hooks SourceSplitterHooks, errChan chan<- error) SourceSplitter
 	NewSourceReader() SourceReader
 	ProtoMessage() *jobconfigpb.Source
 }

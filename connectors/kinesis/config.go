@@ -34,8 +34,8 @@ func (c SourceConfig) Validate() error {
 	return nil
 }
 
-func (c SourceConfig) NewSourceSplitter(hooks connectors.SourceSplitterHooks) connectors.SourceSplitter {
-	return NewSourceSplitter(c, hooks)
+func (c SourceConfig) NewSourceSplitter(sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) connectors.SourceSplitter {
+	return NewSourceSplitter(c, sourceRunnerIDs, hooks, errChan)
 }
 
 func (c SourceConfig) NewSourceReader() connectors.SourceReader {

@@ -23,10 +23,6 @@ func (s *SourceSplitter) LoadCheckpoints(data [][]byte) error {
 	return nil
 }
 
-func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.SourceSplit, error) {
-	return map[string][]*workerpb.SourceSplit{}, nil // No split assignment needed for stdin
-}
-
 func (s *SourceSplitter) Start() {}
 
 func (s *SourceSplitter) Close() error { return nil }

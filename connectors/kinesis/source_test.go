@@ -14,6 +14,7 @@ import (
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
+	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -62,9 +63,17 @@ func TestCheckpointing(t *testing.T) {
 	}
 
 	// Assign splits to source readers
-	ss := config.NewSourceSplitter(connectors.NoOpSourceSplitterHooks)
-	splitAssignments, err := ss.AssignSplits(sourceReaderIDs)
-	require.NoError(t, err)
+	var splitAssignments map[string][]*workerpb.SourceSplit
+	didAssign := make(chan struct{})
+	ss := config.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			splitAssignments = assignments
+			close(didAssign)
+		},
+	}, nil)
+
+	ss.Start()
+	<-didAssign
 	for id, sr := range srs.All() {
 		sr.AssignSplits(splitAssignments[id])
 	}
@@ -103,10 +112,18 @@ func TestCheckpointing(t *testing.T) {
 	}
 
 	// Assign splits to new source readers
+	didAssign = make(chan struct{})
+	ss = config.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			splitAssignments = assignments
+			close(didAssign)
+		},
+	}, nil)
 	err = ss.LoadCheckpoints(checkpoints)
 	require.NoError(t, err)
-	splitAssignments, err = ss.AssignSplits(sourceReaderIDs)
-	require.NoError(t, err)
+
+	ss.Start()
+	<-didAssign
 	for id, sr := range srs.All() {
 		sr.AssignSplits(splitAssignments[id])
 	}
@@ -168,9 +185,17 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	sr := kinesis.NewSourceReader(config)
 
 	// Assign split to source reader
-	ss := config.NewSourceSplitter(connectors.NoOpSourceSplitterHooks)
-	splitAssignments, err := ss.AssignSplits([]string{"sr1"})
-	require.NoError(t, err)
+	var splitAssignments map[string][]*workerpb.SourceSplit
+	didAssign := make(chan struct{})
+	ss := config.NewSourceSplitter([]string{"sr1"}, connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			splitAssignments = assignments
+			close(didAssign)
+		},
+	}, nil)
+
+	ss.Start()
+	<-didAssign
 	err = sr.AssignSplits(splitAssignments["sr1"])
 	require.NoError(t, err)
 

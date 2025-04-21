@@ -16,13 +16,16 @@ import (
 )
 
 type SourceSplitter struct {
-	client  *kadm.Client
-	topics  []string
-	offsets map[string]map[int32]kgo.Offset // Map topic -> partition ID -> offset
+	client          *kadm.Client
+	topics          []string
+	offsets         map[string]map[int32]kgo.Offset // Map topic -> partition ID -> offset
+	sourceRunnerIDs []string
+	hooks           connectors.SourceSplitterHooks
+	errChan         chan<- error
 }
 
 // NewSourceSplitter creates a Kafka source splitter
-func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) (*SourceSplitter, error) {
+func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) (*SourceSplitter, error) {
 	if config.Client == nil {
 		var err error
 		config.Client, err = kgo.NewClient(
@@ -36,20 +39,23 @@ func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks
 	}
 
 	return &SourceSplitter{
-		client:  kadm.NewClient(config.Client),
-		topics:  config.Topics,
-		offsets: make(map[string]map[int32]kgo.Offset),
+		client:          kadm.NewClient(config.Client),
+		topics:          config.Topics,
+		offsets:         make(map[string]map[int32]kgo.Offset),
+		sourceRunnerIDs: sourceRunnerIDs,
+		hooks:           hooks,
+		errChan:         errChan,
 	}, nil
 }
 
-func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.SourceSplit, error) {
+func (s *SourceSplitter) Start() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Fetch metadata for all topics
 	meta, err := s.client.Metadata(ctx, s.topics...)
 	if err != nil {
-		return nil, fmt.Errorf("kafka.SourceSplitter failed to fetch metadata: %w", err)
+		s.errChan <- fmt.Errorf("kafka.SourceSplitter failed to fetch metadata: %w", err)
+		return
 	}
 
 	type split struct {
@@ -59,16 +65,17 @@ func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.Sour
 	var splits []split
 	for _, topicMeta := range meta.Topics {
 		if topicMeta.Err != nil {
-			return nil, fmt.Errorf("kafka.SourceSplitter: error in topic metadata for %s: %w", topicMeta.Topic, topicMeta.Err)
+			s.errChan <- fmt.Errorf("kafka.SourceSplitter: error in topic metadata for %s: %w", topicMeta.Topic, topicMeta.Err)
+			return
 		}
 		for _, partMeta := range topicMeta.Partitions {
 			splits = append(splits, split{Topic: topicMeta.Topic, Partition: partMeta.Partition})
 		}
 	}
 
-	assignments := make(map[string][]*workerpb.SourceSplit, len(ids))
-	splitGroups := sliceu.Partition(splits, len(ids))
-	for i, id := range ids {
+	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
+	splitGroups := sliceu.Partition(splits, len(s.sourceRunnerIDs))
+	for i, id := range s.sourceRunnerIDs {
 		group := splitGroups[i]
 		assignments[id] = make([]*workerpb.SourceSplit, len(group))
 		for j, split := range group {
@@ -88,7 +95,8 @@ func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.Sour
 			}
 		}
 	}
-	return assignments, nil
+
+	s.hooks.AssignSplits(assignments)
 }
 
 func (s *SourceSplitter) LoadCheckpoints(checkpoints [][]byte) error {
@@ -110,8 +118,6 @@ func (s *SourceSplitter) LoadCheckpoints(checkpoints [][]byte) error {
 }
 
 func (s *SourceSplitter) IsSourceSplitter() {}
-
-func (s *SourceSplitter) Start() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 

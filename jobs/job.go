@@ -105,15 +105,12 @@ func New(params *NewParams) (*Job, error) {
 	}
 
 	job := &Job{
-		snapshotStore: snapshotStore,
-		log:           params.Logger,
-		taskQueue:     make(chan func() error),
-		registry:      NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
-		config:        params.JobConfig,
-		clock:         params.Clock,
-		sourceSplitter: params.JobConfig.Sources[0].NewSourceSplitter(connectors.SourceSplitterHooks{
-			OnSplitAssignmentsUpdated: func(map[string][]*workerpb.SourceSplit) {},
-		}),
+		snapshotStore:       snapshotStore,
+		log:                 params.Logger,
+		taskQueue:           make(chan func() error),
+		registry:            NewRegistry(params.JobConfig.WorkerCount, NewLivenessTracker(params.Clock, params.HeartbeatDeadline)),
+		config:              params.JobConfig,
+		clock:               params.Clock,
 		operatorFactory:     params.OperatorFactory,
 		sourceRunnerFactory: params.SourceRunnerFactory,
 		status:              newJobStatus(),
@@ -286,6 +283,16 @@ func (j *Job) start() error {
 	// Get the job's current checkpoint which may be nil
 	ckpt := j.snapshotStore.CurrentCheckpoint()
 
+	// Create the source splitter
+	j.sourceSplitter = j.config.Sources[0].NewSourceSplitter(j.assembly.SourceRunnerIDs(), connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			j.taskQueue <- func() error {
+				j.assembly.AssignSplits(assignments)
+				return nil
+			}
+		},
+	}, nil)
+
 	// Load the source checkpoint into the source splitter
 	if len(ckpt.GetSourceCheckpoints()) > 0 {
 		ckptData := sliceu.Map(ckpt.SourceCheckpoints, func(c *snapshotpb.SourceCheckpoint) []byte {
@@ -296,22 +303,13 @@ func (j *Job) start() error {
 		}
 	}
 
-	// Allow the source splitter to start any background work
-	j.sourceSplitter.Start()
-
-	// Assign splits to the source runners
-	splitAssignments, err := j.sourceSplitter.AssignSplits(j.assembly.SourceRunnerIDs())
-	if err != nil {
-		return fmt.Errorf("assigning splits: %v", err)
-	}
-
 	// Start the assembly
 	if err := j.assembly.Deploy(j.config, ckpt); err != nil {
 		return fmt.Errorf("starting assembly: %v", err)
 	}
 
-	// Assign the splits to the source runners
-	j.assembly.AssignSplits(splitAssignments)
+	// Allow the source splitter to start any background work
+	j.sourceSplitter.Start()
 
 	j.taskQueue <- func() error {
 		j.log.Info("running")

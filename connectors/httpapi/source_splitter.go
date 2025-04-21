@@ -7,32 +7,36 @@ import (
 	"reduction.dev/reduction/proto/workerpb"
 )
 
-func NewSourceSplitter(config SourceConfig, hooks connectors.SourceSplitterHooks) *SourceSplitter {
-	return &SourceSplitter{&http.Client{}, nil}
+func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) *SourceSplitter {
+	return &SourceSplitter{
+		client:          &http.Client{},
+		startingCursor:  nil,
+		sourceRunnerIDs: sourceRunnerIDs,
+		hooks:           hooks,
+		errChan:         errChan,
+	}
 }
 
 type SourceSplitter struct {
-	client         *http.Client
-	startingCursor []byte
+	client          *http.Client
+	startingCursor  []byte
+	sourceRunnerIDs []string
+	hooks           connectors.SourceSplitterHooks
+	errChan         chan<- error
 }
 
-// Currently httpapi always has one split and assigns it to the first given ID.
-func (s *SourceSplitter) AssignSplits(ids []string) (map[string][]*workerpb.SourceSplit, error) {
-	assignments := make(map[string][]*workerpb.SourceSplit, len(ids))
-	if len(ids) == 0 {
-		return assignments, nil
+func (s *SourceSplitter) Start() {
+	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
+	if len(s.sourceRunnerIDs) > 0 {
+		assignments[s.sourceRunnerIDs[0]] = []*workerpb.SourceSplit{{
+			SplitId:  "only",
+			SourceId: "tbd",
+			Cursor:   s.startingCursor,
+		}}
 	}
-
-	assignments[ids[0]] = []*workerpb.SourceSplit{{
-		SplitId:  "only",
-		SourceId: "tbd",
-		Cursor:   s.startingCursor,
-	}}
-
-	return assignments, nil
+	s.hooks.AssignSplits(assignments)
 }
 
-// LoadCheckpoints loads the one-and-only cursor for this SourceSplitter.
 func (s *SourceSplitter) LoadCheckpoints(data [][]byte) error {
 	for _, d := range data {
 		if len(d) != 0 {
@@ -43,8 +47,6 @@ func (s *SourceSplitter) LoadCheckpoints(data [][]byte) error {
 }
 
 func (s *SourceSplitter) IsSourceSplitter() {}
-
-func (s *SourceSplitter) Start() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 
