@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	kafkapb "reduction.dev/reduction-protocol/kafkapb"
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kafka"
 	"reduction.dev/reduction/proto/workerpb"
 )
@@ -43,18 +44,7 @@ func TestKafkaSourceReader_ReadsAllEvents(t *testing.T) {
 	reader1 := kafka.NewSourceReader(config)
 	reader2 := kafka.NewSourceReader(config)
 
-	var assignments map[string][]*workerpb.SourceSplit
-	didAssign := make(chan struct{})
-	splitter, err := kafka.NewSourceSplitter(config, []string{"r1", "r2"}, connectors.SourceSplitterHooks{
-		AssignSplits: func(a map[string][]*workerpb.SourceSplit) {
-			assignments = a
-			close(didAssign)
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	splitter.Start()
-	<-didAssign
+	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"r1", "r2"})
 	require.Len(t, assignments, 2)
 	require.NotEmpty(t, assignments["r1"])
 	require.NotEmpty(t, assignments["r2"])
@@ -110,18 +100,7 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 	reader1 := kafka.NewSourceReader(config)
 	reader2 := kafka.NewSourceReader(config)
 
-	var assignments map[string][]*workerpb.SourceSplit
-	didAssign := make(chan struct{})
-	splitter, err := kafka.NewSourceSplitter(config, []string{"r1", "r2"}, connectors.SourceSplitterHooks{
-		AssignSplits: func(a map[string][]*workerpb.SourceSplit) {
-			assignments = a
-			close(didAssign)
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	splitter.Start()
-	<-didAssign
+	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"r1", "r2"})
 	require.Len(t, assignments, 2)
 	require.NotEmpty(t, assignments["r1"])
 	require.NotEmpty(t, assignments["r2"])

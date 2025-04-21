@@ -8,9 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	kafkapb "reduction.dev/reduction-protocol/kafkapb"
-	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kafka"
-	"reduction.dev/reduction/proto/workerpb"
 )
 
 func TestSinkWriter_WriteAndReadBack(t *testing.T) {
@@ -45,19 +44,8 @@ func TestSinkWriter_WriteAndReadBack(t *testing.T) {
 		Topics:        []string{topic},
 	}
 	reader := kafka.NewSourceReader(config)
-	var assignments map[string][]*workerpb.SourceSplit
-	didAssign := make(chan struct{})
-	splitter, err := kafka.NewSourceSplitter(config, []string{"r1"}, connectors.SourceSplitterHooks{
-		AssignSplits: func(a map[string][]*workerpb.SourceSplit) {
-			assignments = a
-			close(didAssign)
-		},
-	}, nil)
-	require.NoError(t, err)
 
-	// Start the splitter and wait for it to assign splits
-	splitter.Start()
-	<-didAssign
+	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"r1"})
 	require.NoError(t, reader.AssignSplits(assignments["r1"]))
 
 	var readEvents [][]byte

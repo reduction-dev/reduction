@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	protocol "reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
 	"reduction.dev/reduction/proto/workerpb"
@@ -62,18 +63,7 @@ func TestCheckpointing(t *testing.T) {
 		srs.Set(id, sr)
 	}
 
-	// Assign splits to source readers
-	var splitAssignments map[string][]*workerpb.SourceSplit
-	didAssign := make(chan struct{})
-	ss := config.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
-		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
-			splitAssignments = assignments
-			close(didAssign)
-		},
-	}, nil)
-
-	ss.Start()
-	<-didAssign
+	splitAssignments := connectorstest.AssignmentsFromSplitter(config, sourceReaderIDs)
 	for id, sr := range srs.All() {
 		sr.AssignSplits(splitAssignments[id])
 	}
@@ -111,22 +101,24 @@ func TestCheckpointing(t *testing.T) {
 		srs.Set(id, sr)
 	}
 
-	// Assign splits to new source readers
-	didAssign = make(chan struct{})
-	ss = config.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
+	// Create a source splitter that assigns splits to the source readers
+	didAssign := make(chan struct{})
+	ss := config.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
 		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
-			splitAssignments = assignments
+			for id, sr := range srs.All() {
+				sr.AssignSplits(assignments[id])
+			}
 			close(didAssign)
 		},
 	}, nil)
+
+	// Load the source reader checkpoints
 	err = ss.LoadCheckpoints(checkpoints)
 	require.NoError(t, err)
 
+	// Start the source splitter and wait for assignments
 	ss.Start()
 	<-didAssign
-	for id, sr := range srs.All() {
-		sr.AssignSplits(splitAssignments[id])
-	}
 
 	// Read newly written events from the splits
 	for _, sr := range srs.All() {
@@ -184,19 +176,8 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	// Create source reader
 	sr := kinesis.NewSourceReader(config)
 
-	// Assign split to source reader
-	var splitAssignments map[string][]*workerpb.SourceSplit
-	didAssign := make(chan struct{})
-	ss := config.NewSourceSplitter([]string{"sr1"}, connectors.SourceSplitterHooks{
-		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
-			splitAssignments = assignments
-			close(didAssign)
-		},
-	}, nil)
-
-	ss.Start()
-	<-didAssign
-	err = sr.AssignSplits(splitAssignments["sr1"])
+	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"sr1"})
+	err = sr.AssignSplits(assignments["sr1"])
 	require.NoError(t, err)
 
 	// Read the events initially
