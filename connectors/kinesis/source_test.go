@@ -59,7 +59,7 @@ func TestCheckpointing(t *testing.T) {
 	sourceReaderIDs := []string{"sr1", "sr2"}
 	srs := ds.NewSortedMap[string, *kinesis.SourceReader]()
 	for _, id := range sourceReaderIDs {
-		sr := kinesis.NewSourceReader(config)
+		sr := kinesis.NewSourceReader(config, connectors.SourceReaderHooks{})
 		srs.Set(id, sr)
 	}
 
@@ -97,7 +97,7 @@ func TestCheckpointing(t *testing.T) {
 	sourceReaderIDs = []string{"sr3", "sr4"}
 	srs = ds.NewSortedMap[string, *kinesis.SourceReader]()
 	for _, id := range sourceReaderIDs {
-		sr := kinesis.NewSourceReader(config)
+		sr := kinesis.NewSourceReader(config, connectors.SourceReaderHooks{})
 		srs.Set(id, sr)
 	}
 
@@ -174,7 +174,7 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	}
 
 	// Create source reader
-	sr := kinesis.NewSourceReader(config)
+	sr := kinesis.NewSourceReader(config, connectors.SourceReaderHooks{})
 
 	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"sr1"})
 	err = sr.AssignSplits(assignments["sr1"])

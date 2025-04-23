@@ -38,7 +38,7 @@ func (s SourceConfig) NewSourceSplitter(sourceRunnerIDs []string, hooks connecto
 	return &SourceSplitter{}
 }
 
-func (s SourceConfig) NewSourceReader() connectors.SourceReader {
+func (s SourceConfig) NewSourceReader(hooks connectors.SourceReaderHooks) connectors.SourceReader {
 	return NewSourceReader(s)
 }
 

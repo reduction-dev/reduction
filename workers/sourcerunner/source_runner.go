@@ -78,7 +78,7 @@ func New(params NewParams) *SourceRunner {
 			if err != nil {
 				panic(fmt.Sprintf("invalid source config: %v", err))
 			}
-			return sourceConfig.NewSourceReader()
+			return sourceConfig.NewSourceReader(connectors.SourceReaderHooks{})
 		}
 	}
 

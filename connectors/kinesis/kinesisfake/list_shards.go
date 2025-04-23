@@ -3,6 +3,7 @@ package kinesisfake
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 type ListShardsRequest struct {
@@ -27,17 +28,69 @@ type ListShardsResponse struct {
 }
 
 func (f *Fake) listShards(body []byte) (*ListShardsResponse, error) {
-	var request PutRecordsRequest
-	err := json.Unmarshal(body, &request)
-	if err != nil {
+	var request ListShardsRequest
+	if err := json.Unmarshal(body, &request); err != nil {
 		return nil, fmt.Errorf("decode ListShardsRequest: %w", err)
 	}
 
-	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
-	responseShards := make([]Shard, len(stream.shards))
-	for i, shardRecord := range stream.shards {
-		responseShards[i] = Shard{ShardId: shardRecord.id}
+	streamName := request.StreamName
+	if streamName == "" && request.StreamARN != "" {
+		streamName = streamNameFromARN(request.StreamARN)
+	}
+	stream := f.db.streams[streamName]
+	if stream == nil {
+		return nil, fmt.Errorf("stream %s not found", streamName)
 	}
 
-	return &ListShardsResponse{Shards: responseShards}, nil
+	// Find the starting index based on ExclusiveStartShardId or NextToken
+	startIdx := 0
+	if request.ExclusiveStartShardId != "" {
+		foundShardID := slices.IndexFunc(stream.shards, func(s *shard) bool {
+			return s.id == request.ExclusiveStartShardId
+		})
+		if foundShardID == -1 {
+			return nil, fmt.Errorf("exclusive start shard %s not found", request.ExclusiveStartShardId)
+		} else {
+			startIdx = foundShardID + 1
+		}
+	} else if request.NextToken != "" {
+		// NextToken is just the stringified start index
+		fmt.Sscanf(request.NextToken, "%d", &startIdx)
+	}
+
+	// Determine how many shards to return
+	maxResults := int(request.MaxResults)
+	if maxResults <= 0 || maxResults > len(stream.shards)-startIdx {
+		maxResults = len(stream.shards) - startIdx
+	}
+
+	endIdx := min(startIdx+maxResults, len(stream.shards))
+
+	responseShards := make([]Shard, endIdx-startIdx)
+	for i, shardRecord := range stream.shards[startIdx:endIdx] {
+		responseShards[i] = Shard{
+			ShardId: shardRecord.id,
+			HashKeyRange: HashKeyRange{
+				StartingHashKey: shardRecord.hashKeyRange.startingHashKey.String(),
+				EndingHashKey:   shardRecord.hashKeyRange.endingHashKey.String(),
+			},
+			SequenceNumberRange: SequenceNumberRange{
+				StartingSequenceNumber: "0",
+				EndingSequenceNumber:   "",
+			},
+			ParentShardId:         "",
+			AdjacentParentShardId: "",
+		}
+	}
+
+	var nextToken *string
+	if endIdx < len(stream.shards) {
+		tok := fmt.Sprintf("%d", endIdx)
+		nextToken = &tok
+	}
+
+	return &ListShardsResponse{
+		Shards:    responseShards,
+		NextToken: nextToken,
+	}, nil
 }

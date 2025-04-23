@@ -38,8 +38,8 @@ func (c SourceConfig) NewSourceSplitter(sourceRunnerIDs []string, hooks connecto
 	return NewSourceSplitter(c, sourceRunnerIDs, hooks, errChan)
 }
 
-func (c SourceConfig) NewSourceReader() connectors.SourceReader {
-	return NewSourceReader(c)
+func (c SourceConfig) NewSourceReader(hooks connectors.SourceReaderHooks) connectors.SourceReader {
+	return NewSourceReader(c, hooks)
 }
 
 func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {

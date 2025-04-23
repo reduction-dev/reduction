@@ -11,3 +11,6 @@ todo.md
 
 # Ignore the dist directory for goreleaser
 dist/
+
+# Ignore prompts which change a lot
+.github/prompts

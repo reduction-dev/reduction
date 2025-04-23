@@ -22,6 +22,7 @@ type SourceReader struct {
 	streamARN      string
 	assignedShards []*assignedShard
 	shardIndex     int
+	hooks          connectors.SourceReaderHooks
 }
 
 type assignedShard struct {
@@ -31,9 +32,11 @@ type assignedShard struct {
 	shardIterator string
 	// The sequence number of the last record read from this shard.
 	sequenceNumber string
+	// Flag to indicate if the shard has reached the end of input.
+	isFinished bool
 }
 
-func NewSourceReader(config SourceConfig) *SourceReader {
+func NewSourceReader(config SourceConfig, hooks connectors.SourceReaderHooks) *SourceReader {
 	if config.Client == nil {
 		var err error
 		config.Client, err = NewClient(&NewClientParams{
@@ -47,6 +50,7 @@ func NewSourceReader(config SourceConfig) *SourceReader {
 	return &SourceReader{
 		client:    config.Client,
 		streamARN: config.StreamARN,
+		hooks:     hooks,
 	}
 }
 
@@ -57,9 +61,23 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		return [][]byte{}, nil
 	}
 
-	// Read from one shard, picking round-robin
-	shard := s.assignedShards[s.shardIndex]
-	s.shardIndex = (s.shardIndex + 1) % len(s.assignedShards)
+	// Find the next non-finished shard, starting from current index
+	startIdx := s.shardIndex
+	found := false
+	var shard *assignedShard
+	for i := range s.assignedShards {
+		idx := (startIdx + i) % len(s.assignedShards)
+		if !s.assignedShards[idx].isFinished {
+			shard = s.assignedShards[idx]
+			s.shardIndex = (idx + 1) % len(s.assignedShards)
+			found = true
+			break
+		}
+	}
+	if !found {
+		// All shards are finished
+		return [][]byte{}, nil
+	}
 
 	// If we don't have a shardIterator yet, we need to get one
 	if shard.shardIterator == "" {
@@ -91,12 +109,18 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		return nil, fmt.Errorf("kinesis SourceReader.ReadEvents: %w", sourceErrorFrom(err))
 	}
 
-	// Update shard state
-	shard.shardIterator = *records.NextShardIterator
-	if len(records.Records) > 0 {
-		lastRecord := records.Records[len(records.Records)-1]
-		if lastRecord.SequenceNumber != nil {
-			shard.sequenceNumber = *lastRecord.SequenceNumber
+	// Handle finished shards
+	if records.NextShardIterator == nil {
+		shard.isFinished = true
+		s.hooks.NotifySplitsFinished([]string{shard.id})
+	} else {
+		// Update shard state for continued reading
+		shard.shardIterator = *records.NextShardIterator
+		if len(records.Records) > 0 {
+			lastRecord := records.Records[len(records.Records)-1]
+			if lastRecord.SequenceNumber != nil {
+				shard.sequenceNumber = *lastRecord.SequenceNumber
+			}
 		}
 	}
 
@@ -131,8 +155,9 @@ func (s *SourceReader) Checkpoint() []byte {
 	shards := make([]*kinesispb.Shard, len(s.assignedShards))
 	for i, shard := range s.assignedShards {
 		shards[i] = &kinesispb.Shard{
-			ShardId: shard.id,
-			Cursor:  shard.sequenceNumber,
+			ShardId:  shard.id,
+			Cursor:   shard.sequenceNumber,
+			Finished: shard.isFinished,
 		}
 	}
 	snapshot := &kinesispb.Checkpoint{

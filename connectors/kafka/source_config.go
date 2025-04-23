@@ -19,7 +19,7 @@ type SourceConfig struct {
 	Topics        []string
 }
 
-func (c SourceConfig) NewSourceReader() connectors.SourceReader {
+func (c SourceConfig) NewSourceReader(hooks connectors.SourceReaderHooks) connectors.SourceReader {
 	return NewSourceReader(c)
 }
 

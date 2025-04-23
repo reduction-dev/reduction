@@ -58,7 +58,7 @@ func (f *Fake) putRecords(body []byte) (*PutRecordsResponse, error) {
 
 		shard := pickShard(r.PartitionKey, stream.shards)
 		shard.records = append(shard.records, Record{
-			ApproximateArrivalTimestamp: int(time.Now().UnixMilli()),
+			ApproximateArrivalTimestamp: float64(time.Now().UnixNano()) / 1e9,
 			Data:                        data,
 			PartitionKey:                r.PartitionKey,
 			SequenceNumber:              strconv.Itoa(len(shard.records) + i),

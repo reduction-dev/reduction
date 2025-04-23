@@ -3,6 +3,7 @@ package kinesisfake
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
@@ -29,10 +30,25 @@ func (f *Fake) getShardIterator(body []byte) (*GetShardIteratorResponse, error) 
 		return nil, fmt.Errorf("decode ListShardsRequest: %w", err)
 	}
 
+	if request.ShardId == "" {
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New("ShardId is required"),
+		}
+	}
+
 	stream := f.db.streams[streamNameFromARN(request.StreamARN)]
 	if stream == nil {
 		return nil, &kinesistypes.ResourceNotFoundException{
 			Message: ptr.New(fmt.Sprintf("Stream %s not found", request.StreamARN)),
+		}
+	}
+
+	hasShard := slices.ContainsFunc(stream.shards, func(s *shard) bool {
+		return s.id == request.ShardId
+	})
+	if !hasShard {
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New(fmt.Sprintf("Shard %s not found", request.ShardId)),
 		}
 	}
 

@@ -6,15 +6,19 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
+	"reduction.dev/reduction/connectors/kinesis/kinesispb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/ptr"
+	"reduction.dev/reduction/util/sliceu"
 )
 
 func TestSourceReader_ProvisionedThroughputExceededIsRetried(t *testing.T) {
@@ -43,7 +47,7 @@ func TestSourceReader_ProvisionedThroughputExceededIsRetried(t *testing.T) {
 	reader := kinesis.NewSourceReader(kinesis.SourceConfig{
 		Client:    client,
 		StreamARN: streamARN,
-	})
+	}, connectors.SourceReaderHooks{})
 	err = reader.AssignSplits([]*workerpb.SourceSplit{{SplitId: "shardId-000000000000"}})
 	require.NoError(t, err, "should set splits")
 
@@ -97,7 +101,7 @@ func TestSourceReader_AccessDeniedIsTerminal(t *testing.T) {
 	reader := kinesis.NewSourceReader(kinesis.SourceConfig{
 		Client:    client,
 		StreamARN: streamARN,
-	})
+	}, connectors.SourceReaderHooks{})
 	err = reader.AssignSplits([]*workerpb.SourceSplit{
 		{SplitId: "shardId-000000000000"},
 	})
@@ -113,4 +117,83 @@ func TestSourceReader_AccessDeniedIsTerminal(t *testing.T) {
 	accessDeniedErr := &kinesistypes.AccessDeniedException{}
 	assert.ErrorAs(t, err, &accessDeniedErr, "should return access denied")
 	assert.False(t, connectors.IsRetryable(err), "AccessDeniedException should be terminal")
+}
+
+func TestSourceReader_FinishingShards(t *testing.T) {
+	server, _ := kinesisfake.StartFake()
+	defer server.Close()
+
+	client, err := kinesis.NewClient(&kinesis.NewClientParams{
+		Endpoint:    server.URL,
+		Region:      "us-east-2",
+		Credentials: aws.AnonymousCredentials{},
+		Retryer:     aws.NopRetryer{},
+	})
+	require.NoError(t, err, "should create Kinesis client")
+
+	streamARN, err := client.CreateStream(t.Context(), &kinesis.CreateStreamParams{
+		StreamName:      "stream-name",
+		ShardCount:      2,
+		MaxWaitDuration: 1 * time.Minute,
+	})
+	require.NoError(t, err, "should create stream")
+
+	// Put a single record in the stream
+	err = client.PutRecordBatch(t.Context(), streamARN, []kinesis.Record{
+		{Key: "key", Data: []byte("data")},
+	})
+	require.NoError(t, err, "should put record batch")
+
+	// List the two shards to get their IDs
+	shards, err := client.ListShards(t.Context(), streamARN)
+	require.NoError(t, err)
+	shardIDs := sliceu.Map(shards, func(s kinesistypes.Shard) string { return *s.ShardId })
+	require.Len(t, shardIDs, 2, "should have two shards")
+
+	// Merge the two shards to finish both shards
+	_, err = client.MergeShards(t.Context(), &awskinesis.MergeShardsInput{
+		StreamARN:            &streamARN,
+		ShardToMerge:         shards[0].ShardId,
+		AdjacentShardToMerge: shards[1].ShardId,
+	})
+	require.NoError(t, err, "should merge shards")
+
+	// Create a source reader and assign both of the splits to it
+	var splitsFinished []string
+	reader := kinesis.NewSourceReader(
+		kinesis.SourceConfig{Client: client, StreamARN: streamARN},
+		connectors.SourceReaderHooks{
+			NotifySplitsFinished: func(ids []string) {
+				splitsFinished = append(splitsFinished, ids...)
+			},
+		},
+	)
+	err = reader.AssignSplits([]*workerpb.SourceSplit{{SplitId: shardIDs[0]}, {SplitId: shardIDs[1]}})
+	require.NoError(t, err, "should set splits")
+
+	// Read records twice to hit both shards
+	var allEvents [][]byte
+	for range 2 {
+		events, err := reader.ReadEvents()
+		require.NoError(t, err)
+		allEvents = append(allEvents, events...)
+	}
+
+	assert.Len(t, allEvents, 1, "should read the one event")
+	assert.Equal(t, splitsFinished, shardIDs, "should notify both shards finished")
+
+	// Check that both shard are marked finsished in the checkpoint
+	var checkpoint kinesispb.Checkpoint
+	require.NoError(t, proto.Unmarshal(reader.Checkpoint(), &checkpoint))
+	assert.EqualExportedValues(t, &kinesispb.Checkpoint{
+		Shards: []*kinesispb.Shard{{
+			ShardId:  shardIDs[0],
+			Cursor:   "",
+			Finished: true,
+		}, {
+			ShardId:  shardIDs[1],
+			Cursor:   "",
+			Finished: true,
+		}},
+	}, &checkpoint)
 }

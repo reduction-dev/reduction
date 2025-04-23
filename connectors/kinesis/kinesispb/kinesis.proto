@@ -10,4 +10,5 @@ message Checkpoint {
 message Shard {
   string shard_id = 1;
   string cursor = 2;
+  bool finished = 3;
 }

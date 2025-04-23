@@ -56,6 +56,8 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 		resp, err = f.getRecords(body)
 	case "DeleteStream":
 		resp, err = f.deleteStream(body)
+	case "MergeShards":
+		resp, err = f.mergeShards(body)
 	default:
 		err = &kinesistypes.InvalidArgumentException{Message: ptr.New(fmt.Sprintf("Invalid Operation: %s", operation))}
 	}
@@ -77,10 +79,14 @@ type stream struct {
 	shards []*shard
 }
 
+// Interal tracked state of a shard
 type shard struct {
-	id           string
-	records      []Record
-	hashKeyRange hashKeyRange
+	id                  string
+	records             []Record
+	hashKeyRange        hashKeyRange
+	isFinished          bool
+	parentShard         string
+	adjacentParentShard string
 }
 
 type hashKeyRange struct {

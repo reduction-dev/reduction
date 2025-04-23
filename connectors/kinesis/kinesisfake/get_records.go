@@ -17,19 +17,20 @@ type GetRecordsRequest struct {
 	StreamARN     string
 }
 
+// GetRecordsResponse matches kinesis.GetRecordsOutput
 type GetRecordsResponse struct {
-	ChildShards        []Shard
-	MillisBehindLatest int
-	NextShardIterator  string
-	Records            []Record
+	MillisBehindLatest *int64   `json:"MillisBehindLatest,omitempty"`
+	NextShardIterator  *string  `json:"NextShardIterator,omitempty"`
+	Records            []Record `json:"Records"`
 }
 
+// Record matches kinesistypes.Record
 type Record struct {
-	ApproximateArrivalTimestamp int
-	Data                        []byte
-	EncryptionType              string
-	PartitionKey                string
-	SequenceNumber              string
+	ApproximateArrivalTimestamp float64 `json:"ApproximateArrivalTimestamp,omitempty"`
+	Data                        []byte  `json:"Data"`
+	EncryptionType              string  `json:"EncryptionType,omitempty"`
+	PartitionKey                string  `json:"PartitionKey"`
+	SequenceNumber              string  `json:"SequenceNumber"`
 }
 
 func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
@@ -39,8 +40,7 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 
 	var request GetRecordsRequest
-	err := json.Unmarshal(body, &request)
-	if err != nil {
+	if err := json.Unmarshal(body, &request); err != nil {
 		return nil, fmt.Errorf("decode GetRecords: %w", err)
 	}
 
@@ -52,68 +52,100 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 
 	// Parse the iterator
-	shardID, timestamp, pos, err := splitShardIterator(request.ShardIterator)
+	parsedIterator, err := splitShardIterator(request.ShardIterator)
 	if err != nil {
 		return nil, fmt.Errorf("invalid shard iterator: %w", err)
 	}
 
+	if parsedIterator.shardID == "" {
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New("no shard " + request.ShardIterator),
+		}
+	}
+
+	// Find the shard by index
+	shardIndex := slices.IndexFunc(stream.shards, func(s *shard) bool {
+		return s.id == parsedIterator.shardID
+	})
+	if shardIndex == -1 {
+		return nil, &kinesistypes.ResourceNotFoundException{
+			Message: ptr.New("no shard " + parsedIterator.shardID),
+		}
+	}
+	shard := stream.shards[shardIndex]
+
+	// If the shard is finished, return end-of-shard (empty records, no next iterator)
+	if shard.isFinished {
+		records := shard.records[parsedIterator.position:]
+		responseRecords := make([]Record, len(records))
+		for i, r := range records {
+			responseRecords[i] = Record{
+				ApproximateArrivalTimestamp: r.ApproximateArrivalTimestamp,
+				Data:                        r.Data,
+				PartitionKey:                r.PartitionKey,
+			}
+		}
+
+		return &GetRecordsResponse{
+			Records:            responseRecords,
+			NextShardIterator:  nil,
+			MillisBehindLatest: ptr.New(int64(0)),
+		}, nil
+	}
+
 	// Check if the iterator has expired
-	if int64(timestamp) <= f.iteratorsExpirationAt.Load() {
+	if parsedIterator.timestamp <= f.iteratorsExpirationAt.Load() {
 		return nil, &kinesistypes.ExpiredIteratorException{
 			Message: ptr.New(fmt.Sprintf("Iterator %s has expired", request.ShardIterator)),
 		}
 	}
 
-	// Find the shard
-	shardIndex := slices.IndexFunc(stream.shards, func(s *shard) bool {
-		return s.id == shardID
-	})
-	if shardIndex == -1 {
-		return nil, &kinesistypes.ResourceNotFoundException{
-			Message: ptr.New(fmt.Sprintf("no shard %s", request.ShardIterator)),
-		}
-	}
-	shard := stream.shards[shardIndex]
-
 	// Get the records from the position
-	records := shard.records[pos:]
+	records := shard.records[parsedIterator.position:]
 	responseRecords := make([]Record, len(records))
 	for i, r := range records {
 		responseRecords[i] = Record{
-			ApproximateArrivalTimestamp: 0,
-			Data:                        []byte(r.Data),
+			ApproximateArrivalTimestamp: r.ApproximateArrivalTimestamp,
+			Data:                        r.Data,
 			PartitionKey:                r.PartitionKey,
-			SequenceNumber:              strconv.Itoa(pos + i),
+			SequenceNumber:              strconv.Itoa(parsedIterator.position + i),
 		}
 	}
 
 	// Calculate the next position and create the next iterator
-	nextPos := pos + len(records)
+	nextPos := parsedIterator.position + len(records)
 
 	// Increment timestamp for the next iterator using atomic operations
 	nextTimestamp := f.lastIteratorTimestamp.Add(1)
 
 	return &GetRecordsResponse{
-		NextShardIterator: shardIteratorFor(shardID, nextTimestamp, nextPos),
-		Records:           responseRecords,
+		NextShardIterator:  ptr.New(shardIteratorFor(parsedIterator.shardID, nextTimestamp, nextPos)),
+		Records:            responseRecords,
+		MillisBehindLatest: ptr.New(int64(0)),
 	}, nil
 }
 
-func splitShardIterator(iter string) (shardID string, timestamp int64, position int, err error) {
+type parsedIterator struct {
+	shardID   string
+	timestamp int64
+	position  int
+}
+
+func splitShardIterator(iter string) (parsedIterator, error) {
 	parts := strings.Split(iter, ":")
 	if len(parts) != 3 {
-		return "", 0, 0, fmt.Errorf("invalid iterator format: %s", iter)
+		return parsedIterator{}, fmt.Errorf("invalid iterator format: %s", iter)
 	}
 
-	timestamp, err = strconv.ParseInt(parts[1], 10, 64)
+	timestamp, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("invalid timestamp in iterator: %w", err)
+		return parsedIterator{}, fmt.Errorf("invalid timestamp in iterator: %w", err)
 	}
 
 	pos, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("invalid position in iterator: %w", err)
+		return parsedIterator{}, fmt.Errorf("invalid position in iterator: %w", err)
 	}
 
-	return parts[0], timestamp, pos, nil
+	return parsedIterator{parts[0], timestamp, pos}, nil
 }

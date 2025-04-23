@@ -185,3 +185,12 @@ func (c *Client) GetShardIterator(ctx context.Context, params *kinesis.GetShardI
 
 	return *out.ShardIterator, nil
 }
+
+func (c *Client) MergeShards(ctx context.Context, params *kinesis.MergeShardsInput) (*kinesis.MergeShardsOutput, error) {
+	out, err := c.svc.MergeShards(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
