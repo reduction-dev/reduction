@@ -173,8 +173,8 @@ func TestAssigningOverlappingRangesToKeyGroupRanges(t *testing.T) {
 func TestAssignRangesWithEmptyFromValue(t *testing.T) {
 	assert.Equal(t,
 		[][]int{
-			{}, // No assignments for each
-			{},
+			nil, // No assignments for each
+			nil,
 		},
 		partitioning.AssignRanges(
 			[]partitioning.KeyGroupRange{ // to
@@ -182,6 +182,24 @@ func TestAssignRangesWithEmptyFromValue(t *testing.T) {
 				{2, 3},
 			},
 			[]partitioning.KeyGroupRange{}, // from
+		),
+	)
+}
+
+func TestAssignRanges_NoOverlap(t *testing.T) {
+	assert.Equal(t,
+		[][]int{
+			nil, // No assignments for each
+			nil,
+		},
+		partitioning.AssignRanges(
+			[]partitioning.KeyGroupRange{ // to
+				{0, 1},
+				{2, 3},
+			},
+			[]partitioning.KeyGroupRange{ // from
+				{4, 5}, // No overlap with any 'to' range
+			},
 		),
 	)
 }

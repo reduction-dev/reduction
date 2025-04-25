@@ -11,6 +11,7 @@ import (
 
 type MergeShardsRequest struct {
 	StreamARN            string
+	StreamName           string // allow but error if set
 	ShardToMerge         string
 	AdjacentShardToMerge string
 }
@@ -21,6 +22,12 @@ func (f *Fake) mergeShards(body []byte) (*MergeShardsResponse, error) {
 	var req MergeShardsRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, fmt.Errorf("decode MergeShardsRequest: %w", err)
+	}
+	if req.StreamName != "" {
+		return nil, fmt.Errorf("MergeShards: StreamName is not supported, use StreamARN")
+	}
+	if req.StreamARN == "" {
+		return nil, fmt.Errorf("MergeShards: StreamARN must be set")
 	}
 	streamName := streamNameFromARN(req.StreamARN)
 	stream, ok := f.db.streams[streamName]

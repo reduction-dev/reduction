@@ -15,6 +15,7 @@ type Job interface {
 	DeregisterOperator(ctx context.Context, identity *jobpb.NodeIdentity) error
 	OperatorCheckpointComplete(ctx context.Context, req *snapshotpb.OperatorCheckpoint) error
 	OnSourceRunnerCheckpointComplete(ctx context.Context, req *jobpb.SourceRunnerCheckpointCompleteRequest) error
+	NotifySplitsFinished(ctx context.Context, sourceRunnerID string, splitIDs []string) error
 }
 
 type UnimplementedJob struct{}
@@ -43,6 +44,10 @@ func (u UnimplementedJob) OperatorCheckpointComplete(context.Context, *snapshotp
 	panic("unimplemented")
 }
 
+func (u UnimplementedJob) NotifySplitsFinished(ctx context.Context, sourceRunnerID string, splitIDs []string) error {
+	panic("unimplemented")
+}
+
 var _ Job = UnimplementedJob{}
 
 type NoopJob struct{}
@@ -68,6 +73,10 @@ func (n NoopJob) RegisterOperator(ctx context.Context, identity *jobpb.NodeIdent
 }
 
 func (n NoopJob) RegisterSourceRunner(ctx context.Context, identity *jobpb.NodeIdentity) error {
+	return nil
+}
+
+func (n NoopJob) NotifySplitsFinished(ctx context.Context, sourceRunnerID string, splitIDs []string) error {
 	return nil
 }
 

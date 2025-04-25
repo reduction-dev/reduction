@@ -58,6 +58,8 @@ func route(f *Fake, w http.ResponseWriter, r *http.Request) {
 		resp, err = f.deleteStream(body)
 	case "MergeShards":
 		resp, err = f.mergeShards(body)
+	case "SplitShard":
+		resp, err = f.splitShard(body)
 	default:
 		err = &kinesistypes.InvalidArgumentException{Message: ptr.New(fmt.Sprintf("Invalid Operation: %s", operation))}
 	}

@@ -90,28 +90,24 @@ func keyGroupRanges(keyGroupCount, rangeCount int) []KeyGroupRange {
 	return ranges
 }
 
-// Return a slice where each slice index corresponds to a an item in `to` where
+// Return a slice where each slice index corresponds to an item in `to` where
 // the value is a list of KegGroup indices assigned from the `from`
 // KeyGroupRanges.
 func AssignRanges(to []KeyGroupRange, from []KeyGroupRange) [][]int {
-	// The assignments to return
 	assignments := make([][]int, len(to))
-	for i := range assignments {
-		assignments[i] = []int{}
-	}
-	if len(from) == 0 {
-		return assignments
-	}
-
-	toIdx := 0
 	fromIdx := 0
-	for toIdx < len(to) {
-		for fromIdx < len(from) && to[toIdx].Overlaps(from[fromIdx]) {
-			assignments[toIdx] = append(assignments[toIdx], fromIdx)
+	for toIdx, toRange := range to {
+		// Advance fromIdx to the first possible overlap
+		for fromIdx < len(from) && from[fromIdx].End <= toRange.Start {
 			fromIdx++
 		}
-		fromIdx--
-		toIdx++
+		j := fromIdx
+		for j < len(from) && from[j].Start < toRange.End {
+			if toRange.Overlaps(from[j]) {
+				assignments[toIdx] = append(assignments[toIdx], j)
+			}
+			j++
+		}
 	}
 	return assignments
 }

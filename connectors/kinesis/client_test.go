@@ -79,7 +79,7 @@ func testWritingEvents(t *testing.T, ctx context.Context, kclient *kinesis.Clien
 	err = kclient.PutRecordBatch(context.Background(), streamARN, writeEvents)
 	require.NoError(t, err)
 
-	shards, err := kclient.ListShards(ctx, streamARN)
+	shards, err := kclient.ListShards(ctx, streamARN, "")
 	require.NoError(t, err)
 
 	shardIDs := make([]string, len(shards))
@@ -148,7 +148,7 @@ func TestExpiredShardIterator(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the shard
-	shards, err := kclient.ListShards(t.Context(), streamARN)
+	shards, err := kclient.ListShards(t.Context(), streamARN, "")
 	require.NoError(t, err)
 	require.Len(t, shards, 1)
 	shard := shards[0]

@@ -54,6 +54,8 @@ type SourceRunner struct {
 
 	// Add a context field to SourceRunner for use in HandleAssignSplits
 	ctx context.Context
+
+	runnerCtx context.Context // Context tied to SourceRunner lifecycle
 }
 
 type NewParams struct {
@@ -71,20 +73,11 @@ func New(params NewParams) *SourceRunner {
 		params.Clock = clocks.NewSystemClock()
 	}
 
-	if params.SourceReaderFactory == nil {
-		params.SourceReaderFactory = func(source *jobconfigpb.Source) connectors.SourceReader {
-			sourceConfig, err := config.SourceFromProto(source)
-			if err != nil {
-				panic(fmt.Sprintf("invalid source config: %v", err))
-			}
-			return sourceConfig.NewSourceReader(connectors.SourceReaderHooks{})
-		}
-	}
+	srID := ksuid.New().String()
 
-	id := ksuid.New().String()
-	log := slog.With("instanceID", "source-runner-"+id[len(id)-4:])
-	return &SourceRunner{
-		ID:                  id,
+	log := slog.With("instanceID", "source-runner-"+srID[len(srID)-4:])
+	sr := &SourceRunner{
+		ID:                  srID,
 		host:                params.Host,
 		job:                 params.Job,
 		watermarker:         &wmark.Watermarker{},
@@ -102,6 +95,22 @@ func New(params NewParams) *SourceRunner {
 		outputStream:        make(chan *workerpb.Event, 1_000),
 		initDone:            make(chan struct{}),
 	}
+
+	if sr.sourceReaderFactory == nil {
+		sr.sourceReaderFactory = func(source *jobconfigpb.Source) connectors.SourceReader {
+			sourceConfig, err := config.SourceFromProto(source)
+			if err != nil {
+				panic(fmt.Sprintf("invalid source config: %v", err))
+			}
+			return sourceConfig.NewSourceReader(connectors.SourceReaderHooks{
+				NotifySplitsFinished: func(splitIDs []string) {
+					sr.job.NotifySplitsFinished(sr.runnerCtx, sr.ID, splitIDs)
+				},
+			})
+		}
+	}
+
+	return sr
 }
 
 // Start begins registration attempts and is called during boot.
@@ -112,6 +121,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	r.stop = cancel
+	r.runnerCtx = ctx // Store the lifecycle context
 
 	r.registerPoller = r.clock.Every(3*time.Second, func(*clocks.EveryContext) {
 		if err := r.job.RegisterSourceRunner(ctx, &jobpb.NodeIdentity{

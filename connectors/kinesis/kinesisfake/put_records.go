@@ -50,13 +50,24 @@ func (f *Fake) putRecords(body []byte) (*PutRecordsResponse, error) {
 		}
 	}
 
+	// Only pick from consider open shards
+	openShards := make([]*shard, 0, len(stream.shards))
+	for _, s := range stream.shards {
+		if !s.isFinished {
+			openShards = append(openShards, s)
+		}
+	}
+	if len(openShards) == 0 {
+		return nil, fmt.Errorf("no open shards available for writing")
+	}
+
 	for i, r := range request.Records {
 		data, err := base64.StdEncoding.DecodeString(r.Data)
 		if err != nil {
 			panic(err)
 		}
 
-		shard := pickShard(r.PartitionKey, stream.shards)
+		shard := pickShard(r.PartitionKey, openShards)
 		shard.records = append(shard.records, Record{
 			ApproximateArrivalTimestamp: float64(time.Now().UnixNano()) / 1e9,
 			Data:                        data,

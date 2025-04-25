@@ -115,16 +115,16 @@ func (c *Client) CreateStream(ctx context.Context, params *CreateStreamParams) (
 	return *out.StreamDescription.StreamARN, nil
 }
 
-func (c *Client) ListShards(ctx context.Context, streamARN string) ([]types.Shard, error) {
+func (c *Client) ListShards(ctx context.Context, streamARN string, exclusiveStartShardID string) ([]types.Shard, error) {
 	var shards []types.Shard
 
 	var nextToken *string
 	for {
-		input := &kinesis.ListShardsInput{
-			StreamARN: &streamARN,
-		}
+		input := &kinesis.ListShardsInput{StreamARN: &streamARN}
 		if nextToken != nil {
 			input.NextToken = nextToken
+		} else if exclusiveStartShardID != "" {
+			input.ExclusiveStartShardId = &exclusiveStartShardID
 		}
 
 		out, err := c.svc.ListShards(ctx, input)
@@ -193,4 +193,23 @@ func (c *Client) MergeShards(ctx context.Context, params *kinesis.MergeShardsInp
 	}
 
 	return out, nil
+}
+
+type SplitShardParams struct {
+	StreamARN          string
+	ShardToSplit       *string
+	NewStartingHashKey *string
+}
+
+func (c *Client) SplitShard(ctx context.Context, params *SplitShardParams) error {
+	input := &kinesis.SplitShardInput{
+		StreamARN:          &params.StreamARN,
+		ShardToSplit:       params.ShardToSplit,
+		NewStartingHashKey: params.NewStartingHashKey,
+	}
+	_, err := c.svc.SplitShard(ctx, input)
+	if err != nil {
+		return err
+	}
+	return nil
 }

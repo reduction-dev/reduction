@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/jobpb/jobpbconnect"
 	"reduction.dev/reduction/proto/snapshotpb"
@@ -51,3 +52,13 @@ func (c *JobConnectClient) OnSourceRunnerCheckpointComplete(ctx context.Context,
 	_, err := c.connClient.SourceRunnerCheckpointComplete(ctx, connect.NewRequest(ckpt))
 	return err
 }
+
+func (c *JobConnectClient) NotifySplitsFinished(ctx context.Context, sourceRunnerID string, splitIDs []string) error {
+	_, err := c.connClient.NotifySplitsFinished(ctx, connect.NewRequest(&jobpb.NotifySplitsFinishedRequest{
+		SourceRunnerId: sourceRunnerID,
+		SplitIds:       splitIDs,
+	}))
+	return err
+}
+
+var _ proto.Job = (*JobConnectClient)(nil)

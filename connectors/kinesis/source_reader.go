@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
@@ -32,8 +33,6 @@ type assignedShard struct {
 	shardIterator string
 	// The sequence number of the last record read from this shard.
 	sequenceNumber string
-	// Flag to indicate if the shard has reached the end of input.
-	isFinished bool
 }
 
 func NewSourceReader(config SourceConfig, hooks connectors.SourceReaderHooks) *SourceReader {
@@ -61,23 +60,7 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 		return [][]byte{}, nil
 	}
 
-	// Find the next non-finished shard, starting from current index
-	startIdx := s.shardIndex
-	found := false
-	var shard *assignedShard
-	for i := range s.assignedShards {
-		idx := (startIdx + i) % len(s.assignedShards)
-		if !s.assignedShards[idx].isFinished {
-			shard = s.assignedShards[idx]
-			s.shardIndex = (idx + 1) % len(s.assignedShards)
-			found = true
-			break
-		}
-	}
-	if !found {
-		// All shards are finished
-		return [][]byte{}, nil
-	}
+	shard := s.assignedShards[s.shardIndex]
 
 	// If we don't have a shardIterator yet, we need to get one
 	if shard.shardIterator == "" {
@@ -111,8 +94,8 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 
 	// Handle finished shards
 	if records.NextShardIterator == nil {
-		shard.isFinished = true
 		s.hooks.NotifySplitsFinished([]string{shard.id})
+		s.assignedShards = slices.Delete(s.assignedShards, s.shardIndex, s.shardIndex+1)
 	} else {
 		// Update shard state for continued reading
 		shard.shardIterator = *records.NextShardIterator
@@ -122,6 +105,13 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 				shard.sequenceNumber = *lastRecord.SequenceNumber
 			}
 		}
+		// Read the next shard in the list on the next ReadEvents call
+		s.shardIndex++
+	}
+
+	// Keep the shard index in bounds
+	if len(s.assignedShards) > 0 {
+		s.shardIndex = s.shardIndex % len(s.assignedShards)
 	}
 
 	// Convert the records to protobuf format
@@ -156,9 +146,8 @@ func (s *SourceReader) Checkpoint() [][]byte {
 	for i, shard := range s.assignedShards {
 		var err error
 		shards[i], err = proto.Marshal(&kinesispb.Shard{
-			ShardId:  shard.id,
-			Cursor:   shard.sequenceNumber,
-			Finished: shard.isFinished,
+			ShardId: shard.id,
+			Cursor:  shard.sequenceNumber,
 		})
 		if err != nil {
 			panic(err)
