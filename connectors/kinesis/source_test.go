@@ -1,16 +1,13 @@
 package kinesis_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	protocol "reduction.dev/reduction-protocol/kinesispb"
+	"reduction.dev/reduction-protocol/kinesispb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kinesis"
@@ -25,20 +22,8 @@ func TestCheckpointing(t *testing.T) {
 	kinesisServer, _ := kinesisfake.StartFake()
 	defer kinesisServer.Close()
 
-	client, err := kinesis.NewClient(&kinesis.NewClientParams{
-		Endpoint:    kinesisServer.URL,
-		Region:      "us-east-2",
-		Credentials: aws.AnonymousCredentials{},
-	})
-	require.NoError(t, err)
-
-	// Create a Kinesis Stream with two shards
-	streamARN, err := client.CreateStream(context.Background(), &kinesis.CreateStreamParams{
-		StreamName:      "stream-name",
-		ShardCount:      2,
-		MaxWaitDuration: 1 * time.Minute,
-	})
-	require.NoError(t, err)
+	client := kinesis.NewLocalClient(kinesisServer.URL)
+	stream := kinesis.CreateTempStream(t, client, 2)
 
 	// Make 20 records but only write half of them
 	records := make([]kinesis.Record, 20)
@@ -48,11 +33,10 @@ func TestCheckpointing(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%d", i),
 		}
 	}
-	err = client.PutRecordBatch(context.Background(), streamARN, records[:10])
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, records[:10])
 
 	config := kinesis.SourceConfig{
-		StreamARN: streamARN,
+		StreamARN: stream.StreamARN,
 		Client:    client,
 	}
 
@@ -77,7 +61,7 @@ func TestCheckpointing(t *testing.T) {
 
 		// Unmarshal each protobuf record to get the raw data
 		for _, event := range events {
-			var record protocol.Record
+			var record kinesispb.Record
 			err := proto.Unmarshal(event, &record)
 			require.NoError(t, err)
 			readEvents = append(readEvents, record.Data)
@@ -91,8 +75,7 @@ func TestCheckpointing(t *testing.T) {
 	}
 
 	// Write remaining 10 records
-	err = client.PutRecordBatch(context.Background(), streamARN, records[10:])
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, records[10:])
 
 	// Create new set of source readers
 	sourceReaderIDs = []string{"sr3", "sr4"}
@@ -114,7 +97,7 @@ func TestCheckpointing(t *testing.T) {
 	}, nil)
 
 	// Load the source reader checkpoints
-	err = ss.LoadCheckpoint(checkpoint)
+	err := ss.LoadCheckpoint(checkpoint)
 	require.NoError(t, err)
 
 	// Start the source splitter and wait for assignments
@@ -128,7 +111,7 @@ func TestCheckpointing(t *testing.T) {
 
 		// Unmarshal each protobuf record to get the raw data
 		for _, event := range events {
-			var record protocol.Record
+			var record kinesispb.Record
 			err := proto.Unmarshal(event, &record)
 			require.NoError(t, err)
 			readEvents = append(readEvents, record.Data)
@@ -148,29 +131,16 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	kinesisServer, fake := kinesisfake.StartFake()
 	defer kinesisServer.Close()
 
-	client, err := kinesis.NewClient(&kinesis.NewClientParams{
-		Endpoint:    kinesisServer.URL,
-		Region:      "us-east-2",
-		Credentials: aws.AnonymousCredentials{},
-	})
-	require.NoError(t, err)
-
-	// Create a Kinesis Stream with one shard
-	streamARN, err := client.CreateStream(context.Background(), &kinesis.CreateStreamParams{
-		StreamName:      "stream-name",
-		ShardCount:      1,
-		MaxWaitDuration: 1 * time.Minute,
-	})
-	require.NoError(t, err)
+	client := kinesis.NewLocalClient(kinesisServer.URL)
+	stream := kinesis.CreateTempStream(t, client, 1)
 
 	// Put a record on the stream
-	err = client.PutRecordBatch(context.Background(), streamARN, []kinesis.Record{
+	stream.PutRecordBatch(t, []kinesis.Record{
 		{Key: "key", Data: []byte("data")},
 	})
-	require.NoError(t, err)
 
 	config := kinesis.SourceConfig{
-		StreamARN: streamARN,
+		StreamARN: stream.StreamARN,
 		Client:    client,
 	}
 
@@ -178,7 +148,7 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	sr := kinesis.NewSourceReader(config, connectors.SourceReaderHooks{})
 
 	assignments := connectorstest.AssignmentsFromSplitter(config, []string{"sr1"})
-	err = sr.AssignSplits(assignments["sr1"])
+	err := sr.AssignSplits(assignments["sr1"])
 	require.NoError(t, err)
 
 	// Read the events initially
@@ -190,10 +160,9 @@ func TestReadingAfterShardIteratorExpired(t *testing.T) {
 	fake.ExpireShardIterators()
 
 	// Add another record
-	err = client.PutRecordBatch(context.Background(), streamARN, []kinesis.Record{
+	stream.PutRecordBatch(t, []kinesis.Record{
 		{Key: "new-key", Data: []byte("new-data")},
 	})
-	require.NoError(t, err)
 
 	// Try reading again - this should fail because iterator is expired
 	events, err = sr.ReadEvents()

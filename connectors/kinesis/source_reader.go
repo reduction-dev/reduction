@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
@@ -19,7 +18,7 @@ import (
 )
 
 type SourceReader struct {
-	client         *Client
+	client         *kinesis.Client
 	streamARN      string
 	assignedShards []*assignedShard
 	shardIndex     int
@@ -36,18 +35,8 @@ type assignedShard struct {
 }
 
 func NewSourceReader(config SourceConfig, hooks connectors.SourceReaderHooks) *SourceReader {
-	if config.Client == nil {
-		var err error
-		config.Client, err = NewClient(&NewClientParams{
-			Endpoint: config.Endpoint,
-		})
-		if err != nil {
-			log.Fatalf("failed to create kinesis client: %s", err)
-		}
-	}
-
 	return &SourceReader{
-		client:    config.Client,
+		client:    config.NewKinesisClient(),
 		streamARN: config.StreamARN,
 		hooks:     hooks,
 	}
@@ -178,7 +167,10 @@ func (s *SourceReader) refreshShardIterator(shard *assignedShard) error {
 		return fmt.Errorf("kinesis SourceReader.refreshShardIterator getting shard iterator: %w", sourceErrorFrom(err))
 	}
 
-	shard.shardIterator = iterator
+	if iterator.ShardIterator == nil {
+		return fmt.Errorf("kinesis SourceReader.refreshShardIterator: nil ShardIterator returned")
+	}
+	shard.shardIterator = *iterator.ShardIterator
 	return nil
 }
 

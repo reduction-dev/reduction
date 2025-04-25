@@ -23,17 +23,22 @@ func (f *Fake) mergeShards(body []byte) (*MergeShardsResponse, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, fmt.Errorf("decode MergeShardsRequest: %w", err)
 	}
-	if req.StreamName != "" {
-		return nil, fmt.Errorf("MergeShards: StreamName is not supported, use StreamARN")
+
+	var streamName string
+	if req.StreamARN != "" {
+		streamName = streamNameFromARN(req.StreamARN)
+	} else if req.StreamName != "" {
+		streamName = req.StreamName
+	} else {
+		return nil, &kinesistypes.InvalidArgumentException{
+			Message: ptr.New("MergeShards: StreamARN or StreamName must be set"),
+		}
 	}
-	if req.StreamARN == "" {
-		return nil, fmt.Errorf("MergeShards: StreamARN must be set")
-	}
-	streamName := streamNameFromARN(req.StreamARN)
+
 	stream, ok := f.db.streams[streamName]
 	if !ok {
 		return nil, &kinesistypes.ResourceNotFoundException{
-			Message: ptr.New(fmt.Sprintf("Stream %s not found", req.StreamARN)),
+			Message: ptr.New(fmt.Sprintf("Stream %s not found", streamName)),
 		}
 	}
 

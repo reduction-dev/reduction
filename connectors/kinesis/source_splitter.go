@@ -3,9 +3,10 @@ package kinesis
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
+	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
@@ -15,7 +16,7 @@ import (
 )
 
 type SourceSplitter struct {
-	client                  *Client
+	client                  *awskinesis.Client
 	streamARN               string
 	shardsPendingAssignment []string
 	cursors                 map[string]string
@@ -26,19 +27,8 @@ type SourceSplitter struct {
 }
 
 func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) *SourceSplitter {
-	client := config.Client
-	if client == nil {
-		var err error
-		client, err = NewClient(&NewClientParams{
-			Endpoint: config.Endpoint,
-		})
-		if err != nil {
-			log.Fatalf("Failed to create Kinesis Client: %s", err)
-		}
-	}
-
 	return &SourceSplitter{
-		client:          client,
+		client:          config.NewKinesisClient(),
 		streamARN:       config.StreamARN,
 		cursors:         make(map[string]string),
 		errChan:         errChan,
@@ -75,7 +65,7 @@ func (s *SourceSplitter) Start() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	shards, err := s.client.ListShards(ctx, s.streamARN, s.LastSeenShardId)
+	shards, err := s.listAllShards(ctx, s.LastSeenShardId)
 	if err != nil {
 		s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
 		return
@@ -111,8 +101,6 @@ func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []
 
 func (s *SourceSplitter) Close() error { return nil }
 
-var _ connectors.SourceSplitter = (*SourceSplitter)(nil)
-
 // Checkpoint returns a snapshot of the splitter's state for checkpointing.
 func (s *SourceSplitter) Checkpoint() []byte {
 	bs, err := proto.Marshal(&kinesispb.SplitterState{
@@ -123,3 +111,29 @@ func (s *SourceSplitter) Checkpoint() []byte {
 	}
 	return bs
 }
+
+// listAllShards paginates through all shards for a given streamARN, starting after exclusiveStartShardID.
+func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardID string) ([]awstypes.Shard, error) {
+	var shards []awstypes.Shard
+	var nextToken *string
+	for {
+		input := &awskinesis.ListShardsInput{StreamARN: &s.streamARN}
+		if nextToken != nil {
+			input.NextToken = nextToken
+		} else if exclusiveStartShardID != "" {
+			input.ExclusiveStartShardId = &exclusiveStartShardID
+		}
+		out, err := s.client.ListShards(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		shards = append(shards, out.Shards...)
+		if out.NextToken == nil {
+			break
+		}
+		nextToken = out.NextToken
+	}
+	return shards, nil
+}
+
+var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

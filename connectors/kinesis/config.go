@@ -1,10 +1,14 @@
 package kinesis
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"reduction.dev/reduction-protocol/jobconfigpb"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto/confvars"
@@ -15,7 +19,7 @@ type SourceConfig struct {
 	SourceID  string
 	StreamARN string
 	Endpoint  string
-	Client    *Client
+	Client    *kinesis.Client
 }
 
 func (c SourceConfig) Validate() error {
@@ -60,6 +64,24 @@ func SourceConfigFromProto(id string, pb *jobconfigpb.KinesisSource) SourceConfi
 		StreamARN: pb.StreamArn.GetValue(),
 		Endpoint:  pb.Endpoint.GetValue(),
 	}
+}
+
+func (c SourceConfig) NewKinesisClient() *kinesis.Client {
+	if c.Client != nil {
+		return c.Client
+	}
+	awsCfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("failed to load AWS config for Kinesis: %v", err)
+	}
+	var opts []func(*kinesis.Options)
+	if c.Endpoint != "" {
+		endpoint := c.Endpoint
+		opts = append(opts, func(o *kinesis.Options) {
+			o.BaseEndpoint = &endpoint
+		})
+	}
+	return kinesis.NewFromConfig(awsCfg, opts...)
 }
 
 var _ connectors.SourceConfig = SourceConfig{}

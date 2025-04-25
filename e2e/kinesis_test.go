@@ -2,14 +2,11 @@ package e2e_test
 
 import (
 	"cmp"
-	"context"
 	"fmt"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,20 +32,8 @@ func TestKinesis(t *testing.T) {
 	kinesisService, _ := kinesisfake.StartFake()
 	defer kinesisService.Close()
 
-	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{
-		Endpoint:    kinesisService.URL,
-		Region:      "us-east-2",
-		Credentials: aws.AnonymousCredentials{},
-	})
-	require.NoError(t, err)
-
-	// Create a Kinesis Stream with two shards
-	streamARN, err := kclient.CreateStream(context.Background(), &kinesis.CreateStreamParams{
-		StreamName:      "stream-name",
-		ShardCount:      2,
-		MaxWaitDuration: 1 * time.Minute,
-	})
-	require.NoError(t, err)
+	client := kinesis.NewLocalClient(kinesisService.URL)
+	stream := kinesis.CreateTempStream(t, client, 2)
 
 	// Write 100 records to the stream
 	records := make([]kinesis.Record, 100)
@@ -58,8 +43,7 @@ func TestKinesis(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%d", i),
 		}
 	}
-	err = kclient.PutRecordBatch(context.Background(), streamARN, records)
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, records)
 
 	sinkServer := httpapitest.StartServer()
 	defer sinkServer.Close()
@@ -69,7 +53,7 @@ func TestKinesis(t *testing.T) {
 		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
-		StreamARN: topology.StringValue(streamARN),
+		StreamARN: topology.StringValue(stream.StreamARN),
 		Endpoint:  topology.StringValue(kinesisService.URL),
 		KeyEvent:  e2e.KeyKinesisEventWithRawKeyAndZeroTimestamp,
 	})
@@ -121,20 +105,8 @@ func TestKinesis_ScaleIn(t *testing.T) {
 	kinesisService, _ := kinesisfake.StartFake()
 	defer kinesisService.Close()
 
-	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{
-		Endpoint:    kinesisService.URL,
-		Region:      "us-east-2",
-		Credentials: aws.AnonymousCredentials{},
-	})
-	require.NoError(t, err)
-
-	// Create a Kinesis Stream with two shards
-	streamARN, err := kclient.CreateStream(t.Context(), &kinesis.CreateStreamParams{
-		StreamName:      "scale-in-stream",
-		ShardCount:      2,
-		MaxWaitDuration: 1 * time.Minute,
-	})
-	require.NoError(t, err)
+	client := kinesis.NewLocalClient(kinesisService.URL)
+	stream := kinesis.CreateTempStream(t, client, 2)
 
 	// Write 100 records to both shards
 	records := make([]kinesis.Record, 100)
@@ -144,8 +116,7 @@ func TestKinesis_ScaleIn(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%03d", i),
 		}
 	}
-	err = kclient.PutRecordBatch(t.Context(), streamARN, records)
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, records)
 
 	sinkServer := httpapitest.StartServer()
 	defer sinkServer.Close()
@@ -156,7 +127,7 @@ func TestKinesis_ScaleIn(t *testing.T) {
 		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
-		StreamARN: topology.StringValue(streamARN),
+		StreamARN: topology.StringValue(stream.StreamARN),
 		Endpoint:  topology.StringValue(kinesisService.URL),
 		KeyEvent:  e2e.KeyKinesisEventWithRawKeyAndZeroTimestamp,
 	})
@@ -194,15 +165,9 @@ func TestKinesis_ScaleIn(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond, "httpapi sink has 100 items after initial write")
 
 	// Merge the two shards into one (scale-in)
-	shards, err := kclient.ListShards(t.Context(), streamARN, "")
-	require.NoError(t, err)
-	require.Len(t, shards, 2)
-	_, err = kclient.MergeShards(t.Context(), &awskinesis.MergeShardsInput{
-		StreamARN:            &streamARN,
-		ShardToMerge:         shards[0].ShardId,
-		AdjacentShardToMerge: shards[1].ShardId,
-	})
-	require.NoError(t, err)
+	shardIDs := stream.ShardIDs
+	assert.Len(t, shardIDs, 2)
+	stream.MergeShards(t, shardIDs[0], shardIDs[1])
 
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
@@ -224,8 +189,7 @@ func TestKinesis_ScaleIn(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%03d", 100+i),
 		}
 	}
-	err = kclient.PutRecordBatch(t.Context(), streamARN, moreRecords)
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, moreRecords)
 
 	// Restart from checkpoint (re-run job and workers)
 	job, stop = jobstest.Run(jobDef, jobstest.WithStore(jobStore))
@@ -266,20 +230,8 @@ func TestKinesis_ScaleOut(t *testing.T) {
 	kinesisService, _ := kinesisfake.StartFake()
 	defer kinesisService.Close()
 
-	kclient, err := kinesis.NewClient(&kinesis.NewClientParams{
-		Endpoint:    kinesisService.URL,
-		Region:      "us-east-2",
-		Credentials: aws.AnonymousCredentials{},
-	})
-	require.NoError(t, err)
-
-	// Create a Kinesis Stream with one shard
-	streamARN, err := kclient.CreateStream(t.Context(), &kinesis.CreateStreamParams{
-		StreamName:      "scale-out-stream",
-		ShardCount:      1,
-		MaxWaitDuration: 1 * time.Minute,
-	})
-	require.NoError(t, err)
+	client := kinesis.NewLocalClient(kinesisService.URL)
+	stream := kinesis.CreateTempStream(t, client, 1)
 
 	// Write 50 records to the single shard
 	records := make([]kinesis.Record, 50)
@@ -289,8 +241,7 @@ func TestKinesis_ScaleOut(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%03d", i),
 		}
 	}
-	err = kclient.PutRecordBatch(t.Context(), streamARN, records)
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, records)
 
 	sinkServer := httpapitest.StartServer()
 	defer sinkServer.Close()
@@ -300,7 +251,7 @@ func TestKinesis_ScaleOut(t *testing.T) {
 		WorkingStorageLocation: topology.StringValue(t.TempDir()),
 	}
 	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
-		StreamARN: topology.StringValue(streamARN),
+		StreamARN: topology.StringValue(stream.StreamARN),
 		Endpoint:  topology.StringValue(kinesisService.URL),
 		KeyEvent:  e2e.KeyKinesisEventWithRawKeyAndZeroTimestamp,
 	})
@@ -337,17 +288,10 @@ func TestKinesis_ScaleOut(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond, "httpapi sink has 50 items after initial write")
 
 	// Split the single shard into two (scale-out)
-	shards, err := kclient.ListShards(t.Context(), streamARN, "")
-	require.NoError(t, err)
-	require.Len(t, shards, 1)
-
+	shardIDs := stream.ShardIDs
+	assert.Len(t, shardIDs, 1)
 	midpoint := "170141183460469231731687303715884105728" // midpoint of 0 to 2^128-1
-	err = kclient.SplitShard(t.Context(), &kinesis.SplitShardParams{
-		StreamARN:          streamARN,
-		ShardToSplit:       shards[0].ShardId,
-		NewStartingHashKey: &midpoint,
-	})
-	require.NoError(t, err, "split shard should succeed")
+	stream.SplitShard(t, shardIDs[0], midpoint)
 
 	// Checkpoint
 	fsEvents := jobStore.Subscribe()
@@ -369,8 +313,7 @@ func TestKinesis_ScaleOut(t *testing.T) {
 			Data: fmt.Appendf(nil, "data-%03d", 50+i),
 		}
 	}
-	err = kclient.PutRecordBatch(t.Context(), streamARN, moreRecords)
-	require.NoError(t, err)
+	stream.PutRecordBatch(t, moreRecords)
 
 	// Restart from checkpoint (re-run job and workers)
 	job, stop = jobstest.Run(jobDef, jobstest.WithStore(jobStore))
