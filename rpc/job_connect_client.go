@@ -47,7 +47,7 @@ func (c *JobConnectClient) OperatorCheckpointComplete(ctx context.Context, cp *s
 	return err
 }
 
-func (c *JobConnectClient) OnSourceCheckpointComplete(ctx context.Context, ckpt *snapshotpb.SourceCheckpoint) error {
-	_, err := c.connClient.SourceCheckpointComplete(ctx, connect.NewRequest(ckpt))
+func (c *JobConnectClient) OnSourceRunnerCheckpointComplete(ctx context.Context, ckpt *jobpb.SourceRunnerCheckpointCompleteRequest) error {
+	_, err := c.connClient.SourceRunnerCheckpointComplete(ctx, connect.NewRequest(ckpt))
 	return err
 }

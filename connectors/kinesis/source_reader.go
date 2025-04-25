@@ -151,23 +151,21 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	return nil
 }
 
-func (s *SourceReader) Checkpoint() []byte {
-	shards := make([]*kinesispb.Shard, len(s.assignedShards))
+func (s *SourceReader) Checkpoint() [][]byte {
+	shards := make([][]byte, len(s.assignedShards))
 	for i, shard := range s.assignedShards {
-		shards[i] = &kinesispb.Shard{
+		var err error
+		shards[i], err = proto.Marshal(&kinesispb.Shard{
 			ShardId:  shard.id,
 			Cursor:   shard.sequenceNumber,
 			Finished: shard.isFinished,
+		})
+		if err != nil {
+			panic(err)
 		}
 	}
-	snapshot := &kinesispb.Checkpoint{
-		Shards: shards,
-	}
-	bs, err := proto.Marshal(snapshot)
-	if err != nil {
-		panic(err)
-	}
-	return bs
+
+	return shards
 }
 
 func (s *SourceReader) refreshShardIterator(shard *assignedShard) error {

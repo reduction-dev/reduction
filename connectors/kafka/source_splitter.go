@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kafka/kafkapb"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -99,20 +100,16 @@ func (s *SourceSplitter) Start() {
 	s.hooks.AssignSplits(assignments)
 }
 
-func (s *SourceSplitter) LoadCheckpoints(checkpoints [][]byte) error {
-	for _, cpData := range checkpoints {
-		var checkpoint kafkapb.Checkpoint
-		if err := proto.Unmarshal(cpData, &checkpoint); err != nil {
+func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
+	for _, cpData := range ckpt.SplitStates {
+		var ss kafkapb.SplitState
+		if err := proto.Unmarshal(cpData, &ss); err != nil {
 			return fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 		}
-		for _, topic := range checkpoint.Topics {
-			if s.offsets[topic.Name] == nil {
-				s.offsets[topic.Name] = make(map[int32]kgo.Offset)
-			}
-			for _, part := range topic.Partitions {
-				s.offsets[topic.Name][part.Id] = kgo.NewOffset().At(part.Offset)
-			}
+		if s.offsets[ss.Topic] == nil {
+			s.offsets[ss.Topic] = make(map[int32]kgo.Offset)
 		}
+		s.offsets[ss.Topic][ss.Parition] = kgo.NewOffset().At(ss.Offset)
 	}
 	return nil
 }
@@ -122,5 +119,7 @@ func (s *SourceSplitter) IsSourceSplitter() {}
 func (s *SourceSplitter) Close() error { return nil }
 
 func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []string) {}
+
+func (s *SourceSplitter) Checkpoint() []byte { return nil }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

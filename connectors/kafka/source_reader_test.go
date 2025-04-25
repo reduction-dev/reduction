@@ -13,6 +13,7 @@ import (
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kafka"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
@@ -126,8 +127,9 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 	}, 3*time.Second, 100*time.Millisecond, "should consume first 10 records")
 
 	// Checkpoint
-	cp1 := reader1.Checkpoint()
-	cp2 := reader2.Checkpoint()
+	ckpt := &snapshotpb.SourceCheckpoint{
+		SplitStates: append(reader1.Checkpoint(), reader2.Checkpoint()...),
+	}
 
 	// Write remaining 10 records
 	cluster.Produce(ctx, records[10:]...)
@@ -145,7 +147,7 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 		},
 	}, nil)
 	require.NoError(t, err)
-	err = splitter2.LoadCheckpoints([][]byte{cp1, cp2})
+	err = splitter2.LoadCheckpoint(ckpt)
 	require.NoError(t, err)
 
 	splitter2.Start()

@@ -121,7 +121,7 @@ type fakeSourceReader struct {
 	err                     error
 	callCount               int
 	returnEOIAfterCallCount int // after this many calls, return ErrEndOfInput
-	checkpoint              []byte
+	checkpoint              [][]byte
 	connectors.UnimplementedSourceReader
 }
 
@@ -133,6 +133,6 @@ func (r *fakeSourceReader) ReadEvents() ([][]byte, error) {
 	return r.events, r.err
 }
 
-func (r *fakeSourceReader) Checkpoint() []byte {
+func (r *fakeSourceReader) Checkpoint() [][]byte {
 	return r.checkpoint
 }

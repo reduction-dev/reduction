@@ -22,8 +22,15 @@ message KeyGroupRange {
   int32 end = 2;
 }
 
+// SourceCheckpoint represents the entire checkpoint data for a source.
 message SourceCheckpoint {
   uint64 checkpoint_id = 1;
-  bytes data = 2;
-  string source_runner_id = 3;
+  string source_id = 2;
+
+  // Opaque data for the marshaled split snapshots
+  repeated bytes splitStates = 3;
+
+  // State specific to each splitter source type that will likely contain a
+  // cursor for the discovered splits.
+  bytes splitterState = 4;
 }

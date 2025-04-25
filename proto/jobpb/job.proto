@@ -11,7 +11,7 @@ service Job {
   rpc RegisterOperator(NodeIdentity) returns (Empty);
   rpc DeregisterOperator(NodeIdentity) returns (Empty);
   rpc OperatorCheckpointComplete(snapshot.OperatorCheckpoint) returns (Empty);
-  rpc SourceCheckpointComplete(snapshot.SourceCheckpoint) returns (Empty);
+  rpc SourceRunnerCheckpointComplete(SourceRunnerCheckpointCompleteRequest) returns (Empty);
 
   // Notifies the job that splits have been finished by a SourceRunner.
   rpc NotifySplitsFinished(NotifySplitsFinishedRequest) returns (Empty);
@@ -44,4 +44,10 @@ message GetSavepointResponse {
 message NotifySplitsFinishedRequest {
   string source_runner_id = 1;
   repeated string split_ids = 2;
+}
+
+message SourceRunnerCheckpointCompleteRequest {
+  string source_runner_id = 1;
+  uint64 checkpoint_id = 2;
+  repeated bytes split_states = 3;
 }

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/storage/locations"
 
@@ -27,6 +29,7 @@ type Store struct {
 	retainedCheckpointsUpdated chan []uint64
 	state                      storeState
 	stateMu                    sync.Mutex
+	sourceSplitters            []connectors.SourceSplitter
 }
 
 type storeState struct {
@@ -129,13 +132,13 @@ func (s *Store) AddOperatorSnapshot(req *snapshotpb.OperatorCheckpoint) error {
 	}
 
 	if s.state.pendingSnapshot.isComplete() {
-		s.finishSnapshotAsync(s.state.pendingSnapshot)
+		s.finishSnapshot(s.state.pendingSnapshot)
 		s.state.pendingSnapshot = nil
 	}
 	return nil
 }
 
-func (s *Store) AddSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
+func (s *Store) AddSourceSnapshot(ckpt *jobpb.SourceRunnerCheckpointCompleteRequest) error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -146,21 +149,33 @@ func (s *Store) AddSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
 		return fmt.Errorf("source runner %s tried to add to job checkpoint %d but pending checkpoint is %d", ckpt.SourceRunnerId, ckpt.CheckpointId, s.state.pendingSnapshot.id)
 	}
 
-	err := s.state.pendingSnapshot.addSourceSnapshot(ckpt)
+	err := s.state.pendingSnapshot.addSourceRunnerSnapshot(ckpt)
 	if err != nil {
 		return err
 	}
 
 	if s.state.pendingSnapshot.isComplete() {
-		s.finishSnapshotAsync(s.state.pendingSnapshot)
+		s.finishSnapshot(s.state.pendingSnapshot)
 		s.state.pendingSnapshot = nil
 	}
 	return nil
 }
 
-func (s *Store) finishSnapshotAsync(snap *jobSnapshot) {
+func (s *Store) RegisterSourceSplitter(splitter connectors.SourceSplitter) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.sourceSplitters = append(s.sourceSplitters, splitter)
+}
+
+func (s *Store) finishSnapshot(snap *jobSnapshot) {
+	// Get the source splitter checkpoints
+	if len(s.sourceSplitters) != 1 {
+		panic("only one source splitter is suppported")
+	}
+	snap.splitterState = s.sourceSplitters[0].Checkpoint()
+
 	go func() {
-		uri, err := s.finishSnapshot(snap)
+		uri, err := s.finishSnapshotAsync(snap)
 		if err != nil {
 			s.errChan <- err
 			return
@@ -171,7 +186,7 @@ func (s *Store) finishSnapshotAsync(snap *jobSnapshot) {
 	}()
 }
 
-func (s *Store) finishSnapshot(snap *jobSnapshot) (uri string, err error) {
+func (s *Store) finishSnapshotAsync(snap *jobSnapshot) (uri string, err error) {
 	data, err := snap.marshal()
 	if err != nil {
 		return "", err
@@ -292,10 +307,14 @@ func (s *Store) LoadCheckpoint() error {
 	s.state.checkpointID = loadedCheckpoint.Id
 
 	// Create a job snapshot from the loaded checkpoint
+	if len(loadedCheckpoint.SourceCheckpoints) != 1 {
+		panic("only one source checkpoint is supported")
+	}
 	jSnapshot := &jobSnapshot{
-		id:                    loadedCheckpoint.Id,
-		operatorCheckpoints:   loadedCheckpoint.OperatorCheckpoints,
-		sourceRunnerSnapshots: loadedCheckpoint.SourceCheckpoints,
+		id:                  loadedCheckpoint.Id,
+		operatorCheckpoints: loadedCheckpoint.OperatorCheckpoints,
+		splitStates:         loadedCheckpoint.SourceCheckpoints[0].SplitStates,
+		splitterState:       loadedCheckpoint.SourceCheckpoints[0].SplitterState,
 	}
 	s.state.completedSnapshots = []*jobSnapshot{jSnapshot}
 

@@ -18,7 +18,6 @@ import (
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
-	"reduction.dev/reduction/util/sliceu"
 )
 
 type Job struct {
@@ -199,8 +198,8 @@ func (j *Job) HandleOperatorCheckpointComplete(ctx context.Context, req *snapsho
 	return j.snapshotStore.AddOperatorSnapshot(req)
 }
 
-func (j *Job) HandleSourceCheckpointComplete(ctx context.Context, snapshot *snapshotpb.SourceCheckpoint) error {
-	return j.snapshotStore.AddSourceSnapshot(snapshot)
+func (j *Job) HandleSourceRunnerCheckpointComplete(ctx context.Context, req *jobpb.SourceRunnerCheckpointCompleteRequest) error {
+	return j.snapshotStore.AddSourceSnapshot(req)
 }
 
 func (j *Job) HandleNotifySplitsFinished(sourceRunnerID string, splitIDs []string) error {
@@ -306,13 +305,11 @@ func (j *Job) start() error {
 			}
 		},
 	}, j.errChan)
+	j.snapshotStore.RegisterSourceSplitter(j.sourceSplitter)
 
 	// Load the source checkpoint into the source splitter
 	if len(ckpt.GetSourceCheckpoints()) > 0 {
-		ckptData := sliceu.Map(ckpt.SourceCheckpoints, func(c *snapshotpb.SourceCheckpoint) []byte {
-			return c.Data
-		})
-		if err := j.sourceSplitter.LoadCheckpoints(ckptData); err != nil {
+		if err := j.sourceSplitter.LoadCheckpoint(ckpt.SourceCheckpoints[0]); err != nil {
 			return fmt.Errorf("loading checkpoint into source splitter: %v", err)
 		}
 	}

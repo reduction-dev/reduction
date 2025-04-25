@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/iteru"
 	"reduction.dev/reduction/util/sliceu"
@@ -48,10 +49,10 @@ func (s *SourceSplitter) Start() {
 	s.hooks.AssignSplits(assignments)
 }
 
-// LoadCheckpoints gets a list of lists of split documents
-func (s *SourceSplitter) LoadCheckpoints(docs [][]byte) error {
+// LoadCheckpoints loads a source checkpoint into the splitter.
+func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
 	// For each checkpoint document
-	for _, doc := range docs {
+	for _, doc := range ckpt.SplitStates {
 		// Parse the JSON document
 		var splits []*split
 		if err := json.Unmarshal(doc, &splits); err != nil {
@@ -78,5 +79,7 @@ func (s *SourceSplitter) IsSourceSplitter() {}
 func (s *SourceSplitter) Close() error { return nil }
 
 func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []string) {}
+
+func (s *SourceSplitter) Checkpoint() []byte { return nil }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

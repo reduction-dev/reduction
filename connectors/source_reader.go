@@ -5,12 +5,14 @@ import "reduction.dev/reduction/proto/workerpb"
 type SourceReader interface {
 	ReadEvents() ([][]byte, error)
 	AssignSplits(splits []*workerpb.SourceSplit) error
-	Checkpoint() []byte
+
+	// Checkpoint returns a list of marshalled split states.
+	Checkpoint() [][]byte
 }
 
 type UnimplementedSourceReader struct{}
 
-func (u *UnimplementedSourceReader) Checkpoint() []byte {
+func (u *UnimplementedSourceReader) Checkpoint() [][]byte {
 	panic("unimplemented")
 }
 

@@ -20,7 +20,6 @@ import (
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/proto"
 	"reduction.dev/reduction/proto/jobpb"
-	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/workers/wmark"
 )
@@ -311,9 +310,9 @@ func (r *SourceRunner) sendKeyEvent(ctx context.Context, event []byte) {
 // createCheckpoint gets checkpoint data from the source reader and notifies the job.
 func (r *SourceRunner) createCheckpoint(id uint64) error {
 	data := r.sourceReader.Checkpoint()
-	return r.job.OnSourceCheckpointComplete(context.Background(), &snapshotpb.SourceCheckpoint{
+	return r.job.OnSourceRunnerCheckpointComplete(context.Background(), &jobpb.SourceRunnerCheckpointCompleteRequest{
 		CheckpointId:   id,
-		Data:           data,
+		SplitStates:    data,
 		SourceRunnerId: r.ID,
 	})
 }

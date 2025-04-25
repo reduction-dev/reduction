@@ -12,6 +12,7 @@ import (
 
 // SourceConfig contains configuration for the Kinesis source connector
 type SourceConfig struct {
+	SourceID  string
 	StreamARN string
 	Endpoint  string
 	Client    *Client
@@ -53,8 +54,9 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 	}
 }
 
-func SourceConfigFromProto(pb *jobconfigpb.KinesisSource) SourceConfig {
+func SourceConfigFromProto(id string, pb *jobconfigpb.KinesisSource) SourceConfig {
 	return SourceConfig{
+		SourceID:  id,
 		StreamARN: pb.StreamArn.GetValue(),
 		Endpoint:  pb.Endpoint.GetValue(),
 	}

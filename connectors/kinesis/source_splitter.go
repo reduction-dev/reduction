@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/sliceu"
 )
@@ -47,15 +48,13 @@ func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks conn
 
 // LoadCheckpoints receives checkpoint data created by source readers
 // and loads cursor data for each shard id.
-func (s *SourceSplitter) LoadCheckpoints(checkpoints [][]byte) error {
-	for _, cpData := range checkpoints {
-		var checkpoint kinesispb.Checkpoint
-		if err := proto.Unmarshal(cpData, &checkpoint); err != nil {
+func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
+	for _, cpData := range ckpt.SplitStates {
+		var split kinesispb.Shard
+		if err := proto.Unmarshal(cpData, &split); err != nil {
 			return err
 		}
-		for _, shard := range checkpoint.Shards {
-			s.cursors[shard.ShardId] = shard.Cursor
-		}
+		s.cursors[split.ShardId] = split.Cursor
 	}
 	return nil
 }
@@ -97,3 +96,12 @@ func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []
 func (s *SourceSplitter) Close() error { return nil }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)
+
+// Checkpoint returns a snapshot of the splitter's state for checkpointing.
+func (s *SourceSplitter) Checkpoint() []byte {
+	bs, err := proto.Marshal(&kinesispb.SplitterState{})
+	if err != nil {
+		panic(err)
+	}
+	return bs
+}

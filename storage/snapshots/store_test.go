@@ -8,9 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/dkv"
 	"reduction.dev/reduction/dkv/recovery"
 	dkvstorage "reduction.dev/reduction/dkv/storage"
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/storage/locations"
 	"reduction.dev/reduction/storage/snapshots"
@@ -29,6 +31,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		SavepointsPath:   "savepoints",
 		CheckpointsPath:  "checkpoints",
 	})
+	store.RegisterSourceSplitter(&nilCheckpointingSourceSplitter{})
 
 	db := dkv.Open(dkv.DBOptions{
 		FileSystem:   dkvstorage.NewLocalFilesystem(filepath.Join(testDir, "op1")),
@@ -52,10 +55,10 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = store.AddSourceSnapshot(&snapshotpb.SourceCheckpoint{
+	err = store.AddSourceSnapshot(&jobpb.SourceRunnerCheckpointCompleteRequest{
 		CheckpointId:   cpID,
-		Data:           []byte{},
 		SourceRunnerId: "sr1",
+		SplitStates:    [][]byte{{}},
 	})
 	require.NoError(t, err)
 
@@ -79,6 +82,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		CheckpointsPath: "checkpoints",
 		SavepointURI:    spURI,
 	})
+	store.RegisterSourceSplitter(&nilCheckpointingSourceSplitter{})
 	require.NoError(t, err, store.LoadCheckpoint())
 
 	// Get the checkpoint from memory
@@ -110,6 +114,7 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 		SavepointsPath:             "savepoints",
 		CheckpointsPath:            "checkpoints",
 	})
+	store.RegisterSourceSplitter(&nilCheckpointingSourceSplitter{})
 
 	// Start the first checkpoint
 	cpID1, err := store.CreateCheckpoint([]string{"op1"}, []string{"sr1"})
@@ -123,10 +128,10 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 		KeyGroupRange: &snapshotpb.KeyGroupRange{Start: 0, End: 0},
 	})
 	require.NoError(t, err)
-	err = store.AddSourceSnapshot(&snapshotpb.SourceCheckpoint{
+	err = store.AddSourceSnapshot(&jobpb.SourceRunnerCheckpointCompleteRequest{
 		CheckpointId:   cpID1,
-		Data:           []byte{},
 		SourceRunnerId: "sr1",
+		SplitStates:    [][]byte{{}},
 	})
 	require.NoError(t, err)
 
@@ -147,10 +152,10 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 		KeyGroupRange: &snapshotpb.KeyGroupRange{Start: 0, End: 0},
 	})
 	require.NoError(t, err)
-	err = store.AddSourceSnapshot(&snapshotpb.SourceCheckpoint{
+	err = store.AddSourceSnapshot(&jobpb.SourceRunnerCheckpointCompleteRequest{
 		CheckpointId:   cpID2,
-		Data:           []byte{},
 		SourceRunnerId: "sr1",
+		SplitStates:    [][]byte{{}},
 	})
 	require.NoError(t, err)
 
@@ -168,4 +173,12 @@ func TestObsoleteCheckpointEvents(t *testing.T) {
 		Path: firstCkptCreated.Path,
 		Op:   locations.OpRemove,
 	}, <-fsEvents, "first checkpoint file removed")
+}
+
+type nilCheckpointingSourceSplitter struct {
+	connectors.UnimplementedSourceSplitter
+}
+
+func (*nilCheckpointingSourceSplitter) Checkpoint() []byte {
+	return nil
 }

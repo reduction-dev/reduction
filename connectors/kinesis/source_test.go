@@ -15,6 +15,7 @@ import (
 	"reduction.dev/reduction/connectors/connectorstest"
 	"reduction.dev/reduction/connectors/kinesis"
 	"reduction.dev/reduction/connectors/kinesis/kinesisfake"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 	"reduction.dev/reduction/util/ds"
 	"reduction.dev/reduction/util/sliceu"
@@ -84,9 +85,9 @@ func TestCheckpointing(t *testing.T) {
 	}
 
 	// Checkpoint
-	checkpoints := make([][]byte, 0, srs.Size())
+	checkpoint := &snapshotpb.SourceCheckpoint{}
 	for _, sr := range srs.All() {
-		checkpoints = append(checkpoints, sr.Checkpoint())
+		checkpoint.SplitStates = append(checkpoint.SplitStates, sr.Checkpoint()...)
 	}
 
 	// Write remaining 10 records
@@ -113,7 +114,7 @@ func TestCheckpointing(t *testing.T) {
 	}, nil)
 
 	// Load the source reader checkpoints
-	err = ss.LoadCheckpoints(checkpoints)
+	err = ss.LoadCheckpoint(checkpoint)
 	require.NoError(t, err)
 
 	// Start the source splitter and wait for assignments

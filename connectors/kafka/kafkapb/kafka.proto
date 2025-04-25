@@ -3,16 +3,8 @@ syntax = "proto3";
 package connectors.kafka.proto.v1;
 option go_package = "connectors/kafkapb";
 
-message Checkpoint {
-  repeated Topic topics = 1;
-}
-
-message Topic {
-  string name = 1;
-  repeated Partition partitions = 2;
-}
-
-message Partition {
-  int32 id = 1;
-  int64 offset = 2;
+message SplitState {
+  string topic = 1;
+  int32 parition = 2;
+  int64 offset = 3;
 }

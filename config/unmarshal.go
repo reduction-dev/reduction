@@ -62,7 +62,7 @@ func Unmarshal(data []byte, params *Params) (*Config, error) {
 func SourceFromProto(source *jobconfigpb.Source) (connectors.SourceConfig, error) {
 	switch c := source.Config.(type) {
 	case *jobconfigpb.Source_Kinesis:
-		return kinesis.SourceConfigFromProto(c.Kinesis), nil
+		return kinesis.SourceConfigFromProto(source.Id, c.Kinesis), nil
 	case *jobconfigpb.Source_HttpApi:
 		return httpapi.SourceConfigFromProto(c.HttpApi), nil
 	case *jobconfigpb.Source_Embedded:

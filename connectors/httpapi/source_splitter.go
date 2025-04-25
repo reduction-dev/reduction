@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
@@ -37,8 +38,8 @@ func (s *SourceSplitter) Start() {
 	s.hooks.AssignSplits(assignments)
 }
 
-func (s *SourceSplitter) LoadCheckpoints(data [][]byte) error {
-	for _, d := range data {
+func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
+	for _, d := range ckpt.SplitStates {
 		if len(d) != 0 {
 			s.startingCursor = d
 		}
@@ -51,5 +52,9 @@ func (s *SourceSplitter) IsSourceSplitter() {}
 func (s *SourceSplitter) Close() error { return nil }
 
 func (s *SourceSplitter) NotifySplitsFinished(sourceRunnerID string, splitIDs []string) {}
+
+func (s *SourceSplitter) Checkpoint() []byte {
+	return nil
+}
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

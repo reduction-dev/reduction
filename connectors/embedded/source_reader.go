@@ -70,13 +70,18 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	return nil
 }
 
-// Checkpoint returns a JSON document representing an array of splits.
-func (s *SourceReader) Checkpoint() []byte {
-	data, err := json.Marshal(s.splits)
-	if err != nil {
-		panic(fmt.Sprintf("BUG marshaling splits: %v", err))
+// Checkpoint returns a list of JSON encoded splits.
+func (s *SourceReader) Checkpoint() [][]byte {
+	splitData := make([][]byte, len(s.splits))
+	for i, split := range s.splits {
+		data, err := json.Marshal(split)
+		if err != nil {
+			panic(fmt.Sprintf("BUG marshaling split: %v", err))
+		}
+		splitData[i] = data
 	}
-	return data
+
+	return splitData
 }
 
 var _ connectors.SourceReader = (*SourceReader)(nil)

@@ -119,18 +119,15 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	return nil
 }
 
-// Checkpoint returns the current cursor (int64) encoded as bytes
-func (s *SourceReader) Checkpoint() []byte {
-	if len(s.splits) < 1 {
-		return nil
+// Checkpoint returns a list of split cursors (int64) encoded as bytes
+func (s *SourceReader) Checkpoint() [][]byte {
+	result := make([][]byte, len(s.splits))
+	for i, split := range s.splits {
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, uint64(split.cursor))
+		result[i] = b
 	}
-
-	var buf bytes.Buffer
-	err := binary.Write(&buf, binary.BigEndian, int64(s.splits[0].cursor))
-	if err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
+	return result
 }
 
 var _ connectors.SourceReader = (*SourceReader)(nil)

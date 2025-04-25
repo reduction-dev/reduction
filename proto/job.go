@@ -14,7 +14,7 @@ type Job interface {
 	RegisterOperator(ctx context.Context, identity *jobpb.NodeIdentity) error
 	DeregisterOperator(ctx context.Context, identity *jobpb.NodeIdentity) error
 	OperatorCheckpointComplete(ctx context.Context, req *snapshotpb.OperatorCheckpoint) error
-	OnSourceCheckpointComplete(ctx context.Context, checkpoint *snapshotpb.SourceCheckpoint) error
+	OnSourceRunnerCheckpointComplete(ctx context.Context, req *jobpb.SourceRunnerCheckpointCompleteRequest) error
 }
 
 type UnimplementedJob struct{}
@@ -35,7 +35,7 @@ func (u UnimplementedJob) DeregisterSourceRunner(context.Context, *jobpb.NodeIde
 	panic("unimplemented")
 }
 
-func (u UnimplementedJob) OnSourceCheckpointComplete(context.Context, *snapshotpb.SourceCheckpoint) error {
+func (u UnimplementedJob) OnSourceRunnerCheckpointComplete(context.Context, *jobpb.SourceRunnerCheckpointCompleteRequest) error {
 	panic("unimplemented")
 }
 
@@ -55,7 +55,7 @@ func (n NoopJob) DeregisterSourceRunner(ctx context.Context, identity *jobpb.Nod
 	return nil
 }
 
-func (n NoopJob) OnSourceCheckpointComplete(ctx context.Context, checkpoint *snapshotpb.SourceCheckpoint) error {
+func (n NoopJob) OnSourceRunnerCheckpointComplete(ctx context.Context, checkpoint *jobpb.SourceRunnerCheckpointCompleteRequest) error {
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 
+	"reduction.dev/reduction/proto/jobpb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/util/iteru"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type jobSnapshot struct {
-	// The snapshot ID
+	// The checkpoint ID
 	id uint64
 
 	// A set of operator IDs that we're expecting a response from
@@ -25,8 +26,11 @@ type jobSnapshot struct {
 	// A set of source runner IDs that we're expecting a response from
 	sourceRunnerIDsComplete map[string]bool
 
-	// Acknowledged source runner snapshots
-	sourceRunnerSnapshots []*snapshotpb.SourceCheckpoint
+	// The opaque source runner split states
+	splitStates [][]byte
+
+	// The sourceSplitter checkpoint data
+	splitterState []byte
 
 	// A flag to indicate the checkpoint should be converted to a savepoint
 	isSavepoint bool
@@ -66,7 +70,7 @@ func (s *jobSnapshot) addOperatorSnapshot(req *snapshotpb.OperatorCheckpoint) er
 	return nil
 }
 
-func (s *jobSnapshot) addSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error {
+func (s *jobSnapshot) addSourceRunnerSnapshot(ckpt *jobpb.SourceRunnerCheckpointCompleteRequest) error {
 	wasCompleted, ok := s.sourceRunnerIDsComplete[ckpt.SourceRunnerId]
 	if !ok {
 		ids := slices.Collect(maps.Keys(s.sourceRunnerIDsComplete))
@@ -77,7 +81,7 @@ func (s *jobSnapshot) addSourceSnapshot(ckpt *snapshotpb.SourceCheckpoint) error
 	}
 
 	s.sourceRunnerIDsComplete[ckpt.SourceRunnerId] = true
-	s.sourceRunnerSnapshots = append(s.sourceRunnerSnapshots, ckpt)
+	s.splitStates = append(s.splitStates, ckpt.SplitStates...)
 
 	return nil
 }
@@ -89,8 +93,14 @@ func (s *jobSnapshot) isComplete() bool {
 
 func (s *jobSnapshot) toProto() *snapshotpb.JobCheckpoint {
 	return &snapshotpb.JobCheckpoint{
-		Id:                  s.id,
-		SourceCheckpoints:   s.sourceRunnerSnapshots,
+		Id: s.id,
+		// We only add once source checkpoint for now since jobs only support one source
+		SourceCheckpoints: []*snapshotpb.SourceCheckpoint{{
+			CheckpointId:  s.id,
+			SplitStates:   s.splitStates,
+			SourceId:      "tbd",
+			SplitterState: s.splitterState,
+		}},
 		OperatorCheckpoints: s.operatorCheckpoints,
 	}
 }

@@ -105,26 +105,24 @@ func (s *SourceReader) ReadEvents() ([][]byte, error) {
 	return events, nil
 }
 
-func (s *SourceReader) Checkpoint() []byte {
-	checkpoint := &kafkapb.Checkpoint{}
+// Checkpoint turns the offsets map into a flat list of marshalled split states.
+func (s *SourceReader) Checkpoint() [][]byte {
+	var splitStates [][]byte
 	for topicName, partMap := range s.offsets {
-		partitions := make([]*kafkapb.Partition, 0, len(partMap))
 		for partition, offset := range partMap {
-			partitions = append(partitions, &kafkapb.Partition{
-				Id:     partition,
-				Offset: offset,
-			})
+			splitState := &kafkapb.SplitState{
+				Topic:    topicName,
+				Parition: partition,
+				Offset:   offset,
+			}
+			data, err := proto.Marshal(splitState)
+			if err != nil {
+				panic(fmt.Sprintf("failed to marshal split state: %v", err))
+			}
+			splitStates = append(splitStates, data)
 		}
-		checkpoint.Topics = append(checkpoint.Topics, &kafkapb.Topic{
-			Name:       topicName,
-			Partitions: partitions,
-		})
 	}
-	ckptData, err := proto.Marshal(checkpoint)
-	if err != nil {
-		panic(fmt.Sprintf("failed to marshal checkpoint: %v", err))
-	}
-	return ckptData
+	return splitStates
 }
 
 var _ connectors.SourceReader = (*SourceReader)(nil)

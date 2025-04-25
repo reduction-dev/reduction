@@ -24,8 +24,8 @@ func NewJobConnectHandler(job *jobs.Job) (path string, handler http.Handler) {
 	return jobpbconnect.NewJobHandler(h, connect.WithInterceptors(NewLoggingInterceptor(logger, slog.LevelDebug)))
 }
 
-func (l *JobConnectHandler) SourceCheckpointComplete(ctx context.Context, req *connect.Request[snapshotpb.SourceCheckpoint]) (*connect.Response[jobpb.Empty], error) {
-	return connect.NewResponse(&jobpb.Empty{}), l.job.HandleSourceCheckpointComplete(ctx, req.Msg)
+func (l *JobConnectHandler) SourceRunnerCheckpointComplete(ctx context.Context, req *connect.Request[jobpb.SourceRunnerCheckpointCompleteRequest]) (*connect.Response[jobpb.Empty], error) {
+	return connect.NewResponse(&jobpb.Empty{}), l.job.HandleSourceRunnerCheckpointComplete(ctx, req.Msg)
 }
 
 func (l *JobConnectHandler) OperatorCheckpointComplete(ctx context.Context, req *connect.Request[snapshotpb.OperatorCheckpoint]) (*connect.Response[jobpb.Empty], error) {

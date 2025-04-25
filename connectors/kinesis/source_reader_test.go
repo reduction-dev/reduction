@@ -182,18 +182,21 @@ func TestSourceReader_FinishingShards(t *testing.T) {
 	assert.Len(t, allEvents, 1, "should read the one event")
 	assert.Equal(t, splitsFinished, shardIDs, "should notify both shards finished")
 
-	// Check that both shard are marked finsished in the checkpoint
-	var checkpoint kinesispb.Checkpoint
-	require.NoError(t, proto.Unmarshal(reader.Checkpoint(), &checkpoint))
-	assert.EqualExportedValues(t, &kinesispb.Checkpoint{
-		Shards: []*kinesispb.Shard{{
-			ShardId:  shardIDs[0],
-			Cursor:   "",
-			Finished: true,
-		}, {
-			ShardId:  shardIDs[1],
-			Cursor:   "",
-			Finished: true,
-		}},
-	}, &checkpoint)
+	// Check that both shards are marked finsished in the checkpoint
+	splitStates := reader.Checkpoint()
+	ckptShards := make([]*kinesispb.Shard, len(splitStates))
+	for i, split := range splitStates {
+		var shard kinesispb.Shard
+		require.NoError(t, proto.Unmarshal(split, &shard))
+		ckptShards[i] = &shard
+	}
+	assert.EqualExportedValues(t, []*kinesispb.Shard{{
+		ShardId:  shardIDs[0],
+		Cursor:   "",
+		Finished: true,
+	}, {
+		ShardId:  shardIDs[1],
+		Cursor:   "",
+		Finished: true,
+	}}, ckptShards)
 }

@@ -62,7 +62,7 @@ func (s *SourceReader) AssignSplits(splits []*workerpb.SourceSplit) error {
 	return nil
 }
 
-func (s *SourceReader) Checkpoint() []byte {
+func (s *SourceReader) Checkpoint() [][]byte {
 	return nil // No checkpointing needed for stdin
 }
 

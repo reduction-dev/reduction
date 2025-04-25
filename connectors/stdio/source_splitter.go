@@ -2,6 +2,7 @@ package stdio
 
 import (
 	"reduction.dev/reduction/connectors"
+	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
 )
 
@@ -18,7 +19,7 @@ func (s *SourceSplitter) Checkpoint() []byte {
 	return nil // No checkpointing needed for stdin
 }
 
-func (s *SourceSplitter) LoadCheckpoints(data [][]byte) error {
+func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
 	// No checkpointing needed for stdin
 	return nil
 }

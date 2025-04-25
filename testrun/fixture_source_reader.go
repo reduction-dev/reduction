@@ -10,7 +10,7 @@ type fixtureSourceReader struct {
 	events [][]byte
 }
 
-func (f *fixtureSourceReader) Checkpoint() []byte {
+func (f *fixtureSourceReader) Checkpoint() [][]byte {
 	panic("unimplemented")
 }
 
