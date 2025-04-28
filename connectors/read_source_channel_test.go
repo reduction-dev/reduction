@@ -114,6 +114,37 @@ func TestNewReadSourceChannel_Backoff(t *testing.T) {
 	})
 }
 
+func TestReadSourceChannel_StartIsIdempotent(t *testing.T) {
+	events := [][]byte{[]byte("event1")}
+	reader := &fakeSourceReader{
+		events: events,
+	}
+
+	rsc := connectors.NewReadSourceChannel(reader)
+
+	// Start the channel multiple times; only the first should have effect
+	rsc.Start(t.Context())
+	rsc.Start(t.Context())
+	rsc.Start(t.Context())
+
+	readFunc := <-rsc.C
+	receivedEvents, err := readFunc()
+	assert.NoError(t, err)
+	assert.Equal(t, events, receivedEvents)
+	assert.Equal(t, 1, reader.callCount, "should only call ReadEvents once after multiple Start calls")
+
+	// Stop and start again should work
+	rsc.Stop()
+	rsc.Start(t.Context())
+	readFunc = <-rsc.C
+	receivedEvents, err = readFunc()
+	assert.NoError(t, err)
+	assert.Equal(t, events, receivedEvents)
+	assert.Equal(t, 2, reader.callCount, "should call ReadEvents again after restart")
+
+	rsc.Close()
+}
+
 // fakeSourceReader is an implementation of the SourceReader interface
 // that allows controlling what ReadEvents returns
 type fakeSourceReader struct {

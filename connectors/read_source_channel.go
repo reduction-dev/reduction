@@ -28,6 +28,9 @@ type ReadSourceChannel struct {
 
 	// signal to stop sending read functions
 	cancel context.CancelFunc
+
+	// Flag that the channel is already running
+	started bool
 }
 
 func NewReadSourceChannel(sourceReader SourceReader) *ReadSourceChannel {
@@ -40,6 +43,11 @@ func NewReadSourceChannel(sourceReader SourceReader) *ReadSourceChannel {
 // Start sends read functions over a channel that the caller invokes to
 // read events from the source reader.
 func (c *ReadSourceChannel) Start(ctx context.Context) {
+	if c.started {
+		return
+	}
+	c.started = true
+
 	// Allow Stop to cancel the loop
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
@@ -102,6 +110,8 @@ func (c *ReadSourceChannel) Start(ctx context.Context) {
 // Stop stops sending read functions over the channel. The channel can be
 // Started again.
 func (c *ReadSourceChannel) Stop() {
+	c.started = false
+
 	// Cancel the context to stop the loop
 	if c.cancel != nil {
 		c.cancel()

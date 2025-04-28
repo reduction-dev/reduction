@@ -12,3 +12,10 @@ func (f *Fake) ExpireShardIterators() {
 func (f *Fake) SetGetRecordsError(err error) {
 	f.getRecordsError = err
 }
+
+// SetGetRecordsLimit sets the default limit for GetRecords calls. This is
+// useful for testing when we want to return a few records on each request
+// instead of reading the entire shard in one call.
+func (f *Fake) SetGetRecordsLimit(limit int) {
+	f.getRecordsLimit = limit
+}

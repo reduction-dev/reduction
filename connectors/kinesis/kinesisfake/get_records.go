@@ -3,6 +3,7 @@ package kinesisfake
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -74,25 +75,6 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 	shard := stream.shards[shardIndex]
 
-	// If the shard is finished, return end-of-shard (empty records, no next iterator)
-	if shard.isFinished {
-		records := shard.records[parsedIterator.position:]
-		responseRecords := make([]Record, len(records))
-		for i, r := range records {
-			responseRecords[i] = Record{
-				ApproximateArrivalTimestamp: r.ApproximateArrivalTimestamp,
-				Data:                        r.Data,
-				PartitionKey:                r.PartitionKey,
-			}
-		}
-
-		return &GetRecordsResponse{
-			Records:            responseRecords,
-			NextShardIterator:  nil,
-			MillisBehindLatest: ptr.New(int64(0)),
-		}, nil
-	}
-
 	// Check if the iterator has expired
 	if parsedIterator.timestamp <= f.iteratorsExpirationAt.Load() {
 		return nil, &kinesistypes.ExpiredIteratorException{
@@ -101,7 +83,15 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 	}
 
 	// Get the records from the position
-	records := shard.records[parsedIterator.position:]
+	var endPosition int
+	if request.Limit != 0 {
+		endPosition = parsedIterator.position + request.Limit
+	} else {
+		endPosition = parsedIterator.position + f.getRecordsLimit
+	}
+	endPosition = min(endPosition, len(shard.records))
+
+	records := shard.records[parsedIterator.position:endPosition]
 	responseRecords := make([]Record, len(records))
 	for i, r := range records {
 		responseRecords[i] = Record{
@@ -111,15 +101,20 @@ func (f *Fake) getRecords(body []byte) (*GetRecordsResponse, error) {
 			SequenceNumber:              strconv.Itoa(parsedIterator.position + i),
 		}
 	}
-
-	// Calculate the next position and create the next iterator
-	nextPos := parsedIterator.position + len(records)
+	slog.Info("getRecords", "shardID", parsedIterator.shardID, "position", parsedIterator.position, "endPosition", endPosition, "records", len(records))
 
 	// Increment timestamp for the next iterator using atomic operations
 	nextTimestamp := f.lastIteratorTimestamp.Add(1)
 
+	// Next iterator is nil if we are at the end of the shard and the shard has
+	// been superceeded by another child shard.
+	var nextIterator *string
+	if !(endPosition >= len(shard.records) && shard.isFinished) {
+		nextIterator = ptr.New(shardIteratorFor(parsedIterator.shardID, nextTimestamp, endPosition))
+	}
+
 	return &GetRecordsResponse{
-		NextShardIterator:  ptr.New(shardIteratorFor(parsedIterator.shardID, nextTimestamp, nextPos)),
+		NextShardIterator:  nextIterator,
 		Records:            responseRecords,
 		MillisBehindLatest: ptr.New(int64(0)),
 	}, nil

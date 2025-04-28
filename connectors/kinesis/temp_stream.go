@@ -119,6 +119,24 @@ func (s *TempStream) PutRecordBatch(t *testing.T, records []Record) {
 	require.NoError(t, err, "put record batch")
 }
 
+// ListShards returns the list of shard IDs, optionally starting after a given shard ID.
+func (s *TempStream) ListShards(t *testing.T, afterShardID string) []string {
+	input := &kinesis.ListShardsInput{
+		StreamName: &s.StreamName,
+	}
+	if afterShardID != "" {
+		input.ExclusiveStartShardId = &afterShardID
+	}
+	resp, err := s.Client.ListShards(context.Background(), input)
+	require.NoError(t, err, "list shards")
+
+	shardIDs := make([]string, len(resp.Shards))
+	for i, shard := range resp.Shards {
+		shardIDs[i] = *shard.ShardId
+	}
+	return shardIDs
+}
+
 func NewLocalClient(endpoint string) *kinesis.Client {
 	cfg := kinesis.Options{
 		EndpointResolver: kinesis.EndpointResolverFromURL(endpoint),

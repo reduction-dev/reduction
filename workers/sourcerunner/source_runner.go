@@ -56,6 +56,10 @@ type SourceRunner struct {
 	ctx context.Context
 
 	runnerCtx context.Context // Context tied to SourceRunner lifecycle
+
+	startSourceChannelCh chan struct{} // signal to start the source channel
+
+	splitsWereAssigned chan []*workerpb.SourceSplit // channel for split assignment requests
 }
 
 type NewParams struct {
@@ -94,6 +98,7 @@ func New(params NewParams) *SourceRunner {
 		batchingParams:      params.EventBatching,
 		outputStream:        make(chan *workerpb.Event, 1_000),
 		initDone:            make(chan struct{}),
+		splitsWereAssigned:  make(chan []*workerpb.SourceSplit, 1),
 	}
 
 	if sr.sourceReaderFactory == nil {
@@ -236,6 +241,16 @@ func (r *SourceRunner) processEvents(ctx context.Context) error {
 		case <-ctx.Done():
 			r.Logger.Info("stopping source runner loop", "cause", context.Cause(ctx))
 			return nil
+		case splits := <-r.splitsWereAssigned:
+			if err := r.sourceReader.AssignSplits(splits); err != nil {
+				return err
+			}
+			if len(splits) > 0 {
+				if r.sourceChannel == nil {
+					return fmt.Errorf("sourceChannel is nil")
+				}
+				r.sourceChannel.Start(r.ctx)
+			}
 		case <-r.watermarkTicker.C:
 			r.outputStream <- &workerpb.Event{Event: &workerpb.Event_Watermark{Watermark: &workerpb.Watermark{}}}
 		case barrier := <-r.checkpointBarrier:
@@ -332,12 +347,6 @@ func (r *SourceRunner) HandleAssignSplits(splits []*workerpb.SourceSplit) error 
 	if r.sourceReader == nil {
 		return fmt.Errorf("sourceReader is not initialized")
 	}
-	if err := r.sourceReader.AssignSplits(splits); err != nil {
-		return err
-	}
-	// TODO: Add method r.sourceReader.HasSplits() to check if there are splits
-	if len(splits) > 0 {
-		r.sourceChannel.Start(r.ctx)
-	}
+	r.splitsWereAssigned <- splits
 	return nil
 }

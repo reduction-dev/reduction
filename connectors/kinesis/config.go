@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
@@ -16,10 +17,11 @@ import (
 
 // SourceConfig contains configuration for the Kinesis source connector
 type SourceConfig struct {
-	SourceID  string
-	StreamARN string
-	Endpoint  string
-	Client    *kinesis.Client
+	SourceID               string
+	StreamARN              string
+	Endpoint               string
+	Client                 *kinesis.Client
+	ShardDiscoveryInterval time.Duration
 }
 
 func (c SourceConfig) Validate() error {
@@ -57,12 +59,12 @@ func (c SourceConfig) ProtoMessage() *jobconfigpb.Source {
 		},
 	}
 }
-
 func SourceConfigFromProto(id string, pb *jobconfigpb.KinesisSource) SourceConfig {
 	return SourceConfig{
-		SourceID:  id,
-		StreamARN: pb.StreamArn.GetValue(),
-		Endpoint:  pb.Endpoint.GetValue(),
+		SourceID:               id,
+		StreamARN:              pb.StreamArn.GetValue(),
+		Endpoint:               pb.Endpoint.GetValue(),
+		ShardDiscoveryInterval: pb.ShardDiscoveryInterval.AsDuration(),
 	}
 }
 

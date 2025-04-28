@@ -20,7 +20,10 @@ func StartFake() (*httptest.Server, *Fake) {
 		streams: make(map[string]*stream),
 	}
 	mux := http.NewServeMux()
-	fk := &Fake{db: db}
+	fk := &Fake{
+		db:              db,
+		getRecordsLimit: 10_000, // Kinesis max
+	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		route(fk, w, r)
@@ -105,4 +108,5 @@ type Fake struct {
 	lastIteratorTimestamp atomic.Int64
 	iteratorsExpirationAt atomic.Int64
 	getRecordsError       error
+	getRecordsLimit       int
 }

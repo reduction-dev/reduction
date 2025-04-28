@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"testing"
@@ -345,4 +346,134 @@ func TestKinesis_ScaleOut(t *testing.T) {
 	})
 	assert.Equal(t, []byte("data-000"), sinkRecords[0], "first event is data-000")
 	assert.Equal(t, []byte("data-069"), sliceu.Last(sinkRecords), "last event is data-069")
+}
+
+func TestKinesis_ShardLineage(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "aws-acccess-key-id")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-access-key")
+
+	kinesisService, fake := kinesisfake.StartFake()
+	fake.SetGetRecordsLimit(1) // Read 1 record at a time
+	defer kinesisService.Close()
+
+	// Create a kinesis stream with 1 shard
+	client := kinesis.NewLocalClient(kinesisService.URL)
+	stream := kinesis.CreateTempStream(t, client, 1)
+	latestShardIDs := stream.ShardIDs
+
+	batchSize := 10
+
+	// Write 10 events to the stream
+	firstRecords := make([]kinesis.Record, batchSize)
+	for i := range firstRecords {
+		firstRecords[i] = kinesis.Record{
+			Key:  fmt.Sprintf("key-%02d", i),
+			Data: fmt.Appendf(nil, "data-%02d", i),
+		}
+	}
+	stream.PutRecordBatch(t, firstRecords)
+
+	// Split to 2 shards
+	midpoint := "170141183460469231731687303715884105728" // midpoint of 0 to 2^128-1
+	stream.SplitShard(t, latestShardIDs[0], midpoint)
+	latestShardIDs = stream.ListShards(t, latestShardIDs[0])
+	require.Len(t, latestShardIDs, 2)
+
+	// Write 10 events to the stream
+	secondRecords := make([]kinesis.Record, batchSize)
+	for i := range secondRecords {
+		secondRecords[i] = kinesis.Record{
+			Key:  fmt.Sprintf("key-%02d", batchSize+i),
+			Data: fmt.Appendf(nil, "data-%02d", batchSize+i),
+		}
+	}
+	stream.PutRecordBatch(t, secondRecords)
+
+	// Merge back to 1 shard
+	stream.MergeShards(t, latestShardIDs[0], latestShardIDs[1])
+	latestShardIDs = stream.ListShards(t, latestShardIDs[1])
+	require.Len(t, latestShardIDs, 1)
+
+	// Write 10 events to the stream
+	thirdRecords := make([]kinesis.Record, batchSize)
+	for i := range thirdRecords {
+		thirdRecords[i] = kinesis.Record{
+			Key:  fmt.Sprintf("key-%02d", (2*batchSize)+i),
+			Data: fmt.Appendf(nil, "data-%02d", (2*batchSize)+i),
+		}
+	}
+	stream.PutRecordBatch(t, thirdRecords)
+
+	// Start a job with 1 worker
+	sinkServer := httpapitest.StartServer()
+	defer sinkServer.Close()
+
+	jobDef := &topology.Job{
+		WorkerCount:            topology.IntValue(1),
+		WorkingStorageLocation: topology.StringValue(t.TempDir()),
+	}
+	source := clientkinesis.NewSource(jobDef, "source", &clientkinesis.SourceParams{
+		StreamARN: topology.StringValue(stream.StreamARN),
+		Endpoint:  topology.StringValue(kinesisService.URL),
+		KeyEvent: func(ctx context.Context, record *clientkinesis.Record) ([]rxn.KeyedEvent, error) {
+			return []rxn.KeyedEvent{{
+				Key:   []byte("static-key"), // static key to make asserting on order possible
+				Value: record.Data,
+			}}, nil
+		},
+	})
+	sink := clienthttpapi.NewSink(jobDef, "sink", &clienthttpapi.SinkParams{
+		Addr: topology.StringValue(sinkServer.URL()),
+	})
+	operator := topology.NewOperator(jobDef, "Operator", &topology.OperatorParams{
+		Handler: func(op *topology.Operator) rxn.OperatorHandler {
+			return e2e.NewPassThroughHandler(sink, "main")
+		},
+	})
+	source.Connect(operator)
+	operator.Connect(sink)
+
+	job, stop := jobstest.Run(jobDef)
+	defer stop()
+
+	handlerServer, stop := e2e.RunHandler(jobDef)
+	defer stop()
+
+	_, stop = workerstest.Run(t, workerstest.NewServerParams{
+		HandlerAddr: handlerServer.Addr(),
+		JobAddr:     job.RPCAddr(),
+	})
+	defer stop()
+
+	// Wait for all events to be read
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.Equal(t, 3*batchSize, sinkServer.RecordCount("main"))
+	}, 2*time.Second, 10*time.Millisecond, "httpapi sink has 30 items after all writes")
+
+	// Assert event order constraints
+	sinkRecords := sinkServer.Read("main").Events
+
+	// First 10 events must be in order
+	firstSet := sinkRecords[:batchSize]
+	firstExpected := make([][]byte, batchSize)
+	for i := range batchSize {
+		firstExpected[i] = fmt.Appendf(nil, "data-%02d", i)
+	}
+	assert.Equal(t, firstExpected, firstSet, "first 10 events in order at index")
+
+	// Next 10 events: order may vary within this set
+	secondSet := sinkRecords[batchSize : 2*batchSize]
+	secondExpected := make([][]byte, batchSize)
+	for i := range batchSize {
+		secondExpected[i] = fmt.Appendf(nil, "data-%02d", batchSize+i)
+	}
+	assert.ElementsMatch(t, secondExpected, secondSet, "second 10 events match, order may vary")
+
+	// Last 10 events must be in order
+	lastSet := sinkRecords[2*batchSize : 3*batchSize]
+	lastExpected := make([][]byte, batchSize)
+	for i := range batchSize {
+		lastExpected[i] = fmt.Appendf(nil, "data-%02d", (2*batchSize)+i)
+	}
+	assert.Equal(t, lastExpected, lastSet, "last 10 events in order at index")
 }

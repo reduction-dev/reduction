@@ -75,11 +75,11 @@ func (f *Fake) listShards(body []byte) (*ListShardsResponse, error) {
 				EndingHashKey:   shardRecord.hashKeyRange.endingHashKey.String(),
 			},
 			SequenceNumberRange: SequenceNumberRange{
-				StartingSequenceNumber: "0",
-				EndingSequenceNumber:   "",
+				StartingSequenceNumber: shardRecord.hashKeyRange.startingHashKey.String(),
+				EndingSequenceNumber:   shardRecord.hashKeyRange.endingHashKey.String(),
 			},
-			ParentShardId:         "",
-			AdjacentParentShardId: "",
+			ParentShardId:         shardRecord.parentShard,
+			AdjacentParentShardId: shardRecord.adjacentParentShard,
 		}
 	}
 
