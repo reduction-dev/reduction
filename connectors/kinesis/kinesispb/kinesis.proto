@@ -4,7 +4,7 @@ package connectors.kinesis.proto.v1;
 option go_package = "connectors/kinesispb";
 
 message SplitterState {
-  string last_seen_shard_id = 1;
+  string last_assigned_shard_id = 1;
 }
 
 message Shard {

@@ -11,7 +11,6 @@ import (
 func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks, errChan chan<- error) *SourceSplitter {
 	return &SourceSplitter{
 		client:          &http.Client{},
-		startingCursor:  nil,
 		sourceRunnerIDs: sourceRunnerIDs,
 		hooks:           hooks,
 		errChan:         errChan,
@@ -20,30 +19,29 @@ func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks conn
 
 type SourceSplitter struct {
 	client          *http.Client
-	startingCursor  []byte
 	sourceRunnerIDs []string
 	hooks           connectors.SourceSplitterHooks
 	errChan         chan<- error
 }
 
-func (s *SourceSplitter) Start() {
+func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
+	var startingCursor []byte
+	for _, d := range ckpt.GetSplitStates() {
+		if len(d) != 0 {
+			startingCursor = d
+		}
+	}
+
 	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
 	if len(s.sourceRunnerIDs) > 0 {
 		assignments[s.sourceRunnerIDs[0]] = []*workerpb.SourceSplit{{
 			SplitId:  "only",
 			SourceId: "tbd",
-			Cursor:   s.startingCursor,
+			Cursor:   startingCursor,
 		}}
 	}
 	s.hooks.AssignSplits(assignments)
-}
 
-func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
-	for _, d := range ckpt.SplitStates {
-		if len(d) != 0 {
-			s.startingCursor = d
-		}
-	}
 	return nil
 }
 

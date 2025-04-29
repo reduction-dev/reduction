@@ -49,14 +49,24 @@ func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks conn
 	}, nil
 }
 
-func (s *SourceSplitter) Start() {
+func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
+	for _, splitState := range ckpt.GetSplitStates() {
+		var ss kafkapb.SplitState
+		if err := proto.Unmarshal(splitState, &ss); err != nil {
+			return fmt.Errorf("failed to unmarshal checkpoint split state: %w", err)
+		}
+		if s.offsets[ss.Topic] == nil {
+			s.offsets[ss.Topic] = make(map[int32]kgo.Offset)
+		}
+		s.offsets[ss.Topic][ss.Parition] = kgo.NewOffset().At(ss.Offset)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	meta, err := s.client.Metadata(ctx, s.topics...)
 	if err != nil {
-		s.errChan <- fmt.Errorf("kafka.SourceSplitter failed to fetch metadata: %w", err)
-		return
+		return fmt.Errorf("kafka.SourceSplitter failed to fetch metadata: %w", err)
 	}
 
 	type split struct {
@@ -66,8 +76,7 @@ func (s *SourceSplitter) Start() {
 	var splits []split
 	for _, topicMeta := range meta.Topics {
 		if topicMeta.Err != nil {
-			s.errChan <- fmt.Errorf("kafka.SourceSplitter: error in topic metadata for %s: %w", topicMeta.Topic, topicMeta.Err)
-			return
+			return fmt.Errorf("kafka.SourceSplitter: error in topic metadata for %s: %w", topicMeta.Topic, topicMeta.Err)
 		}
 		for _, partMeta := range topicMeta.Partitions {
 			splits = append(splits, split{Topic: topicMeta.Topic, Partition: partMeta.Partition})
@@ -98,19 +107,6 @@ func (s *SourceSplitter) Start() {
 	}
 
 	s.hooks.AssignSplits(assignments)
-}
-
-func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
-	for _, cpData := range ckpt.SplitStates {
-		var ss kafkapb.SplitState
-		if err := proto.Unmarshal(cpData, &ss); err != nil {
-			return fmt.Errorf("failed to unmarshal checkpoint: %w", err)
-		}
-		if s.offsets[ss.Topic] == nil {
-			s.offsets[ss.Topic] = make(map[int32]kgo.Offset)
-		}
-		s.offsets[ss.Topic][ss.Parition] = kgo.NewOffset().At(ss.Offset)
-	}
 	return nil
 }
 

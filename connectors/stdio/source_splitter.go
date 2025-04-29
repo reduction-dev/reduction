@@ -19,12 +19,9 @@ func (s *SourceSplitter) Checkpoint() []byte {
 	return nil // No checkpointing needed for stdin
 }
 
-func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
-	// No checkpointing needed for stdin
+func (s *SourceSplitter) Start(_ *snapshotpb.SourceCheckpoint) error {
 	return nil
 }
-
-func (s *SourceSplitter) Start() {}
 
 func (s *SourceSplitter) Close() error { return nil }
 

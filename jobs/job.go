@@ -307,20 +307,19 @@ func (j *Job) start() error {
 	}, j.errChan)
 	j.snapshotStore.RegisterSourceSplitter(j.sourceSplitter)
 
-	// Load the source checkpoint into the source splitter
-	if len(ckpt.GetSourceCheckpoints()) > 0 {
-		if err := j.sourceSplitter.LoadCheckpoint(ckpt.SourceCheckpoints[0]); err != nil {
-			return fmt.Errorf("loading checkpoint into source splitter: %v", err)
-		}
-	}
-
 	// Start the assembly
 	if err := j.assembly.Deploy(j.config, ckpt); err != nil {
 		return fmt.Errorf("starting assembly: %v", err)
 	}
 
-	// Allow the source splitter to start any background work
-	j.sourceSplitter.Start()
+	// Only using the first source checkpoint
+	var sourceCkpt *snapshotpb.SourceCheckpoint
+	if len(ckpt.GetSourceCheckpoints()) > 0 {
+		sourceCkpt = ckpt.SourceCheckpoints[0]
+	}
+
+	// Start the source splitter with a checkpoint if available and allow it to run background work.
+	j.sourceSplitter.Start(sourceCkpt)
 
 	j.taskQueue <- func() error {
 		j.log.Info("running")

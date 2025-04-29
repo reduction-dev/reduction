@@ -1,8 +1,6 @@
 package embedded
 
 import (
-	"encoding/binary"
-	"encoding/json"
 	"strconv"
 
 	"reduction.dev/reduction/connectors"
@@ -14,29 +12,32 @@ import (
 
 func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks connectors.SourceSplitterHooks) *SourceSplitter {
 	return &SourceSplitter{
-		splitCount:         config.SplitCount,
-		checkpointedSplits: make(map[string]*workerpb.SourceSplit),
-		sourceRunnerIDs:    sourceRunnerIDs,
-		hooks:              hooks,
+		splitCount:      config.SplitCount,
+		sourceRunnerIDs: sourceRunnerIDs,
+		hooks:           hooks,
 	}
 }
 
 type SourceSplitter struct {
-	splitCount         int
-	checkpointedSplits map[string]*workerpb.SourceSplit
-	sourceRunnerIDs    []string
-	hooks              connectors.SourceSplitterHooks
+	splitCount      int
+	sourceRunnerIDs []string
+	hooks           connectors.SourceSplitterHooks
 }
 
-func (s *SourceSplitter) Start() {
-	// Pretend to "discover" splits here.
+func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
+	// Embedded SourceSplitter does not checkpoint
+	if ckpt != nil {
+		panic("embedded source splitter does not support checkpointing")
+	}
+
+	// Create splits all with nil cursors
 	sourceSplits := make([]*workerpb.SourceSplit, s.splitCount)
 	for splitIndex := range iteru.Times(s.splitCount) {
 		splitID := strconv.Itoa(splitIndex)
 		sourceSplits[splitIndex] = &workerpb.SourceSplit{
 			SplitId:  splitID,
 			SourceId: "TBD",
-			Cursor:   s.checkpointedSplits[splitID].GetCursor(), // Use checkpointed cursors if they exist
+			Cursor:   nil,
 		}
 	}
 
@@ -47,30 +48,7 @@ func (s *SourceSplitter) Start() {
 		assignments[id] = splitGroups[i]
 	}
 	s.hooks.AssignSplits(assignments)
-}
 
-// LoadCheckpoints loads a source checkpoint into the splitter.
-func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
-	// For each checkpoint document
-	for _, doc := range ckpt.SplitStates {
-		// Parse the JSON document
-		var splits []*split
-		if err := json.Unmarshal(doc, &splits); err != nil {
-			return err
-		}
-
-		// Append to the list of protobuf objects to assign
-		for _, split := range splits {
-			cursorBytes := make([]byte, 8)
-			binary.BigEndian.PutUint64(cursorBytes, uint64(split.Cursor))
-
-			s.checkpointedSplits[split.SplitID] = &workerpb.SourceSplit{
-				SplitId:  split.SplitID,
-				SourceId: "TBD",
-				Cursor:   cursorBytes,
-			}
-		}
-	}
 	return nil
 }
 

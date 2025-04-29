@@ -147,10 +147,8 @@ func TestKafkaSourceReader_Checkpoint(t *testing.T) {
 		},
 	}, nil)
 	require.NoError(t, err)
-	err = splitter2.LoadCheckpoint(ckpt)
-	require.NoError(t, err)
 
-	splitter2.Start()
+	splitter2.Start(ckpt)
 	<-didAssign2
 	require.Len(t, assignments2, 2)
 	require.NoError(t, reader3.AssignSplits(assignments2["r3"]))

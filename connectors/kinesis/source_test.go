@@ -96,12 +96,8 @@ func TestCheckpointing(t *testing.T) {
 		},
 	}, nil)
 
-	// Load the source reader checkpoints
-	err := ss.LoadCheckpoint(checkpoint)
-	require.NoError(t, err)
-
-	// Start the source splitter and wait for assignments
-	ss.Start()
+	// Start the source splitter with the checkpoint and wait for assignments
+	ss.Start(checkpoint)
 	<-didAssign
 
 	// Read newly written events from the splits

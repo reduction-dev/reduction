@@ -23,7 +23,7 @@ type SourceSplitter struct {
 	sourceRunnerIDs         []string
 	errChan                 chan<- error
 	hooks                   connectors.SourceSplitterHooks
-	LastSeenShardId         string
+	lastAssignedShardId     string // Track the last assigned shard ID
 	splitTracker            *SplitTracker
 	shardDiscoveryInterval  time.Duration
 	shardDiscoveryTicker    *time.Ticker
@@ -60,43 +60,41 @@ func NewSourceSplitter(config SourceConfig, sourceRunnerIDs []string, hooks conn
 	}
 }
 
-// LoadCheckpoints receives checkpoint data created by source readers
-// and loads cursor data for each shard id.
-func (s *SourceSplitter) LoadCheckpoint(ckpt *snapshotpb.SourceCheckpoint) error {
-	// Load the split state
-	for _, splitState := range ckpt.SplitStates {
-		var split kinesispb.Shard
-		if err := proto.Unmarshal(splitState, &split); err != nil {
-			return err
-		}
-		s.cursors[split.ShardId] = split.Cursor
-		s.shardsPendingAssignment = append(s.shardsPendingAssignment, split.ShardId)
-	}
-
-	// Load the splitter state
-	var splitterState kinesispb.SplitterState
-	err := proto.Unmarshal(ckpt.SplitterState, &splitterState)
-	if err != nil {
-		return err
-	}
-	s.LastSeenShardId = splitterState.LastSeenShardId
-
-	return nil
-}
-
-func (s *SourceSplitter) Start() {
+// Start initializes the SourceSplitter, optionally loading a checkpoint.
+func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.ctx = ctx
 	s.cancel = cancel
 
-	if err := s.discoverShards(ctx); err != nil {
-		s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
-		return
+	// Load the split state
+	var pendingShardIDs []string
+	for _, splitState := range ckpt.GetSplitStates() {
+		var split kinesispb.Shard
+		if err := proto.Unmarshal(splitState, &split); err != nil {
+			return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal split state: %w", err)
+		}
+		s.cursors[split.ShardId] = split.Cursor
+		pendingShardIDs = append(pendingShardIDs, split.ShardId)
 	}
-	s.assignPendingShards(ctx)
+
+	// Load the splitter state
+	var splitterState kinesispb.SplitterState
+	if err := proto.Unmarshal(ckpt.GetSplitterState(), &splitterState); err != nil {
+		return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal splitter state: %w", err)
+	}
+	s.lastAssignedShardId = splitterState.LastAssignedShardId
+
+	shardIDs, err := s.discoverShards(ctx, s.lastAssignedShardId)
+	if err != nil {
+		return fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
+	}
+	pendingShardIDs = append(pendingShardIDs, shardIDs...)
+
+	s.assignShards(ctx, pendingShardIDs)
 
 	s.shardDiscoveryTicker = time.NewTicker(s.shardDiscoveryInterval)
 	go s.processShardAssignment(ctx)
+	return nil
 }
 
 func (s *SourceSplitter) processShardAssignment(ctx context.Context) {
@@ -106,15 +104,16 @@ func (s *SourceSplitter) processShardAssignment(ctx context.Context) {
 			return
 		case <-s.shardDiscoveryTicker.C:
 			// periodically discover shards and assign them to source runners
-			if err := s.discoverShards(s.ctx); err != nil {
+			splitIDs, err := s.discoverShards(s.ctx, s.lastAssignedShardId)
+			if err != nil {
 				s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
 				return
 			}
-			s.assignPendingShards(s.ctx)
+			s.assignShards(s.ctx, splitIDs)
 		case <-s.splitsDidFinish:
-			// New splits may become availale after the previous ones are finished
-			s.shardsPendingAssignment = append(s.shardsPendingAssignment, s.splitTracker.AvailableSplits()...)
-			s.assignPendingShards(s.ctx)
+			// When splits finish, their child splits may become available
+			pending := s.splitTracker.AvailableSplits()
+			s.assignShards(s.ctx, pending)
 		}
 	}
 }
@@ -139,7 +138,7 @@ func (s *SourceSplitter) Close() error {
 // Checkpoint returns a snapshot of the splitter's state for checkpointing.
 func (s *SourceSplitter) Checkpoint() []byte {
 	bs, err := proto.Marshal(&kinesispb.SplitterState{
-		LastSeenShardId: s.LastSeenShardId,
+		LastAssignedShardId: s.lastAssignedShardId, // Use lastAssignedShardId for checkpointing
 	})
 	if err != nil {
 		panic(err)
@@ -171,27 +170,25 @@ func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardI
 	return shards, nil
 }
 
-func (s *SourceSplitter) discoverShards(ctx context.Context) error {
-	shards, err := s.listAllShards(ctx, s.LastSeenShardId)
+// discoverShards fetches new shards and returns any shards ready for assignment.
+func (s *SourceSplitter) discoverShards(ctx context.Context, lastAssignedShardID string) ([]string, error) {
+	shards, err := s.listAllShards(ctx, lastAssignedShardID)
 	if err != nil {
-		return fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
+		return nil, fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
 	}
 	s.splitTracker.AddSplits(shards)
-
-	s.shardsPendingAssignment = append(s.shardsPendingAssignment, s.splitTracker.AvailableSplits()...)
-	if len(s.shardsPendingAssignment) > 0 {
-		s.LastSeenShardId = s.shardsPendingAssignment[len(s.shardsPendingAssignment)-1]
-	}
-	return nil
+	return s.splitTracker.AvailableSplits(), nil
 }
 
-func (s *SourceSplitter) assignPendingShards(ctx context.Context) {
-	if len(s.shardsPendingAssignment) == 0 {
+// assignShards assings the list of shards to the source runners. It tracks the
+// assignmets in internal state.
+func (s *SourceSplitter) assignShards(ctx context.Context, shardIDs []string) {
+	if len(shardIDs) == 0 {
 		return
 	}
 
 	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
-	shardIDGroups := sliceu.Partition(s.shardsPendingAssignment, len(s.sourceRunnerIDs))
+	shardIDGroups := sliceu.Partition(shardIDs, len(s.sourceRunnerIDs))
 	for i, id := range s.sourceRunnerIDs {
 		assignedShards := shardIDGroups[i]
 		assignments[id] = make([]*workerpb.SourceSplit, len(assignedShards))
@@ -205,8 +202,12 @@ func (s *SourceSplitter) assignPendingShards(ctx context.Context) {
 	}
 
 	s.hooks.AssignSplits(assignments)
-	s.splitTracker.TrackAssigned(s.shardsPendingAssignment)
-	s.shardsPendingAssignment = nil
+	s.splitTracker.TrackAssigned(shardIDs)
+
+	// Update lastAssignedShardId to the highest assigned shard ID (if any)
+	if len(shardIDs) > 0 {
+		s.lastAssignedShardId = shardIDs[len(shardIDs)-1]
+	}
 }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

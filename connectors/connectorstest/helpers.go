@@ -19,7 +19,7 @@ func AssignmentsFromSplitter(
 			close(didAssign)
 		},
 	}, nil)
-	ss.Start()
+	ss.Start(nil)
 	<-didAssign
 	return splitAssignments
 }
