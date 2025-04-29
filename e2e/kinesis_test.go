@@ -336,8 +336,8 @@ func TestKinesis_ScaleOut(t *testing.T) {
 	defer stop()
 
 	// Wait for the 20 new events to be read (should not re-read the first 50)
-	assert.Eventually(t, func() bool {
-		return sinkServer.RecordCount("main") == 70
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Equal(t, 70, sinkServer.RecordCount("main"))
 	}, 5*time.Second, 100*time.Millisecond, "httpapi sink has 70 items after scale-out and restart")
 
 	sinkRecords := sinkServer.Read("main").Events
