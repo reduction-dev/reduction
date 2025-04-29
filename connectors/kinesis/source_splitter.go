@@ -6,7 +6,6 @@ import (
 	"time"
 
 	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
-	awstypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"google.golang.org/protobuf/proto"
 	"reduction.dev/reduction/connectors"
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
@@ -16,17 +15,15 @@ import (
 )
 
 type SourceSplitter struct {
-	client                  *awskinesis.Client
-	streamARN               string
-	shardsPendingAssignment []string
-	cursors                 map[string]string
-	sourceRunnerIDs         []string
-	errChan                 chan<- error
-	hooks                   connectors.SourceSplitterHooks
-	lastAssignedShardId     string // Track the last assigned shard ID
-	splitTracker            *SplitTracker
-	shardDiscoveryInterval  time.Duration
-	shardDiscoveryTicker    *time.Ticker
+	client                 *awskinesis.Client
+	streamARN              string
+	cursors                map[string]string
+	sourceRunnerIDs        []string
+	errChan                chan<- error
+	hooks                  connectors.SourceSplitterHooks
+	splitTracker           *SplitTracker
+	shardDiscoveryInterval time.Duration
+	shardDiscoveryTicker   *time.Ticker
 
 	// splitsDidFinish signals that some splits were removed and new splits may
 	// be available for assignment.
@@ -82,9 +79,13 @@ func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
 	if err := proto.Unmarshal(ckpt.GetSplitterState(), &splitterState); err != nil {
 		return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal splitter state: %w", err)
 	}
-	s.lastAssignedShardId = splitterState.LastAssignedShardId
+	checkpointedShards := make([]SourceSplitterShard, len(splitterState.AssignedShards))
+	for i, shard := range splitterState.GetAssignedShards() {
+		checkpointedShards[i] = newSourceSplitterShardFromProto(shard)
+	}
+	s.splitTracker.LoadSplits(checkpointedShards, splitterState.LastAssignedShardId)
 
-	shardIDs, err := s.discoverShards(ctx, s.lastAssignedShardId)
+	shardIDs, err := s.discoverShards(ctx, s.splitTracker.LastAssignedSplitID)
 	if err != nil {
 		return fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
 	}
@@ -104,7 +105,7 @@ func (s *SourceSplitter) processShardAssignment(ctx context.Context) {
 			return
 		case <-s.shardDiscoveryTicker.C:
 			// periodically discover shards and assign them to source runners
-			splitIDs, err := s.discoverShards(s.ctx, s.lastAssignedShardId)
+			splitIDs, err := s.discoverShards(s.ctx, s.splitTracker.LastAssignedSplitID)
 			if err != nil {
 				s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
 				return
@@ -137,8 +138,15 @@ func (s *SourceSplitter) Close() error {
 
 // Checkpoint returns a snapshot of the splitter's state for checkpointing.
 func (s *SourceSplitter) Checkpoint() []byte {
+	splits := s.splitTracker.AssignedSplits()
+	pbShards := make([]*kinesispb.SourceSplitterShard, len(splits))
+	for i, shard := range splits {
+		pbShards[i] = shard.toProto()
+	}
+
 	bs, err := proto.Marshal(&kinesispb.SplitterState{
-		LastAssignedShardId: s.lastAssignedShardId, // Use lastAssignedShardId for checkpointing
+		AssignedShards:      pbShards,
+		LastAssignedShardId: s.splitTracker.LastAssignedSplitID,
 	})
 	if err != nil {
 		panic(err)
@@ -147,8 +155,8 @@ func (s *SourceSplitter) Checkpoint() []byte {
 }
 
 // listAllShards paginates through all shards for a given streamARN, starting after exclusiveStartShardID.
-func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardID string) ([]awstypes.Shard, error) {
-	var shards []awstypes.Shard
+func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardID string) ([]SourceSplitterShard, error) {
+	var shards []SourceSplitterShard
 	var nextToken *string
 	for {
 		input := &awskinesis.ListShardsInput{StreamARN: &s.streamARN}
@@ -161,7 +169,9 @@ func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardI
 		if err != nil {
 			return nil, err
 		}
-		shards = append(shards, out.Shards...)
+		for _, shard := range out.Shards {
+			shards = append(shards, newSourceSplitterShardFromKinesis(shard))
+		}
 		if out.NextToken == nil {
 			break
 		}
@@ -203,11 +213,6 @@ func (s *SourceSplitter) assignShards(ctx context.Context, shardIDs []string) {
 
 	s.hooks.AssignSplits(assignments)
 	s.splitTracker.TrackAssigned(shardIDs)
-
-	// Update lastAssignedShardId to the highest assigned shard ID (if any)
-	if len(shardIDs) > 0 {
-		s.lastAssignedShardId = shardIDs[len(shardIDs)-1]
-	}
 }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)

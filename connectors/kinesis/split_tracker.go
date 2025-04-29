@@ -1,47 +1,46 @@
 package kinesis
 
 import (
+	"maps"
 	"slices"
 	"sync"
-
-	awstypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 )
 
 type SplitTracker struct {
-	knownSplits    map[string]KinesisShard
-	assignedSplits map[string]struct{}
-	mu             sync.Mutex
-}
-
-type KinesisShard struct {
-	ShardId        string
-	ParentShardIDs []string
+	knownSplits         map[string]SourceSplitterShard
+	assignedSplits      map[string]struct{}
+	LastAssignedSplitID string // The last split ID that was marked assigned.
+	mu                  sync.Mutex
 }
 
 func NewSplitTracker() *SplitTracker {
 	return &SplitTracker{
-		knownSplits:    make(map[string]KinesisShard),
+		knownSplits:    make(map[string]SourceSplitterShard),
 		assignedSplits: make(map[string]struct{}),
 	}
 }
 
-// AddSplits starts tracking the given kinesis shards.
-func (st *SplitTracker) AddSplits(kinesisShards []awstypes.Shard) {
+// LoadSplits loads the initial splits from a checkpoint marking them as assigned.
+func (st *SplitTracker) LoadSplits(shards []SourceSplitterShard, lastAssignedSplitID string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	for _, kShard := range kinesisShards {
-		parentIDs := make([]string, 0, 2)
-		if kShard.ParentShardId != nil {
-			parentIDs = append(parentIDs, *kShard.ParentShardId)
-		}
-		if kShard.AdjacentParentShardId != nil {
-			parentIDs = append(parentIDs, *kShard.AdjacentParentShardId)
-		}
-		st.knownSplits[*kShard.ShardId] = KinesisShard{
-			ShardId:        *kShard.ShardId,
-			ParentShardIDs: parentIDs,
-		}
+	// Load the splits into the tracker
+	for _, shard := range shards {
+		st.knownSplits[shard.ShardID] = shard
+		st.assignedSplits[shard.ShardID] = struct{}{}
+	}
+
+	st.LastAssignedSplitID = lastAssignedSplitID
+}
+
+// AddSplits starts tracking the given kinesis shards.
+func (st *SplitTracker) AddSplits(shards []SourceSplitterShard) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	for _, shard := range shards {
+		st.knownSplits[shard.ShardID] = shard
 	}
 }
 
@@ -53,9 +52,13 @@ func (st *SplitTracker) TrackAssigned(shardIDs []string) {
 	for _, shardID := range shardIDs {
 		st.assignedSplits[shardID] = struct{}{}
 	}
+
+	if len(shardIDs) > 0 {
+		st.LastAssignedSplitID = shardIDs[len(shardIDs)-1]
+	}
 }
 
-// RemoveSlpits removes the given splits from tracking.
+// RemoveSplits removes the given splits from tracking.
 func (st *SplitTracker) RemoveSplits(splitIDs []string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -75,28 +78,40 @@ func (st *SplitTracker) AvailableSplits() []string {
 
 	for _, split := range st.knownSplits {
 		// Skip assigned shards
-		_, assigned := st.assignedSplits[split.ShardId]
+		_, assigned := st.assignedSplits[split.ShardID]
 		if assigned {
 			continue
 		}
 
 		// Shards with no parents are always available
-		if len(split.ParentShardIDs) == 0 {
-			available = append(available, split.ShardId)
+		if len(split.ParentIDs) == 0 {
+			available = append(available, split.ShardID)
 			continue
 		}
 
 		// Check if there are any parents that need to be read before this shard
-		hasKnownParent := slices.ContainsFunc(split.ParentShardIDs, func(parentID string) bool {
+		hasKnownParent := slices.ContainsFunc(split.ParentIDs, func(parentID string) bool {
 			_, known := st.knownSplits[parentID]
 			return known
 		})
 
 		// If no parents are known, the split is available
 		if !hasKnownParent {
-			available = append(available, split.ShardId)
+			available = append(available, split.ShardID)
 		}
 	}
 
 	return available
+}
+
+func (st *SplitTracker) AssignedSplits() []SourceSplitterShard {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	assigned := make([]SourceSplitterShard, 0, len(st.assignedSplits))
+	for _, shardID := range slices.Sorted(maps.Keys(st.assignedSplits)) {
+		assigned = append(assigned, st.knownSplits[shardID])
+	}
+
+	return assigned
 }

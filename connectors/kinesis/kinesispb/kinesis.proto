@@ -5,10 +5,23 @@ option go_package = "connectors/kinesispb";
 
 message SplitterState {
   string last_assigned_shard_id = 1;
+  repeated SourceSplitterShard assigned_shards = 2;
+}
+
+message SourceSplitterShard {
+  string shard_id = 1;
+  HashKeyRange hash_key_range = 2;
+  repeated string parent_shard_ids = 3;
 }
 
 message Shard {
   string shard_id = 1;
   string cursor = 2;
   bool finished = 3;
+}
+
+// The hash key holds 128 bit unsigned integers
+message HashKeyRange {
+  bytes start = 3;
+  bytes end = 4;
 }
