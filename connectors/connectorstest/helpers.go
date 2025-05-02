@@ -23,3 +23,15 @@ func AssignmentsFromSplitter(
 	<-didAssign
 	return splitAssignments
 }
+
+func StartSplitterAssignments(sourceConfig connectors.SourceConfig, sourceReaderIDs []string) (connectors.SourceSplitter, chan map[string][]*workerpb.SourceSplit) {
+	assignmentsChannel := make(chan map[string][]*workerpb.SourceSplit, 1)
+	splitter := sourceConfig.NewSourceSplitter(sourceReaderIDs, connectors.SourceSplitterHooks{
+		AssignSplits: func(assignments map[string][]*workerpb.SourceSplit) {
+			assignmentsChannel <- assignments
+		},
+	}, nil)
+	splitter.Start(nil)
+
+	return splitter, assignmentsChannel
+}

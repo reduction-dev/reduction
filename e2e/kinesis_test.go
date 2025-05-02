@@ -379,7 +379,7 @@ func TestKinesis_ShardLineage(t *testing.T) {
 	latestShardIDs = stream.ListShards(t, latestShardIDs[0])
 	require.Len(t, latestShardIDs, 2)
 
-	// Write 10 events to the stream
+	// Write 10 more events to the stream
 	secondRecords := make([]kinesis.Record, batchSize)
 	for i := range secondRecords {
 		secondRecords[i] = kinesis.Record{

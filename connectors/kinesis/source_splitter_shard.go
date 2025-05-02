@@ -9,16 +9,20 @@ import (
 
 type SourceSplitterShard struct {
 	ShardID      string
-	HashKeyRange struct {
-		Start big.Int
-		End   big.Int
-	}
-	ParentIDs []string
+	HashKeyRange HashKeyRange
+	ParentIDs    []string
+}
+
+type HashKeyRange struct {
+	Start *big.Int
+	End   *big.Int
 }
 
 func newSourceSplitterShardFromKinesis(shard kinesistypes.Shard) SourceSplitterShard {
-	var start, end big.Int
+	start := new(big.Int)
 	start.SetString(*shard.HashKeyRange.StartingHashKey, 10)
+
+	end := new(big.Int)
 	end.SetString(*shard.HashKeyRange.EndingHashKey, 10)
 
 	parentIDs := make([]string, 0, 2)
@@ -30,33 +34,21 @@ func newSourceSplitterShardFromKinesis(shard kinesistypes.Shard) SourceSplitterS
 	}
 
 	return SourceSplitterShard{
-		ShardID: *shard.ShardId,
-		HashKeyRange: struct {
-			Start big.Int
-			End   big.Int
-		}{
-			Start: start,
-			End:   end,
-		},
-		ParentIDs: parentIDs,
+		ShardID:      *shard.ShardId,
+		HashKeyRange: HashKeyRange{Start: start, End: end},
+		ParentIDs:    parentIDs,
 	}
 }
 
 func newSourceSplitterShardFromProto(shard *kinesispb.SourceSplitterShard) SourceSplitterShard {
-	var start, end big.Int
+	var start, end *big.Int
 	start.SetBytes(shard.HashKeyRange.Start)
 	end.SetBytes(shard.HashKeyRange.End)
 
 	return SourceSplitterShard{
-		ShardID: shard.ShardId,
-		HashKeyRange: struct {
-			Start big.Int
-			End   big.Int
-		}{
-			Start: start,
-			End:   end,
-		},
-		ParentIDs: shard.ParentShardIds,
+		ShardID:      shard.ShardId,
+		HashKeyRange: HashKeyRange{Start: start, End: end},
+		ParentIDs:    shard.ParentShardIds,
 	}
 }
 

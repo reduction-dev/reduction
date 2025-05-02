@@ -3,6 +3,7 @@ package kinesis
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	awskinesis "github.com/aws/aws-sdk-go-v2/service/kinesis"
@@ -11,7 +12,11 @@ import (
 	"reduction.dev/reduction/connectors/kinesis/kinesispb"
 	"reduction.dev/reduction/proto/snapshotpb"
 	"reduction.dev/reduction/proto/workerpb"
-	"reduction.dev/reduction/util/sliceu"
+)
+
+var (
+	bigTwo     = big.NewInt(2)
+	hashKeyMax = new(big.Int).Exp(bigTwo, big.NewInt(128), nil)
 )
 
 type SourceSplitter struct {
@@ -63,38 +68,44 @@ func (s *SourceSplitter) Start(ckpt *snapshotpb.SourceCheckpoint) error {
 	s.ctx = ctx
 	s.cancel = cancel
 
-	// Load the split state
-	var pendingShardIDs []string
-	for _, splitState := range ckpt.GetSplitStates() {
-		var split kinesispb.Shard
-		if err := proto.Unmarshal(splitState, &split); err != nil {
-			return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal split state: %w", err)
-		}
-		s.cursors[split.ShardId] = split.Cursor
-		pendingShardIDs = append(pendingShardIDs, split.ShardId)
-	}
+	var pendingShards []SourceSplitterShard
 
 	// Load the splitter state
 	var splitterState kinesispb.SplitterState
 	if err := proto.Unmarshal(ckpt.GetSplitterState(), &splitterState); err != nil {
 		return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal splitter state: %w", err)
 	}
-	checkpointedShards := make([]SourceSplitterShard, len(splitterState.AssignedShards))
-	for i, shard := range splitterState.GetAssignedShards() {
-		checkpointedShards[i] = newSourceSplitterShardFromProto(shard)
-	}
-	s.splitTracker.LoadSplits(checkpointedShards, splitterState.LastAssignedShardId)
 
-	shardIDs, err := s.discoverShards(ctx, s.splitTracker.LastAssignedSplitID)
+	// Build a list of shards that need to be assigned
+	pendingShards = make([]SourceSplitterShard, len(splitterState.AssignedShards))
+	for i, shard := range splitterState.GetAssignedShards() {
+		pendingShards[i] = newSourceSplitterShardFromProto(shard)
+	}
+	s.splitTracker.LoadSplits(pendingShards, splitterState.LastAssignedShardId)
+
+	// Load the split states to get the cursors
+	for _, splitState := range ckpt.GetSplitStates() {
+		var split kinesispb.Shard
+		if err := proto.Unmarshal(splitState, &split); err != nil {
+			return fmt.Errorf("kinesis.SourceSplitter failed to unmarshal split state: %w", err)
+		}
+		s.cursors[split.ShardId] = split.Cursor
+	}
+
+	// Include newly discovered shards for assignment
+	err := s.discoverShards(ctx, s.splitTracker.LastAssignedSplitID)
 	if err != nil {
 		return fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
 	}
-	pendingShardIDs = append(pendingShardIDs, shardIDs...)
+	pendingShards = append(pendingShards, s.splitTracker.AvailableSplits()...)
 
-	s.assignShards(ctx, pendingShardIDs)
+	// Do the initial split assignment
+	s.assignShards(ctx, pendingShards)
 
+	// Setup background shard assignment
 	s.shardDiscoveryTicker = time.NewTicker(s.shardDiscoveryInterval)
 	go s.processShardAssignment(ctx)
+
 	return nil
 }
 
@@ -105,12 +116,13 @@ func (s *SourceSplitter) processShardAssignment(ctx context.Context) {
 			return
 		case <-s.shardDiscoveryTicker.C:
 			// periodically discover shards and assign them to source runners
-			splitIDs, err := s.discoverShards(s.ctx, s.splitTracker.LastAssignedSplitID)
+			err := s.discoverShards(s.ctx, s.splitTracker.LastAssignedSplitID)
 			if err != nil {
 				s.errChan <- fmt.Errorf("kinesis.SourceSplitter failed to discover shards: %w", err)
 				return
 			}
-			s.assignShards(s.ctx, splitIDs)
+			pending := s.splitTracker.AvailableSplits()
+			s.assignShards(s.ctx, pending)
 		case <-s.splitsDidFinish:
 			// When splits finish, their child splits may become available
 			pending := s.splitTracker.AvailableSplits()
@@ -181,38 +193,61 @@ func (s *SourceSplitter) listAllShards(ctx context.Context, exclusiveStartShardI
 }
 
 // discoverShards fetches new shards and returns any shards ready for assignment.
-func (s *SourceSplitter) discoverShards(ctx context.Context, lastAssignedShardID string) ([]string, error) {
+func (s *SourceSplitter) discoverShards(ctx context.Context, lastAssignedShardID string) error {
 	shards, err := s.listAllShards(ctx, lastAssignedShardID)
 	if err != nil {
-		return nil, fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
+		return fmt.Errorf("kinesis.SourceSplitter failed to list shards: %w", err)
 	}
 	s.splitTracker.AddSplits(shards)
-	return s.splitTracker.AvailableSplits(), nil
+	return nil
 }
 
 // assignShards assings the list of shards to the source runners. It tracks the
 // assignmets in internal state.
-func (s *SourceSplitter) assignShards(ctx context.Context, shardIDs []string) {
-	if len(shardIDs) == 0 {
+func (s *SourceSplitter) assignShards(ctx context.Context, shards []SourceSplitterShard) {
+	if len(shards) == 0 {
 		return
 	}
 
+	// Build a map from runner ID to assigned splits
 	assignments := make(map[string][]*workerpb.SourceSplit, len(s.sourceRunnerIDs))
-	shardIDGroups := sliceu.Partition(shardIDs, len(s.sourceRunnerIDs))
-	for i, id := range s.sourceRunnerIDs {
-		assignedShards := shardIDGroups[i]
-		assignments[id] = make([]*workerpb.SourceSplit, len(assignedShards))
-		for i, shardID := range assignedShards {
-			assignments[id][i] = &workerpb.SourceSplit{
-				SourceId: "tbd",
-				SplitId:  shardID,
-				Cursor:   []byte(s.cursors[shardID]),
-			}
-		}
+	for _, shard := range shards {
+		idx := uniformlyAssignShard(shard.HashKeyRange, len(s.sourceRunnerIDs))
+		runnerID := s.sourceRunnerIDs[idx]
+		assignments[runnerID] = append(assignments[runnerID], &workerpb.SourceSplit{
+			SourceId: "tbd",
+			SplitId:  shard.ShardID,
+			Cursor:   []byte(s.cursors[shard.ShardID]),
+		})
 	}
 
 	s.hooks.AssignSplits(assignments)
-	s.splitTracker.TrackAssigned(shardIDs)
+	s.splitTracker.TrackAssigned(shards)
 }
 
 var _ connectors.SourceSplitter = (*SourceSplitter)(nil)
+
+// uniformlyAssignShard returns the index of the sourceRunnerIDs to assign the
+// shard to, based on the shard hash key range.
+//
+// The algorithm is:
+//  1. Calculate the midpoint of the hash key range: (start + end) / 2
+//  2. Calculate a ratio representing the position of the midpoint in the hash key range:
+//     midpoint / 2^128
+//  3. Multiply the fraction by the number of runners.
+func uniformlyAssignShard(hashKeyRange HashKeyRange, numRunners int) int {
+	// Find absolute midpoint of a shard hash key range
+	mid := new(big.Int).Add(hashKeyRange.Start, hashKeyRange.End)
+	mid.Div(mid, bigTwo)
+
+	// Calculate the relative position (0 to 1) in the key space.
+	pos := new(big.Rat).SetFrac(mid, hashKeyMax)
+
+	// Calculate the index of the runner to assign the shard to.
+	idxRat := pos.Mul(pos, new(big.Rat).SetInt64(int64(numRunners)))
+	idxFloat, _ := idxRat.Float64()
+	idx := int(idxFloat)
+
+	// Ensure the index is within bounds in case of floating point imprecision.
+	return min(idx, numRunners-1)
+}
