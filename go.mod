@@ -20,7 +20,7 @@ require (
 	golang.org/x/text v0.23.0
 	google.golang.org/protobuf v1.36.3
 	reduction.dev/reduction-go v0.0.6
-	reduction.dev/reduction-protocol v0.0.4
+	reduction.dev/reduction-protocol v0.0.5-0.20250502133230-e5852cf15cdc
 )
 
 require (
