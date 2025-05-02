@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,9 @@ type ReadSourceChannel struct {
 
 	// Flag that the channel is already running
 	started bool
+
+	// WaitGroup to wait for the goroutine to finish on Stop/Close
+	wg sync.WaitGroup
 }
 
 func NewReadSourceChannel(sourceReader SourceReader) *ReadSourceChannel {
@@ -52,7 +56,10 @@ func (c *ReadSourceChannel) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
+
 		// Track if we've received end of input
 		atEOI := false
 
@@ -115,6 +122,7 @@ func (c *ReadSourceChannel) Stop() {
 	// Cancel the context to stop the loop
 	if c.cancel != nil {
 		c.cancel()
+		c.wg.Wait()
 		c.cancel = nil
 	}
 }
@@ -122,6 +130,7 @@ func (c *ReadSourceChannel) Stop() {
 func (c *ReadSourceChannel) Close() {
 	if c.cancel != nil {
 		c.cancel()
+		c.wg.Wait()
 	}
 
 	close(c.C)
