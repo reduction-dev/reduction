@@ -37,6 +37,8 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		FileSystem:   dkvstorage.NewLocalFilesystem(filepath.Join(testDir, "op1")),
 		MemTableSize: 5 * 10_000,
 	}, nil)
+	defer db.Close()
+
 	for i := range 10_000 {
 		db.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 	}
@@ -93,6 +95,7 @@ func TestRoundTrippingSavepoint(t *testing.T) {
 		FileSystem:   dkvstorage.NewLocalFilesystem(dkvstorage.Join(testDir, "op2")),
 		MemTableSize: 5 * 10_000,
 	}, []recovery.CheckpointHandle{cpHandle})
+	defer db.Close()
 
 	// Check that all previously written entries are in the DB.
 	for i := range 10_000 {
