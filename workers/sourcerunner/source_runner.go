@@ -173,7 +173,7 @@ func (r *SourceRunner) Start(ctx context.Context) error {
 
 	// Treat context.Canceled as a non-error case
 	if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
-		return cause
+		return fmt.Errorf("context canceled with cause: %w", cause)
 	}
 	return nil
 }
